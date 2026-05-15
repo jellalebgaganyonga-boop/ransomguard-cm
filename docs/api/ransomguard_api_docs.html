@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RansomGuard-CM API Documentation</title>
+    <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5.11.0/swagger-ui.css">
+    <style>
+        body {
+            margin: 0;
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+        }
+        .topbar-banner {
+            background: linear-gradient(135deg, #1976D2 0%, #0D47A1 100%);
+            color: white;
+            padding: 20px 40px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+        .topbar-banner h1 {
+            margin: 0;
+            font-size: 22px;
+            font-weight: 600;
+        }
+        .topbar-banner .meta {
+            font-size: 13px;
+            opacity: 0.85;
+        }
+        .topbar-banner .badge {
+            background: rgba(255,255,255,0.2);
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            margin-left: 10px;
+            font-weight: 500;
+        }
+        #swagger-ui {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        /* Hide Swagger top bar (we have our own) */
+        .swagger-ui .topbar { display: none; }
+        /* Custom theming */
+        .swagger-ui .info { margin: 30px 0; }
+        .swagger-ui .info .title { color: #0D47A1; }
+        .swagger-ui .opblock.opblock-post { border-color: #1976D2; background: rgba(25,118,210,0.05); }
+        .swagger-ui .opblock.opblock-get { border-color: #2E7D32; background: rgba(46,125,50,0.05); }
+        .swagger-ui .scheme-container { box-shadow: 0 1px 4px rgba(0,0,0,0.05); }
+    </style>
+</head>
+<body>
+    <div class="topbar-banner">
+        <div>
+            <h1>RansomGuard-CM API Documentation</h1>
+            <div class="meta">
+                Anti-Ransomware Platform for Healthcare Facilities in Francophone Sub-Saharan Africa
+                <span class="badge">OpenAPI 3.0</span>
+                <span class="badge">v1.0.0</span>
+            </div>
+        </div>
+        <div style="text-align: right;">
+            <div style="font-size: 12px; opacity: 0.85;">Author: Jella Lebga</div>
+            <div style="font-size: 11px; opacity: 0.7;">ICT University Yaoundé · 2026</div>
+        </div>
+    </div>
+
+    <div id="swagger-ui"></div>
+
+    <script src="https://unpkg.com/swagger-ui-dist@5.11.0/swagger-ui-bundle.js"></script>
+    <script src="https://unpkg.com/swagger-ui-dist@5.11.0/swagger-ui-standalone-preset.js"></script>
+    <script>
+        window.onload = function() {
+            window.ui = SwaggerUIBundle({
+                url: "ransomguard_openapi.yaml",
+                dom_id: '#swagger-ui',
+                deepLinking: true,
+                presets: [
+                    SwaggerUIBundle.presets.apis,
+                    SwaggerUIStandalonePreset
+                ],
+                plugins: [
+                    SwaggerUIBundle.plugins.DownloadUrl
+                ],
+                layout: "StandaloneLayout",
+                docExpansion: "list",
+                defaultModelsExpandDepth: 1,
+                defaultModelExpandDepth: 2,
+                displayRequestDuration: true,
+                filter: true,
+                showExtensions: true,
+                tryItOutEnabled: false
+            });
+        };
+    </script>
+</body>
+</html>

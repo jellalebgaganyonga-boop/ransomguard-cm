@@ -1,0 +1,1286 @@
+openapi: 3.0.3
+info:
+  title: RansomGuard-CM API
+  description: |
+    # RansomGuard-CM Public API
+    
+    Anti-Ransomware Endpoint Protection Platform for Healthcare Facilities in Francophone Sub-Saharan Africa.
+    
+    ## Authentication
+    
+    Three distinct API surfaces with different authentication schemes:
+    
+    - **Agent API** — mTLS (mutual TLS) with client certificates
+    - **Dashboard API** — OAuth2 + JWT Bearer + MFA TOTP
+    - **Admin API** — OAuth2 + JWT Bearer + MFA TOTP + Director role
+    - **Cloud API** — Ed25519 signed requests
+    
+    ## Standards Compliance
+    
+    - OWASP API Security Top 10
+    - NIST SP 800-53
+    - ISO 27001 A.9 (Access Control)
+    - Loi N°2024/017 du Cameroun
+    - RFC 6749 (OAuth 2.0)
+    - RFC 7519 (JSON Web Tokens)
+    - RFC 8446 (TLS 1.3)
+    
+    ## Rate Limiting
+    
+    All endpoints are rate-limited. Limits are returned in response headers:
+    
+    - `X-RateLimit-Limit`: Maximum requests per window
+    - `X-RateLimit-Remaining`: Remaining requests
+    - `X-RateLimit-Reset`: Unix timestamp when limit resets
+    
+    ## Versioning
+    
+    API version included in URL path (`/api/v1/`). Breaking changes will be released as `/api/v2/`.
+  version: 1.0.0
+  contact:
+    name: Jella Lebga
+    email: jella.lebga@ictuniversity.edu.cm
+  license:
+    name: Proprietary
+    url: https://ransomguard-cm.example/license
+
+servers:
+  - url: https://ransomguard.local
+    description: On-premise hospital management server
+  - url: https://cloud.ransomguard-cm.com
+    description: Cloud RansomGuard infrastructure (AWS af-south-1)
+
+tags:
+  - name: Authentication
+    description: User authentication and session management
+  - name: Agents
+    description: Endpoint agent operations (mTLS)
+  - name: Alerts
+    description: Security alert ingestion and management
+  - name: Incidents
+    description: Confirmed security incidents
+  - name: Endpoints
+    description: Protected workstation management
+  - name: Backups
+    description: Backup and snapshot operations
+  - name: Restore
+    description: Data restoration workflow
+  - name: Licensing
+    description: License management
+  - name: Updates
+    description: Signed update distribution
+  - name: Users
+    description: User and access management
+  - name: Reports
+    description: Bilingual PDF report generation
+
+# ============================================================================
+# REUSABLE COMPONENTS
+# ============================================================================
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT obtained via /api/v1/auth/login.
+        Token expires after 15 minutes — use refresh token to renew.
+    
+    MTLSAuth:
+      type: mutualTLS
+      description: |
+        Mutual TLS authentication using agent certificate.
+        Each agent has a unique certificate issued at enrollment.
+        Certificate is pinned — server verifies exact fingerprint.
+    
+    Ed25519Signature:
+      type: apiKey
+      in: header
+      name: X-Signature-Ed25519
+      description: |
+        Ed25519 signature of request body, computed with author's private key.
+        Public key is pinned client-side. Used for update distribution.
+
+  schemas:
+    # ----- Common -----
+    Error:
+      type: object
+      required: [code, message, timestamp]
+      properties:
+        code:
+          type: string
+          description: Machine-readable error code
+          example: "VALIDATION_ERROR"
+        message:
+          type: string
+          description: Human-readable error message
+          example: "The 'severity' field must be one of: info, warning, error, critical"
+        details:
+          type: object
+          description: Additional error context
+        request_id:
+          type: string
+          format: uuid
+          description: Unique request ID for support correlation
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-05-15T14:30:00.123456Z"
+
+    Pagination:
+      type: object
+      required: [page, page_size, total, total_pages]
+      properties:
+        page:
+          type: integer
+          minimum: 1
+          example: 1
+        page_size:
+          type: integer
+          minimum: 1
+          maximum: 100
+          example: 20
+        total:
+          type: integer
+          minimum: 0
+          example: 247
+        total_pages:
+          type: integer
+          minimum: 0
+          example: 13
+
+    # ----- Authentication -----
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          example: "tech@hopital-yaounde.cm"
+        password:
+          type: string
+          format: password
+          minLength: 12
+          example: "StrongP@ssw0rd!2026"
+
+    LoginResponse:
+      type: object
+      required: [mfa_required, mfa_token]
+      properties:
+        mfa_required:
+          type: boolean
+          example: true
+        mfa_token:
+          type: string
+          description: Temporary token to use for MFA verification
+          example: "mfa_tmp_8a7f9c2e1b3d4e5f"
+        mfa_methods:
+          type: array
+          items:
+            type: string
+            enum: [totp, backup_codes]
+
+    MFAVerifyRequest:
+      type: object
+      required: [mfa_token, code]
+      properties:
+        mfa_token:
+          type: string
+          example: "mfa_tmp_8a7f9c2e1b3d4e5f"
+        code:
+          type: string
+          pattern: "^[0-9]{6}$"
+          example: "847291"
+
+    AuthTokens:
+      type: object
+      required: [access_token, refresh_token, expires_in, token_type]
+      properties:
+        access_token:
+          type: string
+          description: JWT access token (15 min validity)
+        refresh_token:
+          type: string
+          description: Refresh token (24h validity, single-use)
+        expires_in:
+          type: integer
+          description: Access token validity in seconds
+          example: 900
+        token_type:
+          type: string
+          enum: [Bearer]
+        user:
+          $ref: '#/components/schemas/User'
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        full_name:
+          type: string
+        role:
+          type: string
+          enum: [admin, technician, director, auditor, support]
+        hospital_id:
+          type: string
+          format: uuid
+        preferred_locale:
+          type: string
+          enum: [fr-CM, en-CM]
+        last_login_at:
+          type: string
+          format: date-time
+
+    # ----- Agents -----
+    AgentEnrollRequest:
+      type: object
+      required: [hospital_id, hostname, os_name, os_version, public_key]
+      properties:
+        hospital_id:
+          type: string
+          format: uuid
+        hostname:
+          type: string
+          example: "POSTE-LAB-03"
+        mac_address:
+          type: string
+          example: "00:1A:2B:3C:4D:5E"
+        ip_address:
+          type: string
+          format: ipv4
+        os_name:
+          type: string
+          example: "Windows"
+        os_version:
+          type: string
+          example: "10.0.19044"
+        os_architecture:
+          type: string
+          enum: [x86, x64, arm64]
+        public_key:
+          type: string
+          description: Agent's Ed25519 public key (base64)
+        agent_version:
+          type: string
+          example: "1.0.0"
+
+    AgentCertificate:
+      type: object
+      required: [agent_uuid, certificate_pem, valid_until]
+      properties:
+        agent_uuid:
+          type: string
+          format: uuid
+        certificate_pem:
+          type: string
+          description: PEM-encoded X.509 client certificate
+        valid_until:
+          type: string
+          format: date-time
+        server_ca_pem:
+          type: string
+          description: Server's CA certificate to pin
+
+    Heartbeat:
+      type: object
+      required: [agent_uuid, timestamp, health_status]
+      properties:
+        agent_uuid:
+          type: string
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+        health_status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+        memory_usage_mb:
+          type: integer
+          minimum: 0
+        cpu_usage_percent:
+          type: number
+          minimum: 0
+          maximum: 100
+        agent_version:
+          type: string
+        configuration_hash:
+          type: string
+
+    AgentConfig:
+      type: object
+      properties:
+        configuration_version:
+          type: integer
+        canary_paths:
+          type: array
+          items:
+            type: string
+        entropy_threshold:
+          type: number
+          example: 7.5
+        mass_modification_threshold:
+          type: integer
+          example: 20
+        mass_modification_window_seconds:
+          type: integer
+          example: 30
+        signal_convergence_count:
+          type: integer
+          description: Number of converging signals required to confirm attack
+          example: 3
+        whitelist_processes:
+          type: array
+          items:
+            type: string
+        critical_processes:
+          type: array
+          items:
+            type: string
+        signatures_url:
+          type: string
+          format: uri
+
+    # ----- Alerts & Incidents -----
+    AlertSubmit:
+      type: object
+      required: [endpoint_id, alert_type, severity, signal_source, occurred_at]
+      properties:
+        endpoint_id:
+          type: string
+          format: uuid
+        alert_type:
+          type: string
+          example: "canary_file_modified"
+        severity:
+          type: string
+          enum: [info, warning, error, critical]
+        signal_source:
+          type: string
+          enum: [canary, entropy, process_tree, ml_anomaly, usb, exfil, signature]
+        signal_value:
+          type: number
+        threshold:
+          type: number
+        process_name:
+          type: string
+          example: "suspicious.exe"
+        process_pid:
+          type: integer
+        file_path_hash:
+          type: string
+          description: SHA-256 hash of file path (never plain path)
+        occurred_at:
+          type: string
+          format: date-time
+        payload:
+          type: object
+          description: Additional event-specific data
+
+    AlertResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        incident_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Set if alert was correlated to existing incident
+        accepted_at:
+          type: string
+          format: date-time
+
+    Incident:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        incident_number:
+          type: integer
+          example: 8472
+        hospital_id:
+          type: string
+          format: uuid
+        endpoint_id:
+          type: string
+          format: uuid
+        severity:
+          type: string
+          enum: [low, medium, high, critical]
+        category:
+          type: string
+          enum: [ransomware, suspicious_process, usb_threat, exfiltration, policy_violation, unknown]
+        title:
+          type: string
+          example: "Ransomware Akira detected on POSTE-LAB-03"
+        description:
+          type: string
+        detected_at:
+          type: string
+          format: date-time
+        contained_at:
+          type: string
+          format: date-time
+          nullable: true
+        resolved_at:
+          type: string
+          format: date-time
+          nullable: true
+        signal_count:
+          type: integer
+        signals:
+          type: array
+          items:
+            type: object
+        actions_taken:
+          type: array
+          items:
+            type: string
+        files_affected:
+          type: integer
+        status:
+          type: string
+          enum: [detected, contained, investigating, resolved, false_positive]
+        acknowledged_by:
+          type: string
+          format: uuid
+          nullable: true
+        acknowledged_at:
+          type: string
+          format: date-time
+          nullable: true
+        report_pdf_url:
+          type: string
+          format: uri
+          nullable: true
+
+    # ----- Endpoints -----
+    Endpoint:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        hostname:
+          type: string
+        ip_address:
+          type: string
+        os_name:
+          type: string
+        os_version:
+          type: string
+        department:
+          type: string
+        criticality:
+          type: string
+          enum: [low, medium, high, critical]
+        is_medical_critical:
+          type: boolean
+        status:
+          type: string
+          enum: [active, offline, quarantined, decommissioned]
+        last_seen_at:
+          type: string
+          format: date-time
+        agent_version:
+          type: string
+        health_status:
+          type: string
+          enum: [healthy, degraded, unhealthy, unknown]
+
+    # ----- Backups & Snapshots -----
+    Snapshot:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        endpoint_id:
+          type: string
+          format: uuid
+        snapshot_name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        file_count:
+          type: integer
+        size_bytes:
+          type: integer
+          format: int64
+        verification_status:
+          type: string
+          enum: [pending, verified, corrupted]
+        is_retained:
+          type: boolean
+
+    RestoreRequestPayload:
+      type: object
+      required: [snapshot_id, endpoint_id, request_scope]
+      properties:
+        snapshot_id:
+          type: string
+          format: uuid
+        endpoint_id:
+          type: string
+          format: uuid
+        request_scope:
+          type: string
+          enum: [full, selective]
+        files_filter:
+          type: array
+          items:
+            type: string
+          description: For selective restore — array of file path hashes
+
+    RestoreRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        snapshot_id:
+          type: string
+          format: uuid
+        endpoint_id:
+          type: string
+          format: uuid
+        requested_by:
+          type: string
+          format: uuid
+        approved_by:
+          type: string
+          format: uuid
+          nullable: true
+        request_scope:
+          type: string
+          enum: [full, selective]
+        status:
+          type: string
+          enum: [pending, approved, rejected, executing, completed, failed]
+        requested_at:
+          type: string
+          format: date-time
+        approved_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        files_restored:
+          type: integer
+
+    # ----- Licensing -----
+    LicenseActivateRequest:
+      type: object
+      required: [license_key, server_fingerprint]
+      properties:
+        license_key:
+          type: string
+          example: "RG-CM-2026-XXXX-YYYY-ZZZZ-AAAA"
+        server_fingerprint:
+          type: string
+          description: SHA-256 hash of server hardware identifiers
+
+    LicenseStatus:
+      type: object
+      properties:
+        is_valid:
+          type: boolean
+        status:
+          type: string
+          enum: [active, grace, expired, revoked]
+        plan_type:
+          type: string
+          enum: [starter, standard, enterprise]
+        max_endpoints:
+          type: integer
+        current_endpoints:
+          type: integer
+        expires_at:
+          type: string
+          format: date-time
+        days_remaining:
+          type: integer
+        signed_token:
+          type: string
+          description: Ed25519 signed activation token for offline validation
+
+    # ----- Updates -----
+    UpdateCheckResponse:
+      type: object
+      properties:
+        current_version:
+          type: string
+        latest_version:
+          type: string
+        update_available:
+          type: boolean
+        is_critical:
+          type: boolean
+        released_at:
+          type: string
+          format: date-time
+        download_url:
+          type: string
+          format: uri
+        primary_signature:
+          type: string
+          description: Ed25519 signature from author
+        cosigner_signature:
+          type: string
+          description: Ed25519 signature from independent co-signer
+        package_hash:
+          type: string
+          description: SHA-256 of update package
+
+  responses:
+    Unauthorized:
+      description: Authentication required or token invalid
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    Forbidden:
+      description: Insufficient permissions for this operation
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    ValidationError:
+      description: Request payload validation failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    RateLimited:
+      description: Too many requests
+      headers:
+        X-RateLimit-Limit:
+          schema:
+            type: integer
+        X-RateLimit-Remaining:
+          schema:
+            type: integer
+        X-RateLimit-Reset:
+          schema:
+            type: integer
+        Retry-After:
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    InternalError:
+      description: Internal server error — request_id provided for support
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+# ============================================================================
+# PATHS
+# ============================================================================
+paths:
+
+  # ----- AUTHENTICATION -----
+  /api/v1/auth/login:
+    post:
+      tags: [Authentication]
+      summary: Initial login with email + password
+      description: |
+        Returns an MFA challenge token. The actual access token is issued
+        only after MFA verification via /api/v1/auth/mfa/verify.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        200:
+          description: Credentials valid — proceed to MFA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        429:
+          $ref: '#/components/responses/RateLimited'
+        422:
+          $ref: '#/components/responses/ValidationError'
+
+  /api/v1/auth/mfa/verify:
+    post:
+      tags: [Authentication]
+      summary: Verify MFA TOTP code and issue tokens
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MFAVerifyRequest'
+      responses:
+        200:
+          description: MFA verified — access and refresh tokens issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokens'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        429:
+          $ref: '#/components/responses/RateLimited'
+
+  /api/v1/auth/refresh:
+    post:
+      tags: [Authentication]
+      summary: Refresh access token using refresh token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token:
+                  type: string
+      responses:
+        200:
+          description: New access token issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokens'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/auth/logout:
+    post:
+      tags: [Authentication]
+      summary: Invalidate current session
+      security:
+        - BearerAuth: []
+      responses:
+        204:
+          description: Session invalidated
+        401:
+          $ref: '#/components/responses/Unauthorized'
+
+  # ----- AGENT API (mTLS) -----
+  /api/v1/agents/enroll:
+    post:
+      tags: [Agents]
+      summary: Enroll a new agent and issue its certificate
+      description: |
+        Called once during agent installation. Server validates the hospital_id,
+        generates a unique certificate, and registers the agent.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentEnrollRequest'
+      responses:
+        201:
+          description: Agent enrolled successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentCertificate'
+        409:
+          description: Endpoint with this hostname already exists
+        422:
+          $ref: '#/components/responses/ValidationError'
+
+  /api/v1/agents/heartbeat:
+    post:
+      tags: [Agents]
+      summary: Submit agent health heartbeat
+      description: |
+        Called every 30 seconds by each agent. Updates last_heartbeat_at and
+        health metrics. If no heartbeat for 5 minutes, agent is marked offline.
+      security:
+        - MTLSAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Heartbeat'
+      responses:
+        200:
+          description: Heartbeat accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  config_update_available:
+                    type: boolean
+                  signatures_update_available:
+                    type: boolean
+        401:
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/agents/config:
+    get:
+      tags: [Agents]
+      summary: Retrieve current agent configuration
+      security:
+        - MTLSAuth: []
+      responses:
+        200:
+          description: Current configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentConfig'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/agents/signatures:
+    get:
+      tags: [Agents]
+      summary: Retrieve threat signature feed
+      security:
+        - MTLSAuth: []
+      parameters:
+        - name: since
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: Return signatures published after this timestamp
+      responses:
+        200:
+          description: Threat signatures
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  signatures:
+                    type: array
+                    items:
+                      type: object
+
+  # ----- ALERTS -----
+  /api/v1/alerts:
+    post:
+      tags: [Alerts]
+      summary: Submit a security alert from an agent
+      description: |
+        Called by agents when a signal is detected. Server applies the 3-signal
+        convergence rule to correlate alerts into incidents.
+      security:
+        - MTLSAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlertSubmit'
+      responses:
+        201:
+          description: Alert accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertResponse'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        422:
+          $ref: '#/components/responses/ValidationError'
+
+  # ----- INCIDENTS -----
+  /api/v1/incidents:
+    get:
+      tags: [Incidents]
+      summary: List incidents (paginated)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [detected, contained, investigating, resolved, false_positive]
+        - name: severity
+          in: query
+          schema:
+            type: string
+            enum: [low, medium, high, critical]
+        - name: from_date
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to_date
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        200:
+          description: Paginated list of incidents
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Incident'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/incidents/{incident_id}:
+    get:
+      tags: [Incidents]
+      summary: Retrieve incident details
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: incident_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: Incident details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Incident'
+        404:
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/incidents/{incident_id}/acknowledge:
+    post:
+      tags: [Incidents]
+      summary: Acknowledge an incident
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: incident_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                notes:
+                  type: string
+      responses:
+        200:
+          description: Incident acknowledged
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Incident'
+
+  # ----- ENDPOINTS -----
+  /api/v1/endpoints:
+    get:
+      tags: [Endpoints]
+      summary: List protected endpoints
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, offline, quarantined]
+        - name: department
+          in: query
+          schema:
+            type: string
+      responses:
+        200:
+          description: Paginated list of endpoints
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Endpoint'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+
+  /api/v1/endpoints/{endpoint_id}/snapshots:
+    get:
+      tags: [Endpoints, Backups]
+      summary: List available snapshots for an endpoint
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: endpoint_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: List of snapshots (newest first)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Snapshot'
+
+  # ----- RESTORE -----
+  /api/v1/restore/request:
+    post:
+      tags: [Restore]
+      summary: Request a snapshot restoration
+      description: |
+        Creates a restoration request in pending state. Director approval is
+        required before execution via /api/v1/restore/{id}/approve.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RestoreRequestPayload'
+      responses:
+        201:
+          description: Restoration request created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RestoreRequest'
+
+  /api/v1/restore/{request_id}/approve:
+    post:
+      tags: [Restore]
+      summary: Approve a pending restoration request (Director only)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: request_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: Restoration approved and queued for execution
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RestoreRequest'
+        403:
+          $ref: '#/components/responses/Forbidden'
+
+  # ----- LICENSING -----
+  /api/v1/license/activate:
+    post:
+      tags: [Licensing]
+      summary: Activate a license key
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LicenseActivateRequest'
+      responses:
+        200:
+          description: License activated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LicenseStatus'
+        409:
+          description: License already used on another server
+        422:
+          $ref: '#/components/responses/ValidationError'
+
+  /api/v1/license/status:
+    get:
+      tags: [Licensing]
+      summary: Get current license status
+      security:
+        - BearerAuth: []
+      responses:
+        200:
+          description: Current license status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LicenseStatus'
+
+  # ----- CLOUD UPDATES (Ed25519) -----
+  /cloud/updates/check:
+    get:
+      tags: [Updates]
+      summary: Check for available updates
+      security:
+        - Ed25519Signature: []
+      parameters:
+        - name: current_version
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: server_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: Update check result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateCheckResponse'
+
+  /cloud/updates/{version}:
+    get:
+      tags: [Updates]
+      summary: Download a signed update package
+      security:
+        - Ed25519Signature: []
+      parameters:
+        - name: version
+          in: path
+          required: true
+          schema:
+            type: string
+            example: "1.2.0"
+      responses:
+        200:
+          description: Encrypted update package with dual signature
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+
+  # ----- REPORTS -----
+  /api/v1/reports/incidents/{incident_id}:
+    get:
+      tags: [Reports]
+      summary: Generate bilingual PDF report for an incident
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: incident_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: locale
+          in: query
+          schema:
+            type: string
+            enum: [fr-CM, en-CM]
+            default: fr-CM
+      responses:
+        200:
+          description: PDF report
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+
+  /api/v1/reports/compliance/monthly:
+    get:
+      tags: [Reports]
+      summary: Generate monthly compliance report (for ANTIC)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: year
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: month
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 12
+      responses:
+        200:
+          description: PDF compliance report
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
