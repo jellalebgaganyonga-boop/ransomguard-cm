@@ -1,0 +1,101 @@
+# =============================================================================
+# RansomGuard-CM .gitattributes
+# Normalize line endings across platforms
+# =============================================================================
+
+# Default: auto-detect, normalize to LF in repo
+* text=auto eol=lf
+
+# -----------------------------------------------------------------------------
+# Source code — LF everywhere
+# -----------------------------------------------------------------------------
+*.cs text eol=lf
+*.py text eol=lf
+*.js text eol=lf
+*.jsx text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+
+# -----------------------------------------------------------------------------
+# Configuration and data — LF
+# -----------------------------------------------------------------------------
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.xml text eol=lf
+*.csproj text eol=lf
+*.props text eol=lf
+*.targets text eol=lf
+*.sln text eol=lf
+*.toml text eol=lf
+*.cfg text eol=lf
+*.ini text eol=lf
+*.editorconfig text eol=lf
+
+# -----------------------------------------------------------------------------
+# Documentation — LF
+# -----------------------------------------------------------------------------
+*.md text eol=lf
+*.txt text eol=lf
+*.rst text eol=lf
+
+# -----------------------------------------------------------------------------
+# Shell scripts — LF (Unix)
+# -----------------------------------------------------------------------------
+*.sh text eol=lf
+
+# -----------------------------------------------------------------------------
+# Windows-specific files — CRLF
+# -----------------------------------------------------------------------------
+*.ps1 text eol=crlf
+*.psm1 text eol=crlf
+*.psd1 text eol=crlf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# -----------------------------------------------------------------------------
+# Docker and CI — LF
+# -----------------------------------------------------------------------------
+Dockerfile text eol=lf
+docker-compose*.yml text eol=lf
+*.dockerignore text eol=lf
+Makefile text eol=lf
+
+# -----------------------------------------------------------------------------
+# Binary files — no normalization
+# -----------------------------------------------------------------------------
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.bmp binary
+*.svg text eol=lf
+
+*.exe binary
+*.dll binary
+*.pdb binary
+*.so binary
+
+*.zip binary
+*.tar binary
+*.gz binary
+*.7z binary
+*.rar binary
+
+*.ttf binary
+*.woff binary
+*.woff2 binary
+*.eot binary
+
+*.pdf binary
+*.doc binary
+*.docx binary
+*.xls binary
+*.xlsx binary
+
+# Certificates
+*.pfx binary
+*.p12 binary

@@ -1,0 +1,13 @@
+{
+  "recommendations": [
+    "ms-dotnettools.csdevkit",
+    "ms-dotnettools.csharp",
+    "eamodio.gitlens",
+    "usernamehw.errorlens",
+    "editorconfig.editorconfig",
+    "yzhang.markdown-all-in-one",
+    "ms-dotnettools.vscode-dotnet-runtime",
+    "streetsidesoftware.code-spell-checker",
+    "streetsidesoftware.code-spell-checker-french"
+  ]
+}

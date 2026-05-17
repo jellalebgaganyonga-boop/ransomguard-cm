@@ -9,7 +9,9 @@ desktop.ini
 *.lnk
 
 # ----- IDEs and Editors -----
-.vscode/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
 .idea/
 *.swp
 *.swo
