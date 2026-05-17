@@ -1,5 +1,9 @@
+using System.Threading.Channels;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using RansomGuard.Agent.Core.Configuration;
+using RansomGuard.Agent.Core.Persistence.Entities;
+using RansomGuard.Agent.Core.Persistence.Repositories;
 
 namespace RansomGuard.Agent.Service;
 
@@ -7,25 +11,39 @@ namespace RansomGuard.Agent.Service;
 /// RansomGuard Agent Worker Service — v0.3.0
 ///
 /// Monitors file system events in configured watch paths using FileSystemWatcher.
-/// Configuration-driven: all paths and settings come from appsettings.json via Options pattern.
+/// Events are buffered via bounded channels and persisted asynchronously to SQLite.
 /// </summary>
 public sealed class Worker : BackgroundService
 {
+    private const int EventChannelCapacity = 10_000;
+
     private readonly ILogger<Worker> _logger;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly AgentConfiguration _config;
     private readonly List<FileSystemWatcher> _watchers = [];
+    private readonly Channel<DetectionEvent> _eventChannel;
     private long _eventCount;
     private readonly DateTime _startTime = DateTime.UtcNow;
 
     /// <summary>
-    /// Initializes the worker with configuration and logging dependencies.
+    /// Initializes the worker with configuration, logging, and DI scope factory.
     /// </summary>
     /// <param name="logger">Structured logger instance.</param>
     /// <param name="config">Agent configuration from Options pattern.</param>
-    public Worker(ILogger<Worker> logger, IOptionsMonitor<AgentConfiguration> config)
+    /// <param name="scopeFactory">Service scope factory for creating scoped repositories.</param>
+    public Worker(
+        ILogger<Worker> logger,
+        IOptionsMonitor<AgentConfiguration> config,
+        IServiceScopeFactory scopeFactory)
     {
         _logger = logger;
         _config = config.CurrentValue;
+        _scopeFactory = scopeFactory;
+        _eventChannel = Channel.CreateBounded<DetectionEvent>(
+            new BoundedChannelOptions(EventChannelCapacity)
+            {
+                FullMode = BoundedChannelFullMode.DropOldest
+            });
     }
 
     /// <inheritdoc />
@@ -33,6 +51,9 @@ public sealed class Worker : BackgroundService
     {
         _logger.LogInformation("RansomGuard-CM Agent v{Version} starting", _config.Identity.Version);
         _logger.LogInformation("Environment: {Environment}", _config.Identity.Environment);
+
+        // Start the background event persistence consumer
+        Task persistenceTask = ConsumeEventsAsync(stoppingToken);
 
         string[] resolvedPaths = EnvironmentVariableResolver.ResolvePaths(_config.Detection.WatchPaths);
 
@@ -84,6 +105,10 @@ public sealed class Worker : BackgroundService
                 uptime, _eventCount);
         }
 
+        // Signal channel completion and wait for persistence to drain
+        _eventChannel.Writer.Complete();
+        await persistenceTask;
+
         foreach (FileSystemWatcher watcher in _watchers)
         {
             watcher.EnableRaisingEvents = false;
@@ -93,37 +118,60 @@ public sealed class Worker : BackgroundService
         _logger.LogInformation("RansomGuard Agent stopped. Total events: {EventCount}", _eventCount);
     }
 
-    private void OnFileCreated(object sender, FileSystemEventArgs e)
+    private async Task ConsumeEventsAsync(CancellationToken cancellationToken)
+    {
+        await foreach (DetectionEvent detectionEvent in _eventChannel.Reader.ReadAllAsync(cancellationToken))
+        {
+            try
+            {
+                using IServiceScope scope = _scopeFactory.CreateScope();
+                var repository = scope.ServiceProvider.GetRequiredService<IDetectionEventRepository>();
+                await repository.AddAsync(detectionEvent, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to persist detection event {EventId}", detectionEvent.Id);
+            }
+        }
+    }
+
+    private void EnqueueEvent(string eventType, string filePath, string? oldFilePath = null)
     {
         Interlocked.Increment(ref _eventCount);
+
+        var detectionEvent = new DetectionEvent
+        {
+            EventType = eventType,
+            FilePath = filePath,
+            OldFilePath = oldFilePath,
+            Timestamp = DateTime.UtcNow
+        };
+
+        if (!_eventChannel.Writer.TryWrite(detectionEvent))
+        {
+            _logger.LogWarning("Event channel full, event dropped: {EventType} on {FilePath}", eventType, filePath);
+        }
+
         _logger.LogInformation(
             "File event detected: {EventType} on {FilePath} at {Timestamp}",
-            "Created", e.FullPath, DateTime.UtcNow);
+            eventType, filePath, detectionEvent.Timestamp);
     }
 
-    private void OnFileChanged(object sender, FileSystemEventArgs e)
-    {
-        Interlocked.Increment(ref _eventCount);
-        _logger.LogInformation(
-            "File event detected: {EventType} on {FilePath} at {Timestamp}",
-            "Modified", e.FullPath, DateTime.UtcNow);
-    }
+    private void OnFileCreated(object sender, FileSystemEventArgs e) =>
+        EnqueueEvent("Created", e.FullPath);
 
-    private void OnFileDeleted(object sender, FileSystemEventArgs e)
-    {
-        Interlocked.Increment(ref _eventCount);
-        _logger.LogWarning(
-            "File event detected: {EventType} on {FilePath} at {Timestamp}",
-            "Deleted", e.FullPath, DateTime.UtcNow);
-    }
+    private void OnFileChanged(object sender, FileSystemEventArgs e) =>
+        EnqueueEvent("Modified", e.FullPath);
 
-    private void OnFileRenamed(object sender, RenamedEventArgs e)
-    {
-        Interlocked.Increment(ref _eventCount);
-        _logger.LogWarning(
-            "File event detected: {EventType} on {FilePath} from {OldPath} at {Timestamp}",
-            "Renamed", e.FullPath, e.OldFullPath, DateTime.UtcNow);
-    }
+    private void OnFileDeleted(object sender, FileSystemEventArgs e) =>
+        EnqueueEvent("Deleted", e.FullPath);
+
+    private void OnFileRenamed(object sender, RenamedEventArgs e) =>
+        EnqueueEvent("Renamed", e.FullPath, e.OldFullPath);
 
     private void OnWatcherError(object sender, ErrorEventArgs e)
     {

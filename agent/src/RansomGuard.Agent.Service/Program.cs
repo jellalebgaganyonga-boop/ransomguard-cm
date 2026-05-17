@@ -1,5 +1,8 @@
 using FluentValidation;
+using Microsoft.EntityFrameworkCore;
 using RansomGuard.Agent.Core.Configuration;
+using RansomGuard.Agent.Core.Persistence;
+using RansomGuard.Agent.Core.Persistence.Repositories;
 using RansomGuard.Agent.Service;
 using Serilog;
 using Serilog.Events;
@@ -86,12 +89,29 @@ try
     // Register FluentValidation validator
     builder.Services.AddSingleton<IValidator<AgentConfiguration>, AgentConfigurationValidator>();
 
+    // Register SQLite DbContext with connection string from configuration
+    var dbConnectionString = builder.Configuration
+        .GetSection("Agent:Database:ConnectionString")
+        .Value ?? "Data Source=agent.db";
+    dbConnectionString = EnvironmentVariableResolver.ResolvePath(dbConnectionString);
+
+    builder.Services.AddDbContext<AgentDbContext>(options =>
+        options.UseSqlite(dbConnectionString));
+
+    // Register repositories
+    builder.Services.AddScoped<IDetectionEventRepository, DetectionEventRepository>();
+    builder.Services.AddScoped<IAlertRepository, AlertRepository>();
+    builder.Services.AddScoped<IAuditLogRepository, AuditLogRepository>();
+
     builder.Services.AddHostedService<Worker>();
 
     var host = builder.Build();
 
     // Fail-fast: validate configuration at startup
     ValidateConfiguration(host.Services);
+
+    // Ensure database directory exists and apply migrations
+    EnsureDatabase(host.Services);
 
     host.Run();
 }
@@ -102,6 +122,36 @@ catch (Exception ex)
 finally
 {
     Log.CloseAndFlush();
+}
+
+/// <summary>
+/// Ensures the database directory exists and applies pending migrations.
+/// </summary>
+static void EnsureDatabase(IServiceProvider services)
+{
+    using IServiceScope scope = services.CreateScope();
+    var context = scope.ServiceProvider.GetRequiredService<AgentDbContext>();
+
+    string? connectionString = context.Database.GetConnectionString();
+    if (connectionString is not null)
+    {
+        // Extract path from "Data Source=<path>"
+        const string dataSourcePrefix = "Data Source=";
+        int idx = connectionString.IndexOf(dataSourcePrefix, StringComparison.OrdinalIgnoreCase);
+        if (idx >= 0)
+        {
+            string dbPath = connectionString[(idx + dataSourcePrefix.Length)..].Trim();
+            string? dbDir = Path.GetDirectoryName(dbPath);
+            if (!string.IsNullOrEmpty(dbDir) && !Directory.Exists(dbDir))
+            {
+                Directory.CreateDirectory(dbDir);
+                Log.Information("Created database directory: {Directory}", dbDir);
+            }
+        }
+    }
+
+    context.Database.EnsureCreated();
+    Log.Information("Database initialized successfully");
 }
 
 /// <summary>
