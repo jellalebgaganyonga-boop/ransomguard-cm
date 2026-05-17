@@ -20,6 +20,12 @@ try
 
     var builder = Host.CreateApplicationBuilder(args);
 
+    // Enable running as a Windows Service
+    builder.Services.AddWindowsService(options =>
+    {
+        options.ServiceName = "RansomGuard-CM Agent";
+    });
+
     // Configure Serilog from appsettings.json + programmatic config
     builder.Services.AddSerilog((services, loggerConfig) =>
     {
