@@ -1,138 +1,133 @@
-﻿using System.Collections.Concurrent;
+using Microsoft.Extensions.Options;
+using RansomGuard.Agent.Core.Configuration;
 
 namespace RansomGuard.Agent.Service;
 
 /// <summary>
-/// RansomGuard Agent Worker Service — POC v0.1
+/// RansomGuard Agent Worker Service — v0.3.0
 ///
-/// Validates Hypothesis 1: Real-time file system monitoring on Windows 10/11
-/// using .NET 8 FileSystemWatcher with acceptable performance characteristics.
-///
-/// POC Scope:
-///   - Detect Created, Modified, Deleted, Renamed events
-///   - Watch a predefined hospital test folder on user's desktop
-///   - Log events with timestamps in structured format
-///   - Demonstrate event-driven architecture viability
-///
-/// Known POC Limitations (will be addressed in production):
-///   - FileSystemWatcher may miss events under extreme load (>10k events/sec)
-///   - Will migrate to ETW kernel-mode tracing for production
-///   - No deduplication of duplicate events
-///   - No persistence — events only logged to console
-///
-/// Performance Target (Hypothesis 1 validation):
-///   - CPU: less than 5% on idle monitoring
-///   - RAM: less than 200 MB working set
-///   - Latency: event detection less than 100ms after file operation
+/// Monitors file system events in configured watch paths using FileSystemWatcher.
+/// Configuration-driven: all paths and settings come from appsettings.json via Options pattern.
 /// </summary>
 public sealed class Worker : BackgroundService
 {
     private readonly ILogger<Worker> _logger;
-    private readonly string _watchPath;
-    private FileSystemWatcher? _watcher;
+    private readonly AgentConfiguration _config;
+    private readonly List<FileSystemWatcher> _watchers = [];
     private long _eventCount;
     private readonly DateTime _startTime = DateTime.UtcNow;
 
-    public Worker(ILogger<Worker> logger)
+    /// <summary>
+    /// Initializes the worker with configuration and logging dependencies.
+    /// </summary>
+    /// <param name="logger">Structured logger instance.</param>
+    /// <param name="config">Agent configuration from Options pattern.</param>
+    public Worker(ILogger<Worker> logger, IOptionsMonitor<AgentConfiguration> config)
     {
         _logger = logger;
-        _watchPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
-            "RansomGuard-TestZone");
+        _config = config.CurrentValue;
     }
 
+    /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("================================================================");
-        _logger.LogInformation("RansomGuard-CM Agent — POC v0.1 Starting");
-        _logger.LogInformation("================================================================");
-        _logger.LogInformation("Watch path: {Path}", _watchPath);
+        _logger.LogInformation("RansomGuard-CM Agent v{Version} starting", _config.Identity.Version);
+        _logger.LogInformation("Environment: {Environment}", _config.Identity.Environment);
 
-        // Validate watch path exists
-        if (!Directory.Exists(_watchPath))
+        string[] resolvedPaths = EnvironmentVariableResolver.ResolvePaths(_config.Detection.WatchPaths);
+
+        if (!_config.Detection.EnableFileSystemWatcher)
         {
-            _logger.LogError("Watch path does not exist: {Path}", _watchPath);
-            _logger.LogError("Please create the folder before running the agent.");
+            _logger.LogInformation("FileSystemWatcher detection is disabled by configuration");
+            await Task.Delay(Timeout.Infinite, stoppingToken);
             return;
         }
 
-        // Initialize the file system watcher
-        _watcher = new FileSystemWatcher(_watchPath)
+        foreach (string watchPath in resolvedPaths)
         {
-            NotifyFilter = NotifyFilters.FileName
-                         | NotifyFilters.LastWrite
-                         | NotifyFilters.Size
-                         | NotifyFilters.Attributes
-                         | NotifyFilters.CreationTime,
-            IncludeSubdirectories = true,
-            EnableRaisingEvents = true
-        };
+            if (!Directory.Exists(watchPath))
+            {
+                _logger.LogWarning("Watch path does not exist, creating: {Path}", watchPath);
+                Directory.CreateDirectory(watchPath);
+            }
 
-        // Wire up event handlers
-        _watcher.Created  += OnFileCreated;
-        _watcher.Changed  += OnFileChanged;
-        _watcher.Deleted  += OnFileDeleted;
-        _watcher.Renamed  += OnFileRenamed;
-        _watcher.Error    += OnWatcherError;
+            var watcher = new FileSystemWatcher(watchPath)
+            {
+                NotifyFilter = NotifyFilters.FileName
+                             | NotifyFilters.LastWrite
+                             | NotifyFilters.Size
+                             | NotifyFilters.Attributes
+                             | NotifyFilters.CreationTime,
+                IncludeSubdirectories = true,
+                EnableRaisingEvents = true
+            };
 
-        _logger.LogInformation("File system monitoring ACTIVE");
-        _logger.LogInformation("================================================================");
-        _logger.LogInformation("Try creating, modifying, or deleting files in: {Path}", _watchPath);
-        _logger.LogInformation("Press Ctrl+C to stop the agent");
-        _logger.LogInformation("================================================================");
+            watcher.Created += OnFileCreated;
+            watcher.Changed += OnFileChanged;
+            watcher.Deleted += OnFileDeleted;
+            watcher.Renamed += OnFileRenamed;
+            watcher.Error += OnWatcherError;
 
-        // Keep the service alive — log a heartbeat every 30 seconds
+            _watchers.Add(watcher);
+            _logger.LogInformation("File system monitoring ACTIVE on: {Path}", watchPath);
+        }
+
+        int heartbeatSeconds = _config.Server.HeartbeatIntervalSeconds;
+
         while (!stoppingToken.IsCancellationRequested)
         {
-            await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+            await Task.Delay(TimeSpan.FromSeconds(heartbeatSeconds), stoppingToken);
 
-            var uptime = DateTime.UtcNow - _startTime;
+            TimeSpan uptime = DateTime.UtcNow - _startTime;
             _logger.LogInformation(
-                "[HEARTBEAT] Uptime: {Uptime:hh\\:mm\\:ss} | Events captured: {Count}",
+                "Heartbeat | Uptime: {Uptime:hh\\:mm\\:ss} | Events: {EventCount}",
                 uptime, _eventCount);
         }
 
-        // Cleanup on shutdown
-        _watcher.EnableRaisingEvents = false;
-        _watcher.Dispose();
-        _logger.LogInformation("RansomGuard Agent stopped. Total events: {Count}", _eventCount);
+        foreach (FileSystemWatcher watcher in _watchers)
+        {
+            watcher.EnableRaisingEvents = false;
+            watcher.Dispose();
+        }
+
+        _logger.LogInformation("RansomGuard Agent stopped. Total events: {EventCount}", _eventCount);
     }
 
     private void OnFileCreated(object sender, FileSystemEventArgs e)
     {
         Interlocked.Increment(ref _eventCount);
         _logger.LogInformation(
-            "[CREATED]  #{Count:D5} | {Time:HH:mm:ss.fff} | {Path}",
-            _eventCount, DateTime.Now, e.FullPath);
+            "File event detected: {EventType} on {FilePath} at {Timestamp}",
+            "Created", e.FullPath, DateTime.UtcNow);
     }
 
     private void OnFileChanged(object sender, FileSystemEventArgs e)
     {
         Interlocked.Increment(ref _eventCount);
         _logger.LogInformation(
-            "[MODIFIED] #{Count:D5} | {Time:HH:mm:ss.fff} | {Path}",
-            _eventCount, DateTime.Now, e.FullPath);
+            "File event detected: {EventType} on {FilePath} at {Timestamp}",
+            "Modified", e.FullPath, DateTime.UtcNow);
     }
 
     private void OnFileDeleted(object sender, FileSystemEventArgs e)
     {
         Interlocked.Increment(ref _eventCount);
         _logger.LogWarning(
-            "[DELETED]  #{Count:D5} | {Time:HH:mm:ss.fff} | {Path}",
-            _eventCount, DateTime.Now, e.FullPath);
+            "File event detected: {EventType} on {FilePath} at {Timestamp}",
+            "Deleted", e.FullPath, DateTime.UtcNow);
     }
 
     private void OnFileRenamed(object sender, RenamedEventArgs e)
     {
         Interlocked.Increment(ref _eventCount);
         _logger.LogWarning(
-            "[RENAMED]  #{Count:D5} | {Time:HH:mm:ss.fff} | {Old} -> {New}",
-            _eventCount, DateTime.Now, e.OldFullPath, e.FullPath);
+            "File event detected: {EventType} on {FilePath} from {OldPath} at {Timestamp}",
+            "Renamed", e.FullPath, e.OldFullPath, DateTime.UtcNow);
     }
 
     private void OnWatcherError(object sender, ErrorEventArgs e)
     {
         _logger.LogError(e.GetException(),
-            "FileSystemWatcher error occurred. Buffer may have overflowed.");
+            "FileSystemWatcher error occurred. Buffer may have overflowed");
     }
 }
