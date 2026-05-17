@@ -179,3 +179,8 @@ ironclad/local-config/
 certs/local/
 *.crt
 *.csr
+
+# Local backup files (never commit)
+*.original
+*.bak
+*.backup
