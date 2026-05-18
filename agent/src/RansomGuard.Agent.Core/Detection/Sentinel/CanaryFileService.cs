@@ -41,6 +41,10 @@ public sealed class CanaryFileService : ICanaryFileService
 
         await File.WriteAllBytesAsync(filePath, content, cancellationToken);
 
+        // Hide canaries from normal user view (CWE-732 mitigation).
+        // Ransomware still enumerates them via FindFirstFile default flags.
+        File.SetAttributes(filePath, FileAttributes.Hidden | FileAttributes.System);
+
         var canary = new SentinelCanary
         {
             FilePath = filePath,

@@ -92,6 +92,24 @@ public sealed record SentinelOptions
     /// </summary>
     [Required]
     public string CanaryPrefix { get; init; } = "0001_";
+
+    /// <summary>
+    /// Whether to automatically regenerate deleted canaries at runtime.
+    /// </summary>
+    public bool EnableRealTimeRegeneration { get; init; } = true;
+
+    /// <summary>
+    /// Cooldown in seconds before a canary can be regenerated after deletion.
+    /// </summary>
+    [Range(1, 3600)]
+    public int RegenerationCooldownSeconds { get; init; } = 60;
+
+    /// <summary>
+    /// Maximum number of canary regenerations per hour per directory.
+    /// Exceeding this threshold triggers a SustainedAttack alert.
+    /// </summary>
+    [Range(1, 100)]
+    public int MaxRegenerationsPerHourPerDirectory { get; init; } = 10;
 }
 
 /// <summary>
