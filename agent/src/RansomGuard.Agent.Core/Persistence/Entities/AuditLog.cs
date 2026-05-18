@@ -45,6 +45,12 @@ public sealed class AuditLog
     public required string CurrentHash { get; init; }
 
     /// <summary>
+    /// Ed25519 signature over the canonical payload (Base64-encoded, 88 chars).
+    /// Null for entries created before Ed25519 signing was enabled.
+    /// </summary>
+    public string? Signature { get; init; }
+
+    /// <summary>
     /// UTC timestamp when the record was created.
     /// </summary>
     public DateTime CreatedAt { get; init; } = DateTime.UtcNow;

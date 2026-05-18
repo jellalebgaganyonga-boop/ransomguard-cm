@@ -5,6 +5,7 @@ using RansomGuard.Agent.Core.Detection;
 using RansomGuard.Agent.Core.Detection.Sentinel;
 using RansomGuard.Agent.Core.Persistence;
 using RansomGuard.Agent.Core.Security;
+using RansomGuard.Agent.Core.Security.Cryptography;
 using RansomGuard.Agent.Core.Persistence.Repositories;
 using RansomGuard.Agent.Service;
 using Serilog;
@@ -130,10 +131,16 @@ try
     if (deduplicationWindowMs <= 0) deduplicationWindowMs = 500;
     builder.Services.AddSingleton<IFileEventDeduplicator>(new FileEventDeduplicator(deduplicationWindowMs));
 
+    // Register Ed25519 audit log signer
+    var auditLogSigner = new AuditLogSigner(keyDir,
+        Microsoft.Extensions.Logging.Abstractions.NullLogger<AuditLogSigner>.Instance);
+    builder.Services.AddSingleton(auditLogSigner);
+
     // Register repositories
     builder.Services.AddScoped<IDetectionEventRepository, DetectionEventRepository>();
     builder.Services.AddScoped<IAlertRepository, AlertRepository>();
-    builder.Services.AddScoped<IAuditLogRepository, AuditLogRepository>();
+    builder.Services.AddScoped<IAuditLogRepository>(sp =>
+        new AuditLogRepository(sp.GetRequiredService<AgentDbContext>(), auditLogSigner));
 
     // Register SENTINEL services
     builder.Services.AddScoped<ISentinelCanaryRepository, SentinelCanaryRepository>();

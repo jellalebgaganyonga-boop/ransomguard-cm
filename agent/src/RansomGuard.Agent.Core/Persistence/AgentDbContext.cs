@@ -89,6 +89,7 @@ public sealed class AgentDbContext : DbContext
             entity.Property(e => e.EntityType).HasMaxLength(100);
             entity.Property(e => e.PreviousHash).HasMaxLength(64);
             entity.Property(e => e.CurrentHash).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.Signature).HasMaxLength(128);
         });
 
         modelBuilder.Entity<SentinelCanary>(entity =>
