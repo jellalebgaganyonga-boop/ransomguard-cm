@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using Microsoft.Extensions.Logging;
+using RansomGuard.Agent.Core.Detection.Sentinel.Generators;
 using RansomGuard.Agent.Core.Persistence.Entities;
 using RansomGuard.Agent.Core.Persistence.Repositories;
 
@@ -7,6 +8,7 @@ namespace RansomGuard.Agent.Core.Detection.Sentinel;
 
 /// <summary>
 /// Manages SENTINEL canary files on disk: creation, integrity verification, and deletion.
+/// Supports multiple file formats (.txt, .docx) via generator factory.
 /// Each canary is written with unique synthetic medical content and tracked in the database.
 /// </summary>
 public sealed class CanaryFileService : ICanaryFileService
@@ -26,18 +28,33 @@ public sealed class CanaryFileService : ICanaryFileService
     /// <inheritdoc />
     public async Task<SentinelCanary> CreateCanaryAsync(string directory, string template, string prefix, CancellationToken cancellationToken = default)
     {
+        return await CreateCanaryAsync(directory, template, prefix, ".txt", cancellationToken);
+    }
+
+    /// <summary>
+    /// Creates a canary file in the specified format.
+    /// </summary>
+    /// <param name="directory">Target directory.</param>
+    /// <param name="template">Content template name.</param>
+    /// <param name="prefix">Filename prefix.</param>
+    /// <param name="extension">File extension (e.g., ".docx", ".txt").</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The persisted canary entity.</returns>
+    public async Task<SentinelCanary> CreateCanaryAsync(string directory, string template, string prefix, string extension, CancellationToken cancellationToken = default)
+    {
         if (!Directory.Exists(directory))
         {
             Directory.CreateDirectory(directory);
             _logger.LogInformation("Created canary directory: {Directory}", directory);
         }
 
-        string shortId = Guid.NewGuid().ToString("N")[..8];
-        string fileName = $"{prefix}{template}_{shortId}.txt";
-        string filePath = Path.Combine(directory, fileName);
-
-        (byte[] content, _) = CanaryContentGenerator.Generate(template);
+        ICanaryFileGenerator generator = CanaryFileGeneratorFactory.GetGenerator(extension);
+        byte[] content = generator.Generate(template);
         string contentHash = CanaryContentGenerator.ComputeHash(content);
+
+        string shortId = Guid.NewGuid().ToString("N")[..8];
+        string fileName = $"{prefix}{template}_{shortId}{generator.Extension}";
+        string filePath = Path.Combine(directory, fileName);
 
         await File.WriteAllBytesAsync(filePath, content, cancellationToken);
 
@@ -58,8 +75,8 @@ public sealed class CanaryFileService : ICanaryFileService
         await _repository.AddAsync(canary, cancellationToken);
 
         _logger.LogInformation(
-            "SENTINEL canary deployed: {FileName} in {Directory} (template: {Template}, size: {Size} bytes)",
-            fileName, directory, template, content.Length);
+            "SENTINEL canary deployed: {FileName} in {Directory} (template: {Template}, format: {Format}, size: {Size} bytes)",
+            fileName, directory, template, generator.Extension, content.Length);
 
         return canary;
     }
