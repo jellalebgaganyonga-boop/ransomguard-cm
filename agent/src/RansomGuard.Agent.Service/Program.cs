@@ -2,6 +2,7 @@ using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using RansomGuard.Agent.Core.Configuration;
 using RansomGuard.Agent.Core.Detection;
+using RansomGuard.Agent.Core.Detection.Sentinel;
 using RansomGuard.Agent.Core.Persistence;
 using RansomGuard.Agent.Core.Persistence.Repositories;
 using RansomGuard.Agent.Service;
@@ -117,6 +118,12 @@ try
     builder.Services.AddScoped<IAlertRepository, AlertRepository>();
     builder.Services.AddScoped<IAuditLogRepository, AuditLogRepository>();
 
+    // Register SENTINEL services
+    builder.Services.AddScoped<ISentinelCanaryRepository, SentinelCanaryRepository>();
+    builder.Services.AddScoped<ICanaryFileService, CanaryFileService>();
+
+    // SENTINEL deployment runs before Worker to ensure canaries exist
+    builder.Services.AddHostedService<SentinelDeploymentService>();
     builder.Services.AddHostedService<Worker>();
 
     var host = builder.Build();
