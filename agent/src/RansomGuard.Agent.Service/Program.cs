@@ -131,7 +131,8 @@ finally
 }
 
 /// <summary>
-/// Ensures the database directory exists and applies pending migrations.
+/// Ensures the database directory exists and applies pending EF Core migrations.
+/// Fails fast if migrations cannot be applied (critical startup error).
 /// </summary>
 static void EnsureDatabase(IServiceProvider services)
 {
@@ -141,7 +142,6 @@ static void EnsureDatabase(IServiceProvider services)
     string? connectionString = context.Database.GetConnectionString();
     if (connectionString is not null)
     {
-        // Extract path from "Data Source=<path>"
         const string dataSourcePrefix = "Data Source=";
         int idx = connectionString.IndexOf(dataSourcePrefix, StringComparison.OrdinalIgnoreCase);
         if (idx >= 0)
@@ -156,8 +156,16 @@ static void EnsureDatabase(IServiceProvider services)
         }
     }
 
-    context.Database.EnsureCreated();
-    Log.Information("Database initialized successfully");
+    try
+    {
+        context.Database.Migrate();
+        Log.Information("Database migrations applied successfully");
+    }
+    catch (Exception ex)
+    {
+        Log.Fatal(ex, "Failed to apply database migrations. The agent cannot start with a broken schema");
+        throw;
+    }
 }
 
 /// <summary>
