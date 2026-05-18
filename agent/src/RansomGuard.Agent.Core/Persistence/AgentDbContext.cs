@@ -29,6 +29,16 @@ public sealed class AgentDbContext : DbContext
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
     /// <summary>
+    /// SENTINEL canary files deployed for ransomware detection.
+    /// </summary>
+    public DbSet<SentinelCanary> SentinelCanaries => Set<SentinelCanary>();
+
+    /// <summary>
+    /// High-confidence alerts from SENTINEL canary tampering.
+    /// </summary>
+    public DbSet<CanaryAlert> CanaryAlerts => Set<CanaryAlert>();
+
+    /// <summary>
     /// Initializes a new instance of <see cref="AgentDbContext"/>.
     /// </summary>
     /// <param name="options">Database context options.</param>
@@ -79,6 +89,32 @@ public sealed class AgentDbContext : DbContext
             entity.Property(e => e.EntityType).HasMaxLength(100);
             entity.Property(e => e.PreviousHash).HasMaxLength(64);
             entity.Property(e => e.CurrentHash).IsRequired().HasMaxLength(64);
+        });
+
+        modelBuilder.Entity<SentinelCanary>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.FilePath).IsUnique();
+            entity.HasIndex(e => e.Directory);
+            entity.HasIndex(e => e.Status);
+            entity.Property(e => e.FilePath).IsRequired().HasMaxLength(1024);
+            entity.Property(e => e.FileName).IsRequired().HasMaxLength(255);
+            entity.Property(e => e.Directory).IsRequired().HasMaxLength(1024);
+            entity.Property(e => e.TemplateUsed).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.OriginalContentHash).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.Status).HasConversion<string>().HasMaxLength(20);
+        });
+
+        modelBuilder.Entity<CanaryAlert>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.DetectedAt);
+            entity.HasIndex(e => e.CanaryId);
+            entity.Property(e => e.CanaryPath).IsRequired().HasMaxLength(1024);
+            entity.Property(e => e.AlertType).HasConversion<string>().HasMaxLength(30);
+            entity.Property(e => e.Severity).HasConversion<string>().HasMaxLength(20);
+            entity.Property(e => e.OffendingProcessName).HasMaxLength(255);
+            entity.Property(e => e.OffendingProcessPath).HasMaxLength(1024);
         });
     }
 }

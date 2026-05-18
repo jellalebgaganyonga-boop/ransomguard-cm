@@ -18,6 +18,11 @@ public sealed class AgentConfigurationValidator : AbstractValidator<AgentConfigu
         RuleFor(x => x.Logging).NotNull().SetValidator(new LoggingOptionsValidator());
         RuleFor(x => x.Server).NotNull().SetValidator(new ServerOptionsValidator());
         RuleFor(x => x.Database).NotNull().SetValidator(new DatabaseOptionsValidator());
+
+        When(x => x.Sentinel is not null, () =>
+        {
+            RuleFor(x => x.Sentinel!).SetValidator(new SentinelOptionsValidator());
+        });
     }
 }
 
@@ -152,5 +157,42 @@ public sealed class DatabaseOptionsValidator : AbstractValidator<DatabaseOptions
     {
         RuleFor(x => x.ConnectionString).NotEmpty();
         RuleFor(x => x.MaxRetentionDays).InclusiveBetween(1, 3650);
+    }
+}
+
+/// <summary>
+/// Validates <see cref="SentinelOptions"/>.
+/// </summary>
+public sealed class SentinelOptionsValidator : AbstractValidator<SentinelOptions>
+{
+    /// <summary>
+    /// Initializes validation rules for SENTINEL options.
+    /// </summary>
+    public SentinelOptionsValidator()
+    {
+        RuleFor(x => x.CanariesPerDirectory).InclusiveBetween(1, 10);
+        RuleFor(x => x.CheckIntervalMs).InclusiveBetween(100, 10000);
+
+        RuleFor(x => x.WatchDirectories)
+            .NotEmpty()
+            .WithMessage("Sentinel.WatchDirectories must not be empty.");
+
+        RuleForEach(x => x.WatchDirectories)
+            .Must(BeValidPath)
+            .WithMessage("Each Sentinel watch directory must be a valid path.");
+
+        RuleFor(x => x.CanaryTemplates)
+            .Must(t => t is not null && t.Length >= 3)
+            .WithMessage("Sentinel.CanaryTemplates must contain at least 3 templates.");
+
+        RuleFor(x => x.CanaryPrefix).NotEmpty();
+    }
+
+    private static bool BeValidPath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return false;
+        string expanded = System.Environment.ExpandEnvironmentVariables(path);
+        try { _ = Path.GetFullPath(expanded); return true; }
+        catch { return false; }
     }
 }

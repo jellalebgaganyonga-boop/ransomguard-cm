@@ -42,6 +42,56 @@ public sealed record AgentConfiguration
     /// </summary>
     [Required]
     public required DatabaseOptions Database { get; init; }
+
+    /// <summary>
+    /// SENTINEL canary file detection settings.
+    /// </summary>
+    public SentinelOptions? Sentinel { get; init; }
+}
+
+/// <summary>
+/// SENTINEL semantic medical canary file configuration.
+/// Controls deployment and monitoring of decoy files that detect ransomware.
+/// </summary>
+public sealed record SentinelOptions
+{
+    /// <summary>
+    /// Whether SENTINEL canary monitoring is enabled.
+    /// </summary>
+    public bool Enabled { get; init; } = true;
+
+    /// <summary>
+    /// Number of canary files to deploy per watched directory.
+    /// </summary>
+    [Range(1, 10)]
+    public int CanariesPerDirectory { get; init; } = 3;
+
+    /// <summary>
+    /// Interval in milliseconds between periodic canary integrity checks.
+    /// </summary>
+    [Range(100, 10000)]
+    public int CheckIntervalMs { get; init; } = 1000;
+
+    /// <summary>
+    /// Directories to deploy and monitor canary files in.
+    /// Supports environment variables (e.g., %USERPROFILE%).
+    /// </summary>
+    [Required]
+    [MinLength(1)]
+    public required string[] WatchDirectories { get; init; }
+
+    /// <summary>
+    /// Template names used to generate realistic medical canary content.
+    /// </summary>
+    [Required]
+    [MinLength(3)]
+    public required string[] CanaryTemplates { get; init; }
+
+    /// <summary>
+    /// Filename prefix for canary files (ensures alphabetical prominence).
+    /// </summary>
+    [Required]
+    public string CanaryPrefix { get; init; } = "0001_";
 }
 
 /// <summary>
