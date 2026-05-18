@@ -30,19 +30,21 @@ public sealed class FileEventDeduplicator : IFileEventDeduplicator, IDisposable
         string key = BuildKey(fullPath, changeType);
         DateTime now = DateTime.UtcNow;
 
-        if (_recentEvents.TryGetValue(key, out DateTime lastSeen))
-        {
-            if (now - lastSeen < _window)
+        // Atomic add-or-update: uses AddOrUpdate to prevent race conditions
+        bool isDuplicate = false;
+        _recentEvents.AddOrUpdate(
+            key,
+            now, // Factory for new key: always process
+            (_, lastSeen) =>
             {
-                // Duplicate within window — update timestamp and skip
-                _recentEvents[key] = now;
-                return false;
-            }
-        }
+                if (now - lastSeen < _window)
+                {
+                    isDuplicate = true;
+                }
+                return now;
+            });
 
-        // New event or expired window — record and process
-        _recentEvents[key] = now;
-        return true;
+        return !isDuplicate;
     }
 
     /// <inheritdoc cref="IDisposable.Dispose"/>
