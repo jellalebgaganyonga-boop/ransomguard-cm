@@ -2,6 +2,7 @@ using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using RansomGuard.Agent.Core.Configuration;
 using RansomGuard.Agent.Core.Detection;
+using RansomGuard.Agent.Core.Detection.Entropy;
 using RansomGuard.Agent.Core.Detection.Sentinel;
 using RansomGuard.Agent.Core.Persistence;
 using RansomGuard.Agent.Core.Security;
@@ -147,9 +148,13 @@ try
     builder.Services.AddScoped<ICanaryFileService, CanaryFileService>();
     builder.Services.AddSingleton<RestartManagerHelper>();
 
+    // Register ENTROPY services
+    builder.Services.AddSingleton<IEntropyCalculator, EntropyCalculator>();
+
     // SENTINEL deployment runs before Worker to ensure canaries exist
     builder.Services.AddHostedService<SentinelDeploymentService>();
     builder.Services.AddHostedService<SentinelMonitor>();
+    builder.Services.AddHostedService<EntropyMonitor>();
     builder.Services.AddHostedService<Worker>();
 
     var host = builder.Build();
