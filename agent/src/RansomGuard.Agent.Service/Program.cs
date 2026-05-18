@@ -124,6 +124,7 @@ try
 
     // SENTINEL deployment runs before Worker to ensure canaries exist
     builder.Services.AddHostedService<SentinelDeploymentService>();
+    builder.Services.AddHostedService<SentinelMonitor>();
     builder.Services.AddHostedService<Worker>();
 
     var host = builder.Build();
