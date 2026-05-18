@@ -1,5 +1,5 @@
-using FluentAssertions;
 using RansomGuard.Agent.Core.Configuration;
+using Shouldly;
 
 namespace RansomGuard.Agent.Tests.Configuration;
 
@@ -17,61 +17,52 @@ public sealed class EnvironmentVariableResolverTests
             "Desktop", "Test");
 
         string result = EnvironmentVariableResolver.ResolvePath(input);
-
-        result.Should().Be(expected);
+        result.ShouldBe(expected);
     }
 
     [Fact]
     public void Should_return_path_unchanged_when_no_variables()
     {
         string input = @"C:\SomePath\Test";
-
         string result = EnvironmentVariableResolver.ResolvePath(input);
-
-        result.Should().Be(input);
+        result.ShouldBe(input);
     }
 
     [Fact]
     public void Should_handle_null_path()
     {
         string result = EnvironmentVariableResolver.ResolvePath(null!);
-
-        result.Should().BeNull();
+        result.ShouldBeNull();
     }
 
     [Fact]
     public void Should_handle_empty_path()
     {
         string result = EnvironmentVariableResolver.ResolvePath("");
-
-        result.Should().BeEmpty();
+        result.ShouldBeEmpty();
     }
 
     [Fact]
     public void Should_resolve_multiple_paths()
     {
         string[] input = [@"%USERPROFILE%\Test1", @"C:\Test2"];
-
         string[] result = EnvironmentVariableResolver.ResolvePaths(input);
-
-        result.Should().HaveCount(2);
-        result[0].Should().NotContain("%USERPROFILE%");
-        result[1].Should().Be(@"C:\Test2");
+        result.Length.ShouldBe(2);
+        result[0].ShouldNotContain("%USERPROFILE%");
+        result[1].ShouldBe(@"C:\Test2");
     }
 
     [Fact]
     public void Should_handle_empty_paths_array()
     {
         string[] result = EnvironmentVariableResolver.ResolvePaths([]);
-
-        result.Should().BeEmpty();
+        result.ShouldBeEmpty();
     }
 
     [Fact]
     public void Should_handle_null_paths_array()
     {
         string[] result = EnvironmentVariableResolver.ResolvePaths(null!);
-
-        result.Should().BeEmpty();
+        result.ShouldBeEmpty();
     }
 }

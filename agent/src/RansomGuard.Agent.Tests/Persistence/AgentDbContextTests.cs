@@ -1,6 +1,6 @@
-using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using RansomGuard.Agent.Core.Persistence;
+using Shouldly;
 
 namespace RansomGuard.Agent.Tests.Persistence;
 
@@ -23,41 +23,24 @@ public sealed class AgentDbContextTests : IDisposable
     }
 
     [Fact]
-    public void Should_create_detection_events_table()
-    {
-        _context.DetectionEvents.Should().NotBeNull();
-    }
+    public void Should_create_detection_events_table() => _context.DetectionEvents.ShouldNotBeNull();
 
     [Fact]
-    public void Should_create_alerts_table()
-    {
-        _context.Alerts.Should().NotBeNull();
-    }
+    public void Should_create_alerts_table() => _context.Alerts.ShouldNotBeNull();
 
     [Fact]
-    public void Should_create_agent_states_table()
-    {
-        _context.AgentStates.Should().NotBeNull();
-    }
+    public void Should_create_agent_states_table() => _context.AgentStates.ShouldNotBeNull();
 
     [Fact]
-    public void Should_create_audit_logs_table()
-    {
-        _context.AuditLogs.Should().NotBeNull();
-    }
+    public void Should_create_audit_logs_table() => _context.AuditLogs.ShouldNotBeNull();
 
     [Fact]
     public async Task Should_have_all_four_tables_accessible()
     {
-        int eventCount = await _context.DetectionEvents.CountAsync();
-        int alertCount = await _context.Alerts.CountAsync();
-        int stateCount = await _context.AgentStates.CountAsync();
-        int auditCount = await _context.AuditLogs.CountAsync();
-
-        eventCount.Should().Be(0);
-        alertCount.Should().Be(0);
-        stateCount.Should().Be(0);
-        auditCount.Should().Be(0);
+        (await _context.DetectionEvents.CountAsync()).ShouldBe(0);
+        (await _context.Alerts.CountAsync()).ShouldBe(0);
+        (await _context.AgentStates.CountAsync()).ShouldBe(0);
+        (await _context.AuditLogs.CountAsync()).ShouldBe(0);
     }
 
     public void Dispose()

@@ -1,5 +1,5 @@
-using FluentAssertions;
 using RansomGuard.Agent.Core.Detection;
+using Shouldly;
 
 namespace RansomGuard.Agent.Tests.Detection;
 
@@ -18,84 +18,58 @@ public sealed class FileEventDeduplicatorTests : IDisposable
     [Fact]
     public void First_event_should_always_be_processed()
     {
-        bool result = _deduplicator.ShouldProcess(@"C:\test\file.txt", WatcherChangeTypes.Created);
-
-        result.Should().BeTrue();
+        _deduplicator.ShouldProcess(@"C:\test\file.txt", WatcherChangeTypes.Created).ShouldBeTrue();
     }
 
     [Fact]
     public void Duplicate_event_within_window_should_be_filtered()
     {
         _deduplicator.ShouldProcess(@"C:\test\file.txt", WatcherChangeTypes.Changed);
-
-        bool duplicate = _deduplicator.ShouldProcess(@"C:\test\file.txt", WatcherChangeTypes.Changed);
-
-        duplicate.Should().BeFalse();
+        _deduplicator.ShouldProcess(@"C:\test\file.txt", WatcherChangeTypes.Changed).ShouldBeFalse();
     }
 
     [Fact]
     public void Same_event_outside_window_should_be_processed()
     {
         using var shortWindow = new FileEventDeduplicator(windowMs: 50);
-
         shortWindow.ShouldProcess(@"C:\test\file.txt", WatcherChangeTypes.Changed);
-        Thread.Sleep(100); // Exceed the 50ms window
-
-        bool result = shortWindow.ShouldProcess(@"C:\test\file.txt", WatcherChangeTypes.Changed);
-
-        result.Should().BeTrue();
+        Thread.Sleep(100);
+        shortWindow.ShouldProcess(@"C:\test\file.txt", WatcherChangeTypes.Changed).ShouldBeTrue();
     }
 
     [Fact]
     public void Different_change_types_on_same_file_should_both_be_processed()
     {
         _deduplicator.ShouldProcess(@"C:\test\file.txt", WatcherChangeTypes.Created);
-
-        bool changed = _deduplicator.ShouldProcess(@"C:\test\file.txt", WatcherChangeTypes.Changed);
-
-        changed.Should().BeTrue();
+        _deduplicator.ShouldProcess(@"C:\test\file.txt", WatcherChangeTypes.Changed).ShouldBeTrue();
     }
 
     [Fact]
     public void Different_files_with_same_change_type_should_both_be_processed()
     {
         _deduplicator.ShouldProcess(@"C:\test\file1.txt", WatcherChangeTypes.Changed);
-
-        bool result = _deduplicator.ShouldProcess(@"C:\test\file2.txt", WatcherChangeTypes.Changed);
-
-        result.Should().BeTrue();
+        _deduplicator.ShouldProcess(@"C:\test\file2.txt", WatcherChangeTypes.Changed).ShouldBeTrue();
     }
 
     [Fact]
     public void Multiple_duplicates_should_all_be_filtered()
     {
         _deduplicator.ShouldProcess(@"C:\test\file.txt", WatcherChangeTypes.Changed);
-
-        bool dup1 = _deduplicator.ShouldProcess(@"C:\test\file.txt", WatcherChangeTypes.Changed);
-        bool dup2 = _deduplicator.ShouldProcess(@"C:\test\file.txt", WatcherChangeTypes.Changed);
-        bool dup3 = _deduplicator.ShouldProcess(@"C:\test\file.txt", WatcherChangeTypes.Changed);
-
-        dup1.Should().BeFalse();
-        dup2.Should().BeFalse();
-        dup3.Should().BeFalse();
+        _deduplicator.ShouldProcess(@"C:\test\file.txt", WatcherChangeTypes.Changed).ShouldBeFalse();
+        _deduplicator.ShouldProcess(@"C:\test\file.txt", WatcherChangeTypes.Changed).ShouldBeFalse();
+        _deduplicator.ShouldProcess(@"C:\test\file.txt", WatcherChangeTypes.Changed).ShouldBeFalse();
     }
 
     [Fact]
     public void Thread_safety_with_parallel_events()
     {
         int processedCount = 0;
-        int totalAttempts = 1000;
-
-        Parallel.For(0, totalAttempts, _ =>
+        Parallel.For(0, 1000, _ =>
         {
             if (_deduplicator.ShouldProcess(@"C:\test\concurrent.txt", WatcherChangeTypes.Changed))
-            {
                 Interlocked.Increment(ref processedCount);
-            }
         });
-
-        // Only the first event should be processed; all others are within the 500ms window
-        processedCount.Should().Be(1);
+        processedCount.ShouldBe(1);
     }
 
     [Fact]
@@ -103,30 +77,19 @@ public sealed class FileEventDeduplicatorTests : IDisposable
     {
         using var shortWindow = new FileEventDeduplicator(windowMs: 100);
 
-        bool first = shortWindow.ShouldProcess(@"C:\test\file.txt", WatcherChangeTypes.Changed);
-        first.Should().BeTrue();
-
-        // Within window
+        shortWindow.ShouldProcess(@"C:\test\file.txt", WatcherChangeTypes.Changed).ShouldBeTrue();
         Thread.Sleep(30);
-        bool withinWindow = shortWindow.ShouldProcess(@"C:\test\file.txt", WatcherChangeTypes.Changed);
-        withinWindow.Should().BeFalse();
-
-        // Wait past window
+        shortWindow.ShouldProcess(@"C:\test\file.txt", WatcherChangeTypes.Changed).ShouldBeFalse();
         Thread.Sleep(150);
-        bool afterWindow = shortWindow.ShouldProcess(@"C:\test\file.txt", WatcherChangeTypes.Changed);
-        afterWindow.Should().BeTrue();
+        shortWindow.ShouldProcess(@"C:\test\file.txt", WatcherChangeTypes.Changed).ShouldBeTrue();
     }
 
     [Fact]
     public void Renamed_events_should_be_deduplicated_independently()
     {
         _deduplicator.ShouldProcess(@"C:\test\file.txt", WatcherChangeTypes.Renamed);
-
-        bool dup = _deduplicator.ShouldProcess(@"C:\test\file.txt", WatcherChangeTypes.Renamed);
-        bool deleted = _deduplicator.ShouldProcess(@"C:\test\file.txt", WatcherChangeTypes.Deleted);
-
-        dup.Should().BeFalse();
-        deleted.Should().BeTrue();
+        _deduplicator.ShouldProcess(@"C:\test\file.txt", WatcherChangeTypes.Renamed).ShouldBeFalse();
+        _deduplicator.ShouldProcess(@"C:\test\file.txt", WatcherChangeTypes.Deleted).ShouldBeTrue();
     }
 
     public void Dispose()

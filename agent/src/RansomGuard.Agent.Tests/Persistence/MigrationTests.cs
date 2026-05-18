@@ -1,7 +1,7 @@
-using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using RansomGuard.Agent.Core.Persistence;
+using Shouldly;
 
 namespace RansomGuard.Agent.Tests.Persistence;
 
@@ -21,13 +21,12 @@ public sealed class MigrationTests : IDisposable
     public void Migrations_should_apply_cleanly_to_fresh_database()
     {
         using var context = CreateContext();
-
         context.Database.Migrate();
 
-        context.DetectionEvents.Count().Should().Be(0);
-        context.Alerts.Count().Should().Be(0);
-        context.AgentStates.Count().Should().Be(0);
-        context.AuditLogs.Count().Should().Be(0);
+        context.DetectionEvents.Count().ShouldBe(0);
+        context.Alerts.Count().ShouldBe(0);
+        context.AgentStates.Count().ShouldBe(0);
+        context.AuditLogs.Count().ShouldBe(0);
     }
 
     [Fact]
@@ -38,13 +37,11 @@ public sealed class MigrationTests : IDisposable
             context1.Database.Migrate();
         }
 
-        // Clear SQLite connection pool between uses
         SqliteConnection.ClearAllPools();
 
         using var context2 = CreateContext();
         context2.Database.Migrate();
-
-        context2.DetectionEvents.Count().Should().Be(0);
+        context2.DetectionEvents.Count().ShouldBe(0);
     }
 
     [Fact]
@@ -53,13 +50,13 @@ public sealed class MigrationTests : IDisposable
         using var context = CreateContext();
 
         IEnumerable<string> pending = context.Database.GetPendingMigrations();
-        pending.Should().NotBeEmpty();
-        pending.Should().Contain(m => m.Contains("InitialCreate"));
+        pending.ShouldNotBeEmpty();
+        pending.ShouldContain(m => m.Contains("InitialCreate"));
 
         context.Database.Migrate();
 
         IEnumerable<string> afterMigrate = context.Database.GetPendingMigrations();
-        afterMigrate.Should().BeEmpty();
+        afterMigrate.ShouldBeEmpty();
     }
 
     private AgentDbContext CreateContext()
@@ -67,24 +64,13 @@ public sealed class MigrationTests : IDisposable
         var options = new DbContextOptionsBuilder<AgentDbContext>()
             .UseSqlite($"Data Source={_dbPath}")
             .Options;
-
         return new AgentDbContext(options);
     }
 
     public void Dispose()
     {
         SqliteConnection.ClearAllPools();
-
-        try
-        {
-            if (File.Exists(_dbPath))
-            {
-                File.Delete(_dbPath);
-            }
-        }
-        catch (IOException)
-        {
-            // Best-effort cleanup; temp files will be purged by OS
-        }
+        try { if (File.Exists(_dbPath)) File.Delete(_dbPath); }
+        catch (IOException) { }
     }
 }

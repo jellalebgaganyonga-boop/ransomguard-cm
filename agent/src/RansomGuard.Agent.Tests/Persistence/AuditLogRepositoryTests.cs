@@ -1,8 +1,8 @@
-using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using RansomGuard.Agent.Core.Persistence;
 using RansomGuard.Agent.Core.Persistence.Entities;
 using RansomGuard.Agent.Core.Persistence.Repositories;
+using Shouldly;
 
 namespace RansomGuard.Agent.Tests.Persistence;
 
@@ -30,13 +30,12 @@ public sealed class AuditLogRepositoryTests : IDisposable
     public async Task AppendAsync_first_entry_should_have_no_previous_hash()
     {
         await _repository.AppendAsync("AgentStarted", "Agent started successfully");
-
         AuditLog? latest = await _repository.GetLatestAsync();
 
-        latest.Should().NotBeNull();
-        latest!.PreviousHash.Should().BeNull();
-        latest.CurrentHash.Should().NotBeNullOrEmpty();
-        latest.Action.Should().Be("AgentStarted");
+        latest.ShouldNotBeNull();
+        latest.PreviousHash.ShouldBeNull();
+        latest.CurrentHash.ShouldNotBeNullOrEmpty();
+        latest.Action.ShouldBe("AgentStarted");
     }
 
     [Fact]
@@ -48,9 +47,9 @@ public sealed class AuditLogRepositoryTests : IDisposable
         await _repository.AppendAsync("Action2", "Second entry");
         AuditLog? second = await _repository.GetLatestAsync();
 
-        second.Should().NotBeNull();
-        second!.PreviousHash.Should().Be(first!.CurrentHash);
-        second.CurrentHash.Should().NotBe(first.CurrentHash);
+        second.ShouldNotBeNull();
+        second.PreviousHash.ShouldBe(first!.CurrentHash);
+        second.CurrentHash.ShouldNotBe(first.CurrentHash);
     }
 
     [Fact]
@@ -58,12 +57,11 @@ public sealed class AuditLogRepositoryTests : IDisposable
     {
         Guid entityId = Guid.NewGuid();
         await _repository.AppendAsync("FileDetected", "New file detected", "DetectionEvent", entityId);
-
         AuditLog? latest = await _repository.GetLatestAsync();
 
-        latest.Should().NotBeNull();
-        latest!.EntityType.Should().Be("DetectionEvent");
-        latest.EntityId.Should().Be(entityId);
+        latest.ShouldNotBeNull();
+        latest.EntityType.ShouldBe("DetectionEvent");
+        latest.EntityId.ShouldBe(entityId);
     }
 
     [Fact]
@@ -73,17 +71,13 @@ public sealed class AuditLogRepositoryTests : IDisposable
         await _repository.AppendAsync("Action2", "Entry 2");
         await _repository.AppendAsync("Action3", "Entry 3");
 
-        bool isValid = await _repository.VerifyChainIntegrityAsync();
-
-        isValid.Should().BeTrue();
+        (await _repository.VerifyChainIntegrityAsync()).ShouldBeTrue();
     }
 
     [Fact]
     public async Task VerifyChainIntegrityAsync_should_return_true_for_empty_chain()
     {
-        bool isValid = await _repository.VerifyChainIntegrityAsync();
-
-        isValid.Should().BeTrue();
+        (await _repository.VerifyChainIntegrityAsync()).ShouldBeTrue();
     }
 
     [Fact]
@@ -92,57 +86,45 @@ public sealed class AuditLogRepositoryTests : IDisposable
         await _repository.AppendAsync("Action1", "Entry 1");
         await _repository.AppendAsync("Action2", "Entry 2");
 
-        // Tamper with the first entry's hash
-        AuditLog? firstEntry = await _context.AuditLogs
-            .OrderBy(a => a.CreatedAt)
-            .FirstAsync();
-
-        // Direct SQL update to bypass EF tracking for tamper simulation
+        AuditLog? firstEntry = await _context.AuditLogs.OrderBy(a => a.CreatedAt).FirstAsync();
         await _context.Database.ExecuteSqlRawAsync(
-            "UPDATE AuditLogs SET CurrentHash = 'tampered_hash_value' WHERE Id = {0}",
-            firstEntry.Id);
+            "UPDATE AuditLogs SET CurrentHash = 'tampered_hash_value' WHERE Id = {0}", firstEntry.Id);
 
-        bool isValid = await _repository.VerifyChainIntegrityAsync();
-
-        isValid.Should().BeFalse();
+        (await _repository.VerifyChainIntegrityAsync()).ShouldBeFalse();
     }
 
     [Fact]
     public async Task GetByTimeRangeAsync_should_filter_entries()
     {
         await _repository.AppendAsync("Action1", "Entry 1");
-        await Task.Delay(10); // Ensure different timestamps
+        await Task.Delay(10);
         await _repository.AppendAsync("Action2", "Entry 2");
 
         DateTime from = DateTime.UtcNow.AddMinutes(-1);
         DateTime to = DateTime.UtcNow.AddMinutes(1);
-
         IReadOnlyList<AuditLog> results = await _repository.GetByTimeRangeAsync(from, to);
 
-        results.Should().HaveCount(2);
-        results.Should().BeInAscendingOrder(a => a.CreatedAt);
+        results.Count.ShouldBe(2);
+        // Verify ascending order
+        results[0].CreatedAt.ShouldBeLessThanOrEqualTo(results[1].CreatedAt);
     }
 
     [Fact]
     public void ComputeHash_should_be_deterministic()
     {
         DateTime timestamp = new(2026, 5, 17, 12, 0, 0, DateTimeKind.Utc);
-
         string hash1 = AuditLog.ComputeHash("Action", "Details", timestamp, null);
         string hash2 = AuditLog.ComputeHash("Action", "Details", timestamp, null);
-
-        hash1.Should().Be(hash2);
+        hash1.ShouldBe(hash2);
     }
 
     [Fact]
     public void ComputeHash_should_differ_for_different_inputs()
     {
         DateTime timestamp = new(2026, 5, 17, 12, 0, 0, DateTimeKind.Utc);
-
         string hash1 = AuditLog.ComputeHash("Action1", "Details", timestamp, null);
         string hash2 = AuditLog.ComputeHash("Action2", "Details", timestamp, null);
-
-        hash1.Should().NotBe(hash2);
+        hash1.ShouldNotBe(hash2);
     }
 
     public void Dispose()

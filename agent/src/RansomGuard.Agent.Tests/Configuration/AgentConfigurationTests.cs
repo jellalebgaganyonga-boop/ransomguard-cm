@@ -1,7 +1,6 @@
-using FluentAssertions;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Options;
 using RansomGuard.Agent.Core.Configuration;
+using Shouldly;
 
 namespace RansomGuard.Agent.Tests.Configuration;
 
@@ -33,23 +32,23 @@ public sealed class AgentConfigurationTests
             ["Agent:Database:MaxRetentionDays"] = "90",
         });
 
-        config.Should().NotBeNull();
-        config.Identity.Id.Should().Be("auto-generated-on-first-run");
-        config.Identity.Hostname.Should().Be("AUTO");
-        config.Identity.Version.Should().Be("0.3.0");
-        config.Identity.Environment.Should().Be("Development");
-        config.Detection.WatchPaths.Should().HaveCount(1);
-        config.Detection.WatchPaths[0].Should().Be(@"C:\Test");
-        config.Detection.EnableFileSystemWatcher.Should().BeTrue();
-        config.Detection.EnableETW.Should().BeFalse();
-        config.Logging.MinimumLevel.Should().Be("Information");
-        config.Logging.MaxFileSizeMB.Should().Be(50);
-        config.Logging.RetainedFileCount.Should().Be(30);
-        config.Server.BaseUrl.Should().Be("https://localhost:5001");
-        config.Server.HeartbeatIntervalSeconds.Should().Be(30);
-        config.Server.ConnectionTimeoutSeconds.Should().Be(10);
-        config.Database.ConnectionString.Should().Be("Data Source=agent.db");
-        config.Database.MaxRetentionDays.Should().Be(90);
+        config.ShouldNotBeNull();
+        config.Identity.Id.ShouldBe("auto-generated-on-first-run");
+        config.Identity.Hostname.ShouldBe("AUTO");
+        config.Identity.Version.ShouldBe("0.3.0");
+        config.Identity.Environment.ShouldBe("Development");
+        config.Detection.WatchPaths.Length.ShouldBe(1);
+        config.Detection.WatchPaths[0].ShouldBe(@"C:\Test");
+        config.Detection.EnableFileSystemWatcher.ShouldBeTrue();
+        config.Detection.EnableETW.ShouldBeFalse();
+        config.Logging.MinimumLevel.ShouldBe("Information");
+        config.Logging.MaxFileSizeMB.ShouldBe(50);
+        config.Logging.RetainedFileCount.ShouldBe(30);
+        config.Server.BaseUrl.ShouldBe("https://localhost:5001");
+        config.Server.HeartbeatIntervalSeconds.ShouldBe(30);
+        config.Server.ConnectionTimeoutSeconds.ShouldBe(10);
+        config.Database.ConnectionString.ShouldBe("Data Source=agent.db");
+        config.Database.MaxRetentionDays.ShouldBe(90);
     }
 
     [Fact]
@@ -71,8 +70,8 @@ public sealed class AgentConfigurationTests
             ["Agent:Database:ConnectionString"] = "Data Source=agent.db",
         });
 
-        config.Detection.WatchPaths.Should().HaveCount(3);
-        config.Detection.WatchPaths.Should().Contain(@"C:\Path2");
+        config.Detection.WatchPaths.Length.ShouldBe(3);
+        config.Detection.WatchPaths.ShouldContain(@"C:\Path2");
     }
 
     [Fact]
@@ -92,12 +91,12 @@ public sealed class AgentConfigurationTests
         });
 
         // Record defaults are preserved: EnableFileSystemWatcher defaults to true
-        config.Detection.EnableFileSystemWatcher.Should().BeTrue();
-        config.Detection.EnableETW.Should().BeFalse();
+        config.Detection.EnableFileSystemWatcher.ShouldBeTrue();
+        config.Detection.EnableETW.ShouldBeFalse();
         // Int defaults from record are preserved via Bind on pre-constructed object
-        config.Logging.MaxFileSizeMB.Should().Be(50);
-        config.Server.HeartbeatIntervalSeconds.Should().Be(30);
-        config.Database.MaxRetentionDays.Should().Be(90);
+        config.Logging.MaxFileSizeMB.ShouldBe(50);
+        config.Server.HeartbeatIntervalSeconds.ShouldBe(30);
+        config.Database.MaxRetentionDays.ShouldBe(90);
     }
 
     private static AgentConfiguration BuildConfiguration(Dictionary<string, string?> values)

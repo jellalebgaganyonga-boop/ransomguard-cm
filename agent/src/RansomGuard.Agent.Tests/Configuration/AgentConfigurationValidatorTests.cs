@@ -1,6 +1,6 @@
-using FluentAssertions;
 using FluentValidation.Results;
 using RansomGuard.Agent.Core.Configuration;
+using Shouldly;
 
 namespace RansomGuard.Agent.Tests.Configuration;
 
@@ -15,10 +15,8 @@ public sealed class AgentConfigurationValidatorTests
     public void Valid_configuration_should_pass_validation()
     {
         AgentConfiguration config = CreateValidConfig();
-
         ValidationResult result = _validator.Validate(config);
-
-        result.IsValid.Should().BeTrue();
+        result.IsValid.ShouldBeTrue();
     }
 
     [Theory]
@@ -31,11 +29,9 @@ public sealed class AgentConfigurationValidatorTests
         {
             Identity = CreateValidConfig().Identity with { Id = id }
         };
-
         ValidationResult result = _validator.Validate(config);
-
-        result.IsValid.Should().BeFalse();
-        result.Errors.Should().Contain(e => e.PropertyName.Contains("Id"));
+        result.IsValid.ShouldBeFalse();
+        result.Errors.ShouldContain(e => e.PropertyName.Contains("Id"));
     }
 
     [Fact]
@@ -45,10 +41,8 @@ public sealed class AgentConfigurationValidatorTests
         {
             Identity = CreateValidConfig().Identity with { Id = "auto-generated-on-first-run" }
         };
-
         ValidationResult result = _validator.Validate(config);
-
-        result.IsValid.Should().BeTrue();
+        result.IsValid.ShouldBeTrue();
     }
 
     [Fact]
@@ -58,10 +52,8 @@ public sealed class AgentConfigurationValidatorTests
         {
             Identity = CreateValidConfig().Identity with { Id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890" }
         };
-
         ValidationResult result = _validator.Validate(config);
-
-        result.IsValid.Should().BeTrue();
+        result.IsValid.ShouldBeTrue();
     }
 
     [Theory]
@@ -74,10 +66,8 @@ public sealed class AgentConfigurationValidatorTests
         {
             Identity = CreateValidConfig().Identity with { Environment = environment }
         };
-
         ValidationResult result = _validator.Validate(config);
-
-        result.IsValid.Should().BeFalse();
+        result.IsValid.ShouldBeFalse();
     }
 
     [Theory]
@@ -90,10 +80,8 @@ public sealed class AgentConfigurationValidatorTests
         {
             Identity = CreateValidConfig().Identity with { Environment = environment }
         };
-
         ValidationResult result = _validator.Validate(config);
-
-        result.IsValid.Should().BeTrue();
+        result.IsValid.ShouldBeTrue();
     }
 
     [Fact]
@@ -103,11 +91,9 @@ public sealed class AgentConfigurationValidatorTests
         {
             Detection = CreateValidConfig().Detection with { WatchPaths = [] }
         };
-
         ValidationResult result = _validator.Validate(config);
-
-        result.IsValid.Should().BeFalse();
-        result.Errors.Should().Contain(e => e.PropertyName.Contains("WatchPaths"));
+        result.IsValid.ShouldBeFalse();
+        result.Errors.ShouldContain(e => e.PropertyName.Contains("WatchPaths"));
     }
 
     [Fact]
@@ -115,15 +101,10 @@ public sealed class AgentConfigurationValidatorTests
     {
         AgentConfiguration config = CreateValidConfig() with
         {
-            Detection = CreateValidConfig().Detection with
-            {
-                WatchPaths = ["%USERPROFILE%\\Desktop\\Test"]
-            }
+            Detection = CreateValidConfig().Detection with { WatchPaths = ["%USERPROFILE%\\Desktop\\Test"] }
         };
-
         ValidationResult result = _validator.Validate(config);
-
-        result.IsValid.Should().BeTrue();
+        result.IsValid.ShouldBeTrue();
     }
 
     [Theory]
@@ -133,15 +114,10 @@ public sealed class AgentConfigurationValidatorTests
     {
         AgentConfiguration config = CreateValidConfig() with
         {
-            Detection = CreateValidConfig().Detection with
-            {
-                WatchPaths = [path]
-            }
+            Detection = CreateValidConfig().Detection with { WatchPaths = [path] }
         };
-
         ValidationResult result = _validator.Validate(config);
-
-        result.IsValid.Should().BeFalse();
+        result.IsValid.ShouldBeFalse();
     }
 
     [Theory]
@@ -155,10 +131,8 @@ public sealed class AgentConfigurationValidatorTests
         {
             Server = CreateValidConfig().Server with { BaseUrl = url }
         };
-
         ValidationResult result = _validator.Validate(config);
-
-        result.IsValid.Should().BeFalse();
+        result.IsValid.ShouldBeFalse();
     }
 
     [Fact]
@@ -168,10 +142,8 @@ public sealed class AgentConfigurationValidatorTests
         {
             Server = CreateValidConfig().Server with { BaseUrl = "https://ransomguard.local:5001" }
         };
-
         ValidationResult result = _validator.Validate(config);
-
-        result.IsValid.Should().BeTrue();
+        result.IsValid.ShouldBeTrue();
     }
 
     [Theory]
@@ -183,10 +155,8 @@ public sealed class AgentConfigurationValidatorTests
         {
             Server = CreateValidConfig().Server with { HeartbeatIntervalSeconds = seconds }
         };
-
         ValidationResult result = _validator.Validate(config);
-
-        result.IsValid.Should().BeFalse();
+        result.IsValid.ShouldBeFalse();
     }
 
     [Theory]
@@ -199,10 +169,8 @@ public sealed class AgentConfigurationValidatorTests
         {
             Server = CreateValidConfig().Server with { HeartbeatIntervalSeconds = seconds }
         };
-
         ValidationResult result = _validator.Validate(config);
-
-        result.IsValid.Should().BeTrue();
+        result.IsValid.ShouldBeTrue();
     }
 
     [Fact]
@@ -212,10 +180,8 @@ public sealed class AgentConfigurationValidatorTests
         {
             Database = CreateValidConfig().Database with { ConnectionString = "" }
         };
-
         ValidationResult result = _validator.Validate(config);
-
-        result.IsValid.Should().BeFalse();
+        result.IsValid.ShouldBeFalse();
     }
 
     [Theory]
@@ -227,10 +193,8 @@ public sealed class AgentConfigurationValidatorTests
         {
             Database = CreateValidConfig().Database with { MaxRetentionDays = days }
         };
-
         ValidationResult result = _validator.Validate(config);
-
-        result.IsValid.Should().BeFalse();
+        result.IsValid.ShouldBeFalse();
     }
 
     [Theory]
@@ -242,10 +206,8 @@ public sealed class AgentConfigurationValidatorTests
         {
             Logging = CreateValidConfig().Logging with { MinimumLevel = level }
         };
-
         ValidationResult result = _validator.Validate(config);
-
-        result.IsValid.Should().BeFalse();
+        result.IsValid.ShouldBeFalse();
     }
 
     [Theory]
@@ -257,10 +219,8 @@ public sealed class AgentConfigurationValidatorTests
         {
             Logging = CreateValidConfig().Logging with { MaxFileSizeMB = size }
         };
-
         ValidationResult result = _validator.Validate(config);
-
-        result.IsValid.Should().BeFalse();
+        result.IsValid.ShouldBeFalse();
     }
 
     [Theory]
@@ -272,10 +232,8 @@ public sealed class AgentConfigurationValidatorTests
         {
             Server = CreateValidConfig().Server with { ConnectionTimeoutSeconds = seconds }
         };
-
         ValidationResult result = _validator.Validate(config);
-
-        result.IsValid.Should().BeFalse();
+        result.IsValid.ShouldBeFalse();
     }
 
     private static AgentConfiguration CreateValidConfig() => new()
