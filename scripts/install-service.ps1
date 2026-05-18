@@ -56,6 +56,11 @@ sc.exe description $ServiceName "$Description"
 # Subsequent failures: restart after 60 seconds
 # Reset failure counter after 1 day (86400 seconds)
 sc.exe failure $ServiceName reset= 86400 actions= restart/5000/restart/10000/restart/60000
+sc.exe failureflag $ServiceName 1
+
+# Security descriptor: prevent non-admin users from stopping the service
+# SY=SYSTEM, BA=Administrators, IU=Interactive Users (read only), SU=Service Users (read only)
+sc.exe sdset $ServiceName "D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)(A;;CCLCSWLOCRRC;;;IU)(A;;CCLCSWLOCRRC;;;SU)"
 
 # Ensure ProgramData directories exist
 $dataDir = Join-Path $env:ProgramData "RansomGuard-CM\data"
