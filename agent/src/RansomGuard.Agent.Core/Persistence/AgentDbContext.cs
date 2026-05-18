@@ -49,6 +49,11 @@ public sealed class AgentDbContext : DbContext
     public DbSet<EntropyAlert> EntropyAlerts => Set<EntropyAlert>();
 
     /// <summary>
+    /// GENEALOGY process tree forensic records linked to alerts.
+    /// </summary>
+    public DbSet<GenealogyRecord> GenealogyRecords => Set<GenealogyRecord>();
+
+    /// <summary>
     /// Initializes a new instance of <see cref="AgentDbContext"/>.
     /// </summary>
     /// <param name="options">Database context options.</param>
@@ -146,6 +151,16 @@ public sealed class AgentDbContext : DbContext
             entity.Property(e => e.FilePath).IsRequired().HasMaxLength(1024);
             entity.Property(e => e.RuleName).IsRequired().HasMaxLength(50);
             entity.Property(e => e.Severity).IsRequired().HasMaxLength(20);
+        });
+
+        modelBuilder.Entity<GenealogyRecord>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.AlertId);
+            entity.Property(e => e.ProcessTreeJson).IsRequired();
+            entity.Property(e => e.SuspiciousPatternsJson).IsRequired();
+            entity.Property(e => e.RootProcessName).IsRequired().HasMaxLength(255);
+            entity.Property(e => e.Summary).IsRequired().HasMaxLength(1024);
         });
     }
 }

@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using RansomGuard.Agent.Core.Configuration;
 using RansomGuard.Agent.Core.Detection;
 using RansomGuard.Agent.Core.Detection.Entropy;
+using RansomGuard.Agent.Core.Detection.Genealogy;
 using RansomGuard.Agent.Core.Detection.Sentinel;
 using RansomGuard.Agent.Core.Persistence;
 using RansomGuard.Agent.Core.Security;
@@ -150,6 +151,10 @@ try
 
     // Register ENTROPY services
     builder.Services.AddSingleton<IEntropyCalculator, EntropyCalculator>();
+
+    // Register GENEALOGY services
+    builder.Services.AddSingleton<IProcessSnapshotService, ProcessSnapshotService>();
+    builder.Services.AddScoped<IGenealogyEnricher, GenealogyEnricher>();
 
     // SENTINEL deployment runs before Worker to ensure canaries exist
     builder.Services.AddHostedService<SentinelDeploymentService>();
