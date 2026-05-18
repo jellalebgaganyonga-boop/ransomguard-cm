@@ -2,16 +2,17 @@ using System.Threading.Channels;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using RansomGuard.Agent.Core.Configuration;
+using RansomGuard.Agent.Core.Detection;
 using RansomGuard.Agent.Core.Persistence.Entities;
 using RansomGuard.Agent.Core.Persistence.Repositories;
 
 namespace RansomGuard.Agent.Service;
 
 /// <summary>
-/// RansomGuard Agent Worker Service — v0.3.0
+/// RansomGuard Agent Worker Service — v0.3.1
 ///
 /// Monitors file system events in configured watch paths using FileSystemWatcher.
-/// Events are buffered via bounded channels and persisted asynchronously to SQLite.
+/// Events are deduplicated, buffered via bounded channels, and persisted asynchronously to SQLite.
 /// </summary>
 public sealed class Worker : BackgroundService
 {
@@ -19,26 +20,31 @@ public sealed class Worker : BackgroundService
 
     private readonly ILogger<Worker> _logger;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IFileEventDeduplicator _deduplicator;
     private readonly AgentConfiguration _config;
     private readonly List<FileSystemWatcher> _watchers = [];
     private readonly Channel<DetectionEvent> _eventChannel;
     private long _eventCount;
+    private long _duplicatesFiltered;
     private readonly DateTime _startTime = DateTime.UtcNow;
 
     /// <summary>
-    /// Initializes the worker with configuration, logging, and DI scope factory.
+    /// Initializes the worker with configuration, logging, deduplicator, and DI scope factory.
     /// </summary>
     /// <param name="logger">Structured logger instance.</param>
     /// <param name="config">Agent configuration from Options pattern.</param>
     /// <param name="scopeFactory">Service scope factory for creating scoped repositories.</param>
+    /// <param name="deduplicator">File event deduplicator to filter duplicate FSW events.</param>
     public Worker(
         ILogger<Worker> logger,
         IOptionsMonitor<AgentConfiguration> config,
-        IServiceScopeFactory scopeFactory)
+        IServiceScopeFactory scopeFactory,
+        IFileEventDeduplicator deduplicator)
     {
         _logger = logger;
         _config = config.CurrentValue;
         _scopeFactory = scopeFactory;
+        _deduplicator = deduplicator;
         _eventChannel = Channel.CreateBounded<DetectionEvent>(
             new BoundedChannelOptions(EventChannelCapacity)
             {
@@ -52,7 +58,6 @@ public sealed class Worker : BackgroundService
         _logger.LogInformation("RansomGuard-CM Agent v{Version} starting", _config.Identity.Version);
         _logger.LogInformation("Environment: {Environment}", _config.Identity.Environment);
 
-        // Start the background event persistence consumer
         Task persistenceTask = ConsumeEventsAsync(stoppingToken);
 
         string[] resolvedPaths = EnvironmentVariableResolver.ResolvePaths(_config.Detection.WatchPaths);
@@ -101,11 +106,10 @@ public sealed class Worker : BackgroundService
 
             TimeSpan uptime = DateTime.UtcNow - _startTime;
             _logger.LogInformation(
-                "Heartbeat | Uptime: {Uptime:hh\\:mm\\:ss} | Events: {EventCount}",
-                uptime, _eventCount);
+                "Heartbeat | Uptime: {Uptime:hh\\:mm\\:ss} | Events captured: {EventCount} | Duplicates filtered: {DuplicatesFiltered}",
+                uptime, _eventCount, _duplicatesFiltered);
         }
 
-        // Signal channel completion and wait for persistence to drain
         _eventChannel.Writer.Complete();
         await persistenceTask;
 
@@ -115,7 +119,8 @@ public sealed class Worker : BackgroundService
             watcher.Dispose();
         }
 
-        _logger.LogInformation("RansomGuard Agent stopped. Total events: {EventCount}", _eventCount);
+        _logger.LogInformation("RansomGuard Agent stopped. Total events: {EventCount} | Duplicates filtered: {DuplicatesFiltered}",
+            _eventCount, _duplicatesFiltered);
     }
 
     private async Task ConsumeEventsAsync(CancellationToken cancellationToken)
@@ -139,8 +144,14 @@ public sealed class Worker : BackgroundService
         }
     }
 
-    private void EnqueueEvent(string eventType, string filePath, string? oldFilePath = null)
+    private void EnqueueEvent(string eventType, string filePath, WatcherChangeTypes changeType, string? oldFilePath = null)
     {
+        if (!_deduplicator.ShouldProcess(filePath, changeType))
+        {
+            Interlocked.Increment(ref _duplicatesFiltered);
+            return;
+        }
+
         Interlocked.Increment(ref _eventCount);
 
         var detectionEvent = new DetectionEvent
@@ -162,16 +173,16 @@ public sealed class Worker : BackgroundService
     }
 
     private void OnFileCreated(object sender, FileSystemEventArgs e) =>
-        EnqueueEvent("Created", e.FullPath);
+        EnqueueEvent("Created", e.FullPath, e.ChangeType);
 
     private void OnFileChanged(object sender, FileSystemEventArgs e) =>
-        EnqueueEvent("Modified", e.FullPath);
+        EnqueueEvent("Modified", e.FullPath, e.ChangeType);
 
     private void OnFileDeleted(object sender, FileSystemEventArgs e) =>
-        EnqueueEvent("Deleted", e.FullPath);
+        EnqueueEvent("Deleted", e.FullPath, e.ChangeType);
 
     private void OnFileRenamed(object sender, RenamedEventArgs e) =>
-        EnqueueEvent("Renamed", e.FullPath, e.OldFullPath);
+        EnqueueEvent("Renamed", e.FullPath, e.ChangeType, e.OldFullPath);
 
     private void OnWatcherError(object sender, ErrorEventArgs e)
     {

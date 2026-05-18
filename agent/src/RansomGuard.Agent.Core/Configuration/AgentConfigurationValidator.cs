@@ -66,6 +66,8 @@ public sealed class DetectionOptionsValidator : AbstractValidator<DetectionOptio
         RuleForEach(x => x.WatchPaths)
             .Must(BeValidWindowsPath)
             .WithMessage("Each watch path must be a valid Windows path.");
+
+        RuleFor(x => x.DeduplicationWindowMs).InclusiveBetween(50, 5000);
     }
 
     private static bool BeValidWindowsPath(string path)

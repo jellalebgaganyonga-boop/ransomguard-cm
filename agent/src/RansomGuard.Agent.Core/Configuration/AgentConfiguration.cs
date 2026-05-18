@@ -96,6 +96,13 @@ public sealed record DetectionOptions
     /// Whether to enable ETW (Event Tracing for Windows) kernel-mode tracing.
     /// </summary>
     public bool EnableETW { get; init; }
+
+    /// <summary>
+    /// Sliding window in milliseconds for deduplicating FileSystemWatcher events.
+    /// Events with the same path and type within this window are treated as duplicates.
+    /// </summary>
+    [Range(50, 5000)]
+    public int DeduplicationWindowMs { get; init; } = 500;
 }
 
 /// <summary>

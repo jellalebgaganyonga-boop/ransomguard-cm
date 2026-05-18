@@ -1,6 +1,7 @@
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using RansomGuard.Agent.Core.Configuration;
+using RansomGuard.Agent.Core.Detection;
 using RansomGuard.Agent.Core.Persistence;
 using RansomGuard.Agent.Core.Persistence.Repositories;
 using RansomGuard.Agent.Service;
@@ -103,6 +104,13 @@ try
 
     builder.Services.AddDbContext<AgentDbContext>(options =>
         options.UseSqlite(dbConnectionString));
+
+    // Register file event deduplicator
+    var deduplicationWindowMs = builder.Configuration
+        .GetSection("Agent:Detection:DeduplicationWindowMs")
+        .Get<int>();
+    if (deduplicationWindowMs <= 0) deduplicationWindowMs = 500;
+    builder.Services.AddSingleton<IFileEventDeduplicator>(new FileEventDeduplicator(deduplicationWindowMs));
 
     // Register repositories
     builder.Services.AddScoped<IDetectionEventRepository, DetectionEventRepository>();
