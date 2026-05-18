@@ -33,6 +33,7 @@ obj/
 project.lock.json
 project.fragment.lock.json
 artifacts/
+!artifacts/sbom/
 **/Properties/launchSettings.json
 *.userprefs
 *.suo
