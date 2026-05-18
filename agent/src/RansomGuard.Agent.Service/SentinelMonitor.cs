@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using RansomGuard.Agent.Core.Configuration;
@@ -19,6 +18,7 @@ public sealed class SentinelMonitor : BackgroundService
     private readonly ILogger<SentinelMonitor> _logger;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IFileEventDeduplicator _deduplicator;
+    private readonly RestartManagerHelper _restartManager;
     private readonly AgentConfiguration _config;
     private readonly List<FileSystemWatcher> _watchers = [];
 
@@ -29,12 +29,14 @@ public sealed class SentinelMonitor : BackgroundService
         ILogger<SentinelMonitor> logger,
         IOptionsMonitor<AgentConfiguration> config,
         IServiceScopeFactory scopeFactory,
-        IFileEventDeduplicator deduplicator)
+        IFileEventDeduplicator deduplicator,
+        RestartManagerHelper restartManager)
     {
         _logger = logger;
         _config = config.CurrentValue;
         _scopeFactory = scopeFactory;
         _deduplicator = deduplicator;
+        _restartManager = restartManager;
     }
 
     /// <inheritdoc />
@@ -152,8 +154,11 @@ public sealed class SentinelMonitor : BackgroundService
         var canaryRepo = services.GetRequiredService<ISentinelCanaryRepository>();
         var auditRepo = services.GetRequiredService<IAuditLogRepository>();
 
-        // Attempt process attribution
-        (int? pid, string? procName, string? procPath) = TryAttributeProcess(canary.FilePath);
+        // Attempt process attribution via Restart Manager API
+        ProcessAttribution? attribution = TryAttributeProcess(canary.FilePath);
+        int? pid = attribution?.ProcessId;
+        string? procName = attribution?.ProcessName;
+        string? procPath = attribution?.ExecutablePath;
 
         var alert = new CanaryAlert
         {
@@ -192,33 +197,32 @@ public sealed class SentinelMonitor : BackgroundService
             alertType, canary.FilePath, procName ?? "unknown", pid?.ToString() ?? "N/A", alert.Severity);
     }
 
-    private static (int? Pid, string? Name, string? Path) TryAttributeProcess(string filePath)
+    private ProcessAttribution? TryAttributeProcess(string filePath)
     {
         try
         {
-            Process[] processes = Process.GetProcesses();
-            foreach (Process process in processes)
+            IReadOnlyList<ProcessAttribution> processes = _restartManager.GetProcessesLockingFile(filePath);
+            if (processes.Count == 0)
             {
-                try
-                {
-                    if (process.MainModule?.FileName is not null)
-                    {
-                        // Basic heuristic: check if any process has a handle to files in the same directory
-                        // Full file handle attribution would require kernel-level APIs (ETW, NtQuerySystemInformation)
-                        // This is a best-effort approach for the POC
-                    }
-                }
-                catch
-                {
-                    // Access denied for system processes — expected
-                }
+                _logger.LogDebug("No processes locking {FilePath}", filePath);
+                return null;
             }
-        }
-        catch
-        {
-            // Process enumeration failed
-        }
 
-        return (null, null, null);
+            // Heuristic: most recently started process is most likely the offender
+            ProcessAttribution offender = processes
+                .OrderByDescending(p => p.StartTime ?? DateTime.MinValue)
+                .First();
+
+            _logger.LogInformation(
+                "Process attribution: {ProcessName} (PID: {ProcessId}) identified for {FilePath}",
+                offender.ProcessName, offender.ProcessId, filePath);
+
+            return offender;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Process attribution failed for {FilePath}", filePath);
+            return null;
+        }
     }
 }

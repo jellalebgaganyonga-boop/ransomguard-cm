@@ -121,6 +121,7 @@ try
     // Register SENTINEL services
     builder.Services.AddScoped<ISentinelCanaryRepository, SentinelCanaryRepository>();
     builder.Services.AddScoped<ICanaryFileService, CanaryFileService>();
+    builder.Services.AddSingleton<RestartManagerHelper>();
 
     // SENTINEL deployment runs before Worker to ensure canaries exist
     builder.Services.AddHostedService<SentinelDeploymentService>();
