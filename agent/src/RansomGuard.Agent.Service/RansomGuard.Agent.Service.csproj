@@ -28,4 +28,10 @@
   <ItemGroup>
     <ProjectReference Include="..\RansomGuard.Agent.Core\RansomGuard.Agent.Core.csproj" />
   </ItemGroup>
+
+  <!-- Generate SHA-256 hash file after publish for self-integrity verification -->
+  <Target Name="GenerateSelfHash" AfterTargets="Publish">
+    <Exec Command="powershell -NoProfile -Command &quot;(Get-FileHash -Algorithm SHA256 '$(PublishDir)$(TargetFileName)').Hash | Out-File -Encoding ascii -NoNewline '$(PublishDir)$(TargetFileName).sha256'&quot;" />
+    <Message Importance="high" Text="Self-integrity hash generated: $(PublishDir)$(TargetFileName).sha256" />
+  </Target>
 </Project>
