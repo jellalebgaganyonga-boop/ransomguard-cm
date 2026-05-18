@@ -22,6 +22,13 @@ Log.Logger = new LoggerConfiguration()
 
 try
 {
+    // CLI command: --verify-audit-log
+    if (args.Contains("--verify-audit-log"))
+    {
+        await VerifyAuditLogAsync();
+        return;
+    }
+
     Log.Information("RansomGuard-CM Agent starting up");
 
     var builder = Host.CreateApplicationBuilder(args);
@@ -216,6 +223,71 @@ static void EnsureDatabase(IServiceProvider services)
     {
         Log.Fatal(ex, "Failed to apply database migrations. The agent cannot start with a broken schema");
         throw;
+    }
+}
+
+/// <summary>
+/// Verifies the audit log hash chain and Ed25519 signatures.
+/// Exit 0 if valid, exit 1 if tampered.
+/// </summary>
+static async Task VerifyAuditLogAsync()
+{
+    Console.WriteLine("=== Audit Log Verification ===");
+
+    var builder = Host.CreateApplicationBuilder([]);
+
+    var dbConnectionString = builder.Configuration
+        .GetSection("Agent:Database:ConnectionString")
+        .Value ?? "Data Source=agent.db";
+    dbConnectionString = EnvironmentVariableResolver.ResolvePath(dbConnectionString);
+
+    SQLitePCL.Batteries_V2.Init();
+
+    string keyDir = EnvironmentVariableResolver.ResolvePath(
+        builder.Configuration.GetSection("Agent:Database:KeyDirectory").Value
+        ?? "%ProgramData%\\RansomGuard-CM\\keys");
+    var dbKeyManager = new DatabaseKeyManager(keyDir,
+        Microsoft.Extensions.Logging.Abstractions.NullLogger<DatabaseKeyManager>.Instance);
+    string dbKey = dbKeyManager.GetOrCreateKey();
+
+    string encryptedConnectionString = dbConnectionString.Contains("Password=")
+        ? dbConnectionString
+        : $"{dbConnectionString};Password={dbKey}";
+
+    var options = new DbContextOptionsBuilder<AgentDbContext>()
+        .UseSqlite(encryptedConnectionString)
+        .Options;
+
+    using var context = new AgentDbContext(options);
+    context.Database.Migrate();
+
+    var signer = new AuditLogSigner(keyDir,
+        Microsoft.Extensions.Logging.Abstractions.NullLogger<AuditLogSigner>.Instance);
+    var repo = new AuditLogRepository(context, signer);
+
+    int entryCount = await context.AuditLogs.CountAsync();
+    Console.WriteLine($"Audit log entries: {entryCount}");
+
+    if (entryCount == 0)
+    {
+        Console.WriteLine("No entries to verify.");
+        Console.WriteLine("RESULT: PASS (empty log)");
+        return;
+    }
+
+    bool valid = await repo.VerifyChainIntegrityAsync();
+
+    if (valid)
+    {
+        Console.WriteLine("Hash chain: INTACT");
+        Console.WriteLine("Ed25519 signatures: VALID");
+        Console.WriteLine("Tampered rows: 0");
+        Console.WriteLine("RESULT: PASS");
+    }
+    else
+    {
+        Console.WriteLine("RESULT: FAIL — audit log integrity compromised");
+        Environment.ExitCode = 1;
     }
 }
 

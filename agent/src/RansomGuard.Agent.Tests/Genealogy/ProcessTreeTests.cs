@@ -66,4 +66,39 @@ public sealed class ProcessTreeTests
         // Summary should be "parent -> ... -> current"
         tree.Summary.ShouldContain(tree.Root.ProcessName);
     }
+
+    [Fact]
+    public void ProcessTree_Depth_MatchesAncestorCount()
+    {
+        ProcessTree? tree = _service.BuildProcessTree(Environment.ProcessId);
+        tree.ShouldNotBeNull();
+
+        tree.Depth.ShouldBe(tree.Ancestors.Count);
+    }
+
+    [Fact]
+    public void ProcessTree_SingleNode_Summary_NoArrow()
+    {
+        var root = new ProcessSnapshot
+        {
+            ProcessId = 1234,
+            ParentProcessId = 0,
+            ProcessName = "testapp",
+            WorkingSetBytes = 1024
+        };
+        var tree = new ProcessTree { Root = root, Ancestors = [] };
+
+        tree.Summary.ShouldBe("testapp");
+        tree.Summary.ShouldNotContain("->");
+    }
+
+    [Fact]
+    public void CaptureProcess_CurrentProcess_HasNonZeroWorkingSet()
+    {
+        ProcessSnapshot? snapshot = _service.CaptureProcess(Environment.ProcessId);
+
+        snapshot.ShouldNotBeNull();
+        snapshot.WorkingSetBytes.ShouldBeGreaterThan(0);
+        snapshot.ParentProcessId.ShouldBeGreaterThan(0);
+    }
 }

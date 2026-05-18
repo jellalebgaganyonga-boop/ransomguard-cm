@@ -223,6 +223,9 @@ public sealed class EntropyMonitor : BackgroundService
             {
                 _logger.LogError(ex, "Error processing entropy for {FilePath}", filePath);
             }
+
+            // Rate limit: ~100 calculations/sec (10ms delay per event)
+            await Task.Delay(10, ct);
         }
     }
 }

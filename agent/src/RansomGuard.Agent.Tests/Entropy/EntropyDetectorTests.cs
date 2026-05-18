@@ -150,6 +150,53 @@ public sealed class EntropyDetectorTests
         alert.RuleId.ShouldBe(1);
     }
 
+    // --- Additional edge-case tests ---
+
+    [Fact]
+    public void Rule2_NonSusceptibleExtension_HighDelta_FiresAlert()
+    {
+        var baseline = CreateBaseline(@"C:\Data\archive.bin", 3.5);
+        EntropyAlert? alert = _detector.Analyze(@"C:\Data\archive.bin", 7.5, baseline);
+
+        alert.ShouldNotBeNull();
+        alert.RuleId.ShouldBe(2);
+        alert.RuleName.ShouldBe("SuddenEntropyDelta");
+    }
+
+    [Fact]
+    public void Analyze_FileWithNoExtension_NoRule1()
+    {
+        var baseline = CreateBaseline(@"C:\Data\README", 3.0);
+        EntropyAlert? alert = _detector.Analyze(@"C:\Data\README", 7.9, baseline);
+
+        // No extension → not in SusceptibleExtensions → Rule 1 doesn't fire
+        // But delta 4.9 > 2.5 and current 7.9 > 7.0 → Rule 2 fires
+        alert.ShouldNotBeNull();
+        alert.RuleId.ShouldBe(2);
+    }
+
+    [Fact]
+    public void Analyze_EntropyExactlyAtAbsoluteThreshold_Rule1DoesNotFire()
+    {
+        var baseline = CreateBaseline(@"C:\Data\notes.txt", 4.0);
+        // Exactly at threshold (7.5), not above it → Rule 1 won't fire (requires >)
+        // But Rule 2 fires: delta 3.5 > 2.5 and current 7.5 > 7.0
+        EntropyAlert? alert = _detector.Analyze(@"C:\Data\notes.txt", 7.5, baseline);
+
+        alert.ShouldNotBeNull();
+        alert.RuleId.ShouldBe(2); // Rule 2 fires, not Rule 1
+    }
+
+    [Fact]
+    public void Rule3_ExactlyAtMinFiles_FiresAlert()
+    {
+        EntropyAlert? alert = _detector.AnalyzeDirectoryShift(@"C:\Hospital\Records", 5, 2.0);
+
+        alert.ShouldNotBeNull();
+        alert.RuleId.ShouldBe(3);
+        alert.Severity.ShouldBe("Critical");
+    }
+
     private static EntropyBaseline CreateBaseline(string path, double entropy) => new()
     {
         FilePath = path,

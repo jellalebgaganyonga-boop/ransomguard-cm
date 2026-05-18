@@ -133,6 +133,34 @@ public sealed class EntropyBaselineServiceTests : IDisposable
         avg.ShouldBeNull();
     }
 
+    [Fact]
+    public async Task RebuildIfStaleAsync_FreshBaseline_DoesNotRebuild()
+    {
+        await File.WriteAllTextAsync(Path.Combine(_testDir, "data.txt"), "Content");
+        await _service.BuildBaselineAsync(_testDir);
+
+        int countBefore = await _repository.CountAsync();
+        await _service.RebuildIfStaleAsync(_testDir);
+        int countAfter = await _repository.CountAsync();
+
+        countAfter.ShouldBe(countBefore);
+    }
+
+    [Fact]
+    public async Task BuildBaselineAsync_NonExistentDirectory_NoException()
+    {
+        string fakePath = Path.Combine(Path.GetTempPath(), $"nonexistent_{Guid.NewGuid():N}");
+        await _service.BuildBaselineAsync(fakePath);
+        // Should not throw
+    }
+
+    [Fact]
+    public async Task UpdateBaselineAsync_NonExistentFile_NoException()
+    {
+        await _service.UpdateBaselineAsync(@"C:\nonexistent\file.txt", 7.5, 2048);
+        // Should not throw — silently ignores missing baseline
+    }
+
     public void Dispose()
     {
         _context.Database.CloseConnection();

@@ -103,6 +103,57 @@ public sealed class SuspiciousPatternTests
         flags.Count.ShouldBeGreaterThanOrEqualTo(3);
     }
 
+    [Fact]
+    public void VssadminUpperCase_StillDetected_CaseInsensitive()
+    {
+        var tree = BuildTree(
+            root: CreateSnapshot("VSSADMIN", cmdLine: "VSSADMIN.EXE DELETE SHADOWS /ALL /QUIET"),
+            parent: CreateSnapshot("cmd"));
+
+        IReadOnlyList<SuspiciousPatternFlag> flags = SuspiciousPatternDetector.Analyze(tree);
+
+        flags.ShouldContain(f => f.TechniqueId == "T1490");
+    }
+
+    [Fact]
+    public void PwshVariant_DetectsEncodedCommand()
+    {
+        var tree = BuildTree(
+            root: CreateSnapshot("pwsh", cmdLine: "pwsh.exe -EncodedCommand AAAA"),
+            parent: CreateSnapshot("cmd"));
+
+        IReadOnlyList<SuspiciousPatternFlag> flags = SuspiciousPatternDetector.Analyze(tree);
+
+        flags.ShouldContain(f => f.TechniqueId == "T1027");
+    }
+
+    [Fact]
+    public void ExeInAppData_Detected_T1059()
+    {
+        var tree = BuildTree(
+            root: CreateSnapshot("dropper", execPath: @"C:\Users\test\AppData\Roaming\dropper.exe"),
+            parent: CreateSnapshot("explorer"));
+
+        IReadOnlyList<SuspiciousPatternFlag> flags = SuspiciousPatternDetector.Analyze(tree);
+
+        flags.ShouldContain(f => f.TechniqueId == "T1059");
+        flags.ShouldContain(f => f.Description.Contains("%APPDATA%"));
+    }
+
+    [Fact]
+    public void EmptyTree_NoAncestors_BenignProcess_NoFlags()
+    {
+        var tree = new ProcessTree
+        {
+            Root = CreateSnapshot("notepad", execPath: @"C:\Windows\System32\notepad.exe"),
+            Ancestors = []
+        };
+
+        IReadOnlyList<SuspiciousPatternFlag> flags = SuspiciousPatternDetector.Analyze(tree);
+
+        flags.Count.ShouldBe(0);
+    }
+
     private static ProcessTree BuildTree(ProcessSnapshot root, ProcessSnapshot parent) => new()
     {
         Root = root,

@@ -2,6 +2,7 @@
 
 **Version:** v0.5.0-detection-engine
 **Date:** 2026-05-18
+**Validation Date:** 2026-05-18
 
 ## Summary
 
@@ -17,14 +18,76 @@ Sprint 3 transitioned the product from canary tripwire to real ransomware detect
 | 4 | USB GUARD | Pending (Sprint 4) |
 | 5 | EXFIL WATCH | Pending (Sprint 4) |
 
-## Files Created
+## Validation Gates
+
+### Test Coverage
+
+| Category | Tests |
+|----------|-------|
+| EntropyCalculator | 12 |
+| EntropyDetector (monolithic) | 16 |
+| DetectionRules (separate) | 14 |
+| EntropyBaseline | 11 |
+| EntropyDetectionE2E | 3 |
+| ProcessTree / ProcessSnapshot | 8 |
+| SuspiciousPattern (original 5 + case/edge) | 11 |
+| AdditionalPatterns (T1566, T1218) | 6 |
+| GenealogyEnricher Stress (handle leak) | 2 |
+| RansomwareSimulationE2E | 3 |
+| **Sprint 3 New** | **86** |
+| **Grand Total** | **278** |
+
+### Performance SLO (measured 2026-05-18)
+
+| Metric | Measured | SLO Target | Result |
+|--------|----------|------------|--------|
+| Max RAM | 155.75 MB | 200 MB | PASS |
+| Avg RAM | 153.12 MB | — | — |
+| Avg CPU | 0% | 5% | PASS |
+| Handle Variance | 17 | 50 | PASS |
+| Handle Range | 745 — 762 | — | — |
+| Avg Threads | 27 | — | — |
+
+All SLOs: **PASS**
+
+### E2E Ransomware Simulation
+
+| Scenario | Result | Latency |
+|----------|--------|---------|
+| Full pipeline (10 files encrypted, alerts fire) | PASS | ~1s |
+| Legitimate edits (no false positives) | PASS | ~91ms |
+| Whitelisted format (no alert on .zip) | PASS | ~3s |
+
+### STRIDE Threat Models
+
+- `docs/security/entropy-stride.md` — **13 threats** analyzed
+- `docs/security/genealogy-stride.md` — **13 threats** analyzed
+
+### Validation Item Confirmations
+
+| Item | Status | Evidence |
+|------|--------|----------|
+| 5a — PathValidator in GenealogyEnricher | CONFIRMED | `GenealogyEnricher.cs:40-46` |
+| 5b — ConstantTimeComparison audit | CLEAN | No SequenceEqual in Entropy/Genealogy detection |
+| 5c — Rate limiting wired | CONFIRMED | `EntropyBaselineService.cs:81` (50/sec), `EntropyMonitor.cs:224` (100/sec) |
+| 5d — Handle leak test | PASS | Variance < 50 after 100 WMI operations |
+| 5e — Audit log Ed25519 verification | CONFIRMED | `--verify-audit-log` CLI: hash chain intact, Ed25519 valid |
+
+## Files Created / Modified
+
+### New in Validation
+- `agent/src/RansomGuard.Agent.Service/ServiceRegistration.cs` — shared DI setup
+- `agent/src/RansomGuard.Agent.Tests/EndToEnd/RansomwareSimulationE2E.cs` — 3 E2E tests
+- `agent/src/RansomGuard.Agent.Tests/Genealogy/GenealogyEnricherStressTests.cs` — handle leak stress tests
+- `docs/benchmarks/sprint-3-perf-validation.md` — SLO report with real numbers
+- `docs/benchmarks/sprint-3-perf-samples.csv` — 60 metric samples
 
 ### Detection/Entropy/
 - `IEntropyCalculator.cs` — interface (file + buffer overloads)
 - `EntropyCalculator.cs` — streaming IO, sampling, stackalloc
 - `EntropyCalculatorOptions.cs` — configurable buffer/sampling sizes
 - `EntropyDetector.cs` — monolithic 4-rule engine
-- `EntropyBaselineService.cs` — rate-limited baseline build
+- `EntropyBaselineService.cs` — rate-limited baseline build (50 files/sec)
 - `IEntropyBaselineService.cs` — baseline interface
 - `EntropyEvent.cs` — channel event record
 - `DetectionRules/IEntropyRule.cs` — rule interface + context
@@ -40,39 +103,15 @@ Sprint 3 transitioned the product from canary tripwire to real ransomware detect
 - `ProcessSnapshotService.cs` — WMI + System.Diagnostics
 - `SuspiciousPatternDetector.cs` — 5 inline patterns
 - `IGenealogyEnricher.cs` — enricher interface
-- `GenealogyEnricher.cs` — RestartManager + tree + patterns
+- `GenealogyEnricher.cs` — RestartManager + tree + patterns + PathValidator
 - `Patterns/IPatternRule.cs` — modular rule interface
 - `Patterns/EmailAttachmentRule.cs` — T1566
 - `Patterns/SignedBinaryProxyRule.cs` — T1218
 
-### Persistence/
-- `Entities/EntropyBaseline.cs`
-- `Entities/EntropyAlert.cs`
-- `Entities/GenealogyRecord.cs`
-- `Repositories/IEntropyBaselineRepository.cs`
-- `Repositories/EntropyBaselineRepository.cs`
-
 ### Service/
-- `EntropyMonitor.cs` — BackgroundService with channel pipeline
-
-### Migrations
-- `AddEntropyEntities` — EntropyBaseline + EntropyAlert tables
-- `AddGenealogyRecord` — GenealogyRecord table
-
-## Test Coverage
-
-| Category | Tests |
-|----------|-------|
-| EntropyCalculator | 12 |
-| EntropyDetector (monolithic) | 12 |
-| DetectionRules (separate) | 14 |
-| EntropyBaseline | 8 |
-| EntropyDetectionE2E | 3 |
-| ProcessTree | 5 |
-| SuspiciousPattern (original 5) | 7 |
-| AdditionalPatterns (T1566, T1218) | 6 |
-| **Sprint 3 New** | **67** |
-| **Grand Total** | **259** |
+- `EntropyMonitor.cs` — BackgroundService with channel pipeline + rate limiting (100/sec)
+- `ServiceRegistration.cs` — shared DI configuration for tests
+- `Program.cs` — added `--verify-audit-log` CLI command
 
 ## MITRE ATT&CK Coverage
 
@@ -88,31 +127,20 @@ Sprint 3 transitioned the product from canary tripwire to real ransomware detect
 
 **7/7 mandatory patterns implemented.**
 
-## STRIDE Threat Models
-- `docs/security/entropy-stride.md` — 11 threats analyzed
-- `docs/security/genealogy-stride.md` — 11 threats analyzed
-
-## Documentation
-- `docs/modules/entropy.md` — complete module documentation
-- `docs/modules/genealogy.md` — complete module documentation
-- `docs/testing/sprint-3-manual-tests.md` — 5 manual test procedures
-- `scripts/sprint-3-performance-validation.ps1` — SLO validation script
-
-## E2E Scenarios Validated
-
-1. Single file encryption: French text -> AES bytes -> Rule 1 fires (Critical)
-2. Legitimate edit: text appended -> No alert
-3. Mass encryption: 10 CSV files encrypted -> Rule 3 directory shift (Critical)
-
 ## Known Limitations
 
 1. **PID reuse race window**: Small window where PID reuse could misattribute
-2. **Extension spoofing**: Whitelist bypass via renaming (magic bytes planned)
+2. **Extension spoofing**: Whitelist bypass via renaming (magic bytes planned Sprint 4)
 3. **Slow ransomware**: Encryption over days may cause baseline drift
 4. **WinTrust not yet integrated**: Signature verification uses process name only
 
-## Sprint 4 Readiness: YES
+## Verdict: Sprint 3 is COMPLETE
 
-All deliverables complete. 259 tests. 0 warnings. 0 errors. 7/7 MITRE patterns. STRIDE models documented. Module documentation written.
+- 278 tests, 0 warnings, 0 errors
+- All 3 SLOs PASS (RAM 155.75 MB, CPU 0%, handle variance 17)
+- E2E ransomware simulation: PASS (< 5s latency)
+- STRIDE: 13 threats per module (26 total)
+- All 5 validation confirmations verified with file:line evidence
+- 7/7 MITRE ATT&CK patterns implemented
 
-Next: Sprint 4 (USB GUARD + EXFIL WATCH — modules 4 and 5 of 5).
+Sprint 4 can start upon user approval.

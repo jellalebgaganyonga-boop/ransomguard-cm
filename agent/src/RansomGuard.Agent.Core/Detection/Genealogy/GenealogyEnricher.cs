@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using RansomGuard.Agent.Core.Detection.Sentinel;
 using RansomGuard.Agent.Core.Persistence;
 using RansomGuard.Agent.Core.Persistence.Entities;
+using RansomGuard.Agent.Core.Security;
 
 namespace RansomGuard.Agent.Core.Detection.Genealogy;
 
@@ -37,9 +38,17 @@ public sealed class GenealogyEnricher : IGenealogyEnricher
     {
         try
         {
+            // Validate file path at system boundary (CWE-22)
+            var pathResult = PathValidator.Validate(offendingFilePath);
+            if (!pathResult.IsValid)
+            {
+                _logger.LogWarning("GENEALOGY rejected invalid path: {Error}", pathResult.ErrorMessage);
+                return null;
+            }
+
             // Step 1: Find which process holds the file
             if (!OperatingSystem.IsWindows()) return null;
-            IReadOnlyList<ProcessAttribution> attributions = _restartManager.GetProcessesLockingFile(offendingFilePath);
+            IReadOnlyList<ProcessAttribution> attributions = _restartManager.GetProcessesLockingFile(pathResult.CanonicalPath!);
 
             int targetPid;
             if (attributions.Count > 0)
