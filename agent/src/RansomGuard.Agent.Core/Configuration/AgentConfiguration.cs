@@ -47,6 +47,11 @@ public sealed record AgentConfiguration
     /// SENTINEL canary file detection settings.
     /// </summary>
     public SentinelOptions? Sentinel { get; init; }
+
+    /// <summary>
+    /// ENTROPY detection settings for Shannon entropy-based ransomware detection.
+    /// </summary>
+    public EntropyOptions? Entropy { get; init; }
 }
 
 /// <summary>
@@ -243,4 +248,45 @@ public sealed record DatabaseOptions
     /// </summary>
     [Range(1, 3650)]
     public int MaxRetentionDays { get; init; } = 90;
+}
+
+/// <summary>
+/// Shannon entropy-based ransomware detection configuration.
+/// </summary>
+public sealed record EntropyOptions
+{
+    /// <summary>Whether entropy detection is enabled.</summary>
+    public bool Enabled { get; init; } = true;
+
+    /// <summary>Absolute entropy threshold (bits/byte) for text-like files.</summary>
+    [Range(6.0, 8.0)]
+    public double AbsoluteThreshold { get; init; } = 7.5;
+
+    /// <summary>Entropy delta threshold (current - baseline) to trigger alert.</summary>
+    [Range(1.0, 5.0)]
+    public double DeltaThreshold { get; init; } = 2.5;
+
+    /// <summary>Directory-wide entropy shift threshold for mass encryption detection.</summary>
+    [Range(0.5, 5.0)]
+    public double DirectoryShiftThreshold { get; init; } = 1.5;
+
+    /// <summary>Time window in seconds for directory-wide shift detection.</summary>
+    [Range(10, 600)]
+    public int DirectoryShiftWindowSeconds { get; init; } = 60;
+
+    /// <summary>Minimum number of files affected for directory-wide shift alert.</summary>
+    [Range(2, 50)]
+    public int DirectoryShiftMinFiles { get; init; } = 5;
+
+    /// <summary>Extensions that are legitimately high-entropy (skip alerts).</summary>
+    public string[] WhitelistedExtensions { get; init; } =
+        [".zip", ".7z", ".gz", ".rar", ".jpg", ".jpeg", ".png", ".mp3", ".mp4", ".avi", ".mkv"];
+
+    /// <summary>Extensions susceptible to encryption (lower threshold).</summary>
+    public string[] SusceptibleExtensions { get; init; } =
+        [".txt", ".doc", ".docx", ".pdf", ".xlsx", ".json", ".xml", ".csv", ".rtf", ".odt"];
+
+    /// <summary>Maximum file size in MB for entropy analysis.</summary>
+    [Range(1, 1000)]
+    public int MaxFileSizeMB { get; init; } = 100;
 }

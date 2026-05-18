@@ -39,6 +39,16 @@ public sealed class AgentDbContext : DbContext
     public DbSet<CanaryAlert> CanaryAlerts => Set<CanaryAlert>();
 
     /// <summary>
+    /// Entropy baselines for delta-based detection.
+    /// </summary>
+    public DbSet<EntropyBaseline> EntropyBaselines => Set<EntropyBaseline>();
+
+    /// <summary>
+    /// Entropy-based detection alerts.
+    /// </summary>
+    public DbSet<EntropyAlert> EntropyAlerts => Set<EntropyAlert>();
+
+    /// <summary>
     /// Initializes a new instance of <see cref="AgentDbContext"/>.
     /// </summary>
     /// <param name="options">Database context options.</param>
@@ -116,6 +126,26 @@ public sealed class AgentDbContext : DbContext
             entity.Property(e => e.Severity).HasConversion<string>().HasMaxLength(20);
             entity.Property(e => e.OffendingProcessName).HasMaxLength(255);
             entity.Property(e => e.OffendingProcessPath).HasMaxLength(1024);
+        });
+
+        modelBuilder.Entity<EntropyBaseline>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.FilePath).IsUnique();
+            entity.HasIndex(e => e.DirectoryPath);
+            entity.HasIndex(e => e.FileExtension);
+            entity.Property(e => e.FilePath).IsRequired().HasMaxLength(1024);
+            entity.Property(e => e.DirectoryPath).IsRequired().HasMaxLength(1024);
+            entity.Property(e => e.FileExtension).IsRequired().HasMaxLength(20);
+        });
+
+        modelBuilder.Entity<EntropyAlert>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.DetectedAt);
+            entity.Property(e => e.FilePath).IsRequired().HasMaxLength(1024);
+            entity.Property(e => e.RuleName).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.Severity).IsRequired().HasMaxLength(20);
         });
     }
 }
