@@ -4,6 +4,7 @@ using RansomGuard.Agent.Core.Configuration;
 using RansomGuard.Agent.Core.Detection;
 using RansomGuard.Agent.Core.Detection.Sentinel;
 using RansomGuard.Agent.Core.Persistence;
+using RansomGuard.Agent.Core.Security;
 using RansomGuard.Agent.Core.Persistence.Repositories;
 using RansomGuard.Agent.Service;
 using Serilog;
@@ -97,14 +98,30 @@ try
     // Register FluentValidation validator
     builder.Services.AddSingleton<IValidator<AgentConfiguration>, AgentConfigurationValidator>();
 
-    // Register SQLite DbContext with connection string from configuration
+    // Register SQLite DbContext with SQLCipher encryption (CWE-311)
     var dbConnectionString = builder.Configuration
         .GetSection("Agent:Database:ConnectionString")
         .Value ?? "Data Source=agent.db";
     dbConnectionString = EnvironmentVariableResolver.ResolvePath(dbConnectionString);
 
+    // Initialize SQLCipher provider
+    SQLitePCL.Batteries_V2.Init();
+
+    // Database encryption key via DPAPI
+    string keyDir = EnvironmentVariableResolver.ResolvePath(
+        builder.Configuration.GetSection("Agent:Database:KeyDirectory").Value
+        ?? "%ProgramData%\\RansomGuard-CM\\keys");
+    var dbKeyManager = new DatabaseKeyManager(keyDir,
+        Microsoft.Extensions.Logging.Abstractions.NullLogger<DatabaseKeyManager>.Instance);
+    string dbKey = dbKeyManager.GetOrCreateKey();
+
+    // Append Password to connection string for SQLCipher
+    string encryptedConnectionString = dbConnectionString.Contains("Password=")
+        ? dbConnectionString
+        : $"{dbConnectionString};Password={dbKey}";
+
     builder.Services.AddDbContext<AgentDbContext>(options =>
-        options.UseSqlite(dbConnectionString));
+        options.UseSqlite(encryptedConnectionString));
 
     // Register file event deduplicator
     var deduplicationWindowMs = builder.Configuration
