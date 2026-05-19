@@ -69,6 +69,21 @@ public sealed class AgentDbContext : DbContext
     public DbSet<QuarantinedFile> QuarantinedFiles => Set<QuarantinedFile>();
 
     /// <summary>
+    /// USB connection logs for audit trail (90-day retention).
+    /// </summary>
+    public DbSet<UsbConnectionLog> UsbConnectionLogs => Set<UsbConnectionLog>();
+
+    /// <summary>
+    /// USB content scan results.
+    /// </summary>
+    public DbSet<UsbScanResult> UsbScanResults => Set<UsbScanResult>();
+
+    /// <summary>
+    /// USB GUARD alerts cross-linked with scans and genealogy.
+    /// </summary>
+    public DbSet<UsbAlert> UsbAlerts => Set<UsbAlert>();
+
+    /// <summary>
     /// Initializes a new instance of <see cref="AgentDbContext"/>.
     /// </summary>
     /// <param name="options">Database context options.</param>
@@ -194,6 +209,40 @@ public sealed class AgentDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Mode).HasConversion<string>().HasMaxLength(20);
             entity.Property(e => e.SuspiciousExtensionsJson).IsRequired();
+        });
+
+        modelBuilder.Entity<UsbConnectionLog>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.ConnectedAt);
+            entity.HasIndex(e => e.SerialNumberHash);
+            entity.HasIndex(e => e.RetainUntil);
+            entity.Property(e => e.DeviceInstanceId).IsRequired().HasMaxLength(512);
+            entity.Property(e => e.SerialNumberHash).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.VendorId).IsRequired().HasMaxLength(10);
+            entity.Property(e => e.ProductId).IsRequired().HasMaxLength(10);
+            entity.Property(e => e.DeviceClass).IsRequired().HasMaxLength(30);
+            entity.Property(e => e.DriveLetter).HasMaxLength(5);
+        });
+
+        modelBuilder.Entity<UsbScanResult>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.UsbConnectionLogId);
+            entity.HasIndex(e => e.ScannedAt);
+            entity.Property(e => e.FlaggedFilesJson).IsRequired();
+            entity.Property(e => e.HighestSeverity).IsRequired().HasMaxLength(20);
+        });
+
+        modelBuilder.Entity<UsbAlert>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.UsbScanResultId);
+            entity.HasIndex(e => e.GeneratedAt);
+            entity.Property(e => e.Title).IsRequired().HasMaxLength(500);
+            entity.Property(e => e.Description).IsRequired();
+            entity.Property(e => e.Severity).IsRequired().HasMaxLength(20);
+            entity.Property(e => e.ActionTaken).IsRequired().HasMaxLength(50);
         });
 
         modelBuilder.Entity<QuarantinedFile>(entity =>
