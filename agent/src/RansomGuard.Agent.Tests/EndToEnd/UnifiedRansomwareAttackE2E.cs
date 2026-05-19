@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Text;
+using RansomGuard.Agent.Core.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -35,11 +36,16 @@ public sealed class UnifiedRansomwareAttackE2E : IAsyncLifetime, IDisposable
     private readonly ProcessSnapshotService _snapshotService;
     private readonly List<string> _medicalFiles = [];
     private readonly List<SentinelCanary> _canaries = [];
+    private readonly string _keyDir;
+    private readonly AuditLogSigner _signer;
 
     public UnifiedRansomwareAttackE2E()
     {
         _testDir = Path.Combine(Path.GetTempPath(), $"rg_unified_e2e_{Guid.NewGuid():N}");
         Directory.CreateDirectory(_testDir);
+
+        _keyDir = Path.Combine(_testDir, "keys");
+        Directory.CreateDirectory(_keyDir);
 
         var options = new DbContextOptionsBuilder<AgentDbContext>()
             .UseSqlite("Data Source=:memory:")
@@ -59,8 +65,9 @@ public sealed class UnifiedRansomwareAttackE2E : IAsyncLifetime, IDisposable
             SusceptibleExtensions = [".txt", ".docx", ".pdf", ".csv", ".xlsx"]
         });
 
+        _signer = new AuditLogSigner(_keyDir, new Mock<ILogger<AuditLogSigner>>().Object);
         _canaryRepo = new SentinelCanaryRepository(_context);
-        _auditRepo = new AuditLogRepository(_context);
+        _auditRepo = new AuditLogRepository(_context, _signer);
         _canaryService = new CanaryFileService(_canaryRepo, new Mock<ILogger<CanaryFileService>>().Object);
         _snapshotService = new ProcessSnapshotService(new Mock<ILogger<ProcessSnapshotService>>().Object);
         _genealogyEnricher = new GenealogyEnricher(
@@ -151,14 +158,24 @@ public sealed class UnifiedRansomwareAttackE2E : IAsyncLifetime, IDisposable
         };
         IReadOnlyList<SuspiciousPatternFlag> t1490Flags = SuspiciousPatternDetector.Analyze(vssadminTree);
 
-        // Step B: Encrypt all 50 files with random bytes (simulating AES-256)
+        // Step B: Encrypt all 50 files with AES-256
+        using var aes = Aes.Create();
+        aes.KeySize = 256;
+        aes.GenerateKey();
+        aes.GenerateIV();
+
         var baselines = await _context.EntropyBaselines.ToDictionaryAsync(b => b.FilePath);
         var entropyAlerts = new List<EntropyAlert>();
         double totalDelta = 0;
 
         foreach (string path in _medicalFiles)
         {
-            byte[] encrypted = RandomNumberGenerator.GetBytes((int)new FileInfo(path).Length);
+            byte[] plaintext = await File.ReadAllBytesAsync(path);
+            byte[] encrypted;
+            using (var encryptor = aes.CreateEncryptor())
+            {
+                encrypted = encryptor.TransformFinalBlock(plaintext, 0, plaintext.Length);
+            }
             await File.WriteAllBytesAsync(path, encrypted);
 
             double? currentEntropy = await _calculator.ComputeFileEntropyAsync(path);
@@ -272,6 +289,15 @@ public sealed class UnifiedRansomwareAttackE2E : IAsyncLifetime, IDisposable
         t1490Flags.ShouldContain(f => f.TechniqueId == "T1490", "T1490 vssadmin pattern must fire");
         t1490Flags.First(f => f.TechniqueId == "T1490").Severity.ShouldBe("Critical");
 
+        // GENEALOGY cross-linking: GenealogyRecords reference real alert IDs
+        var alertIds = entropyAlerts.Select(a => a.Id).ToHashSet();
+        var genealogyAlertIds = await _context.Set<GenealogyRecord>()
+            .Select(g => g.AlertId)
+            .ToListAsync();
+        int linkedCount = genealogyAlertIds.Count(id => alertIds.Contains(id));
+        linkedCount.ShouldBeGreaterThanOrEqualTo(5,
+            "At least 5 GenealogyRecords should reference real alert IDs");
+
         // Audit log entries exist
         int auditCount = await _context.AuditLogs.CountAsync();
         auditCount.ShouldBeGreaterThanOrEqualTo(10, "Audit log should have entries for alerts");
@@ -279,6 +305,11 @@ public sealed class UnifiedRansomwareAttackE2E : IAsyncLifetime, IDisposable
         // Audit log hash chain intact
         bool chainValid = await _auditRepo.VerifyChainIntegrityAsync();
         chainValid.ShouldBeTrue("Audit log hash chain should be intact");
+
+        // Audit log Ed25519 signatures valid (signer is wired in constructor)
+        var auditEntries = await _context.AuditLogs.OrderBy(a => a.CreatedAt).ToListAsync();
+        int signedCount = auditEntries.Count(e => e.Signature is not null);
+        signedCount.ShouldBe(auditEntries.Count, "All audit entries should be Ed25519 signed");
 
         // Latency under 90 seconds
         sw.Elapsed.TotalSeconds.ShouldBeLessThan(90, "Full E2E pipeline under 90 seconds");
