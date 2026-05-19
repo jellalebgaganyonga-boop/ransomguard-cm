@@ -8,6 +8,7 @@ using RansomGuard.Agent.Core.Persistence;
 using RansomGuard.Agent.Core.Persistence.Entities;
 using RansomGuard.Agent.Core.Persistence.Repositories;
 using Microsoft.EntityFrameworkCore;
+using RansomGuard.Agent.Core.Security.RateLimiting;
 
 namespace RansomGuard.Agent.Service;
 
@@ -27,6 +28,7 @@ public sealed class EntropyMonitor : BackgroundService
     private readonly AgentConfiguration _config;
     private readonly Channel<string> _fileChannel;
     private readonly List<FileSystemWatcher> _watchers = [];
+    private readonly IOperationRateLimiter? _rateLimiter;
 
     /// <summary>
     /// Initializes the entropy monitor.
@@ -36,13 +38,15 @@ public sealed class EntropyMonitor : BackgroundService
         IOptionsMonitor<AgentConfiguration> config,
         IServiceScopeFactory scopeFactory,
         IFileEventDeduplicator deduplicator,
-        IEntropyCalculator calculator)
+        IEntropyCalculator calculator,
+        RateLimiterFactory? rateLimiterFactory = null)
     {
         _logger = logger;
         _config = config.CurrentValue;
         _scopeFactory = scopeFactory;
         _deduplicator = deduplicator;
         _calculator = calculator;
+        _rateLimiter = rateLimiterFactory?.GetLimiter(RateLimiterFactory.EntropyComputation);
         _fileChannel = Channel.CreateBounded<string>(
             new BoundedChannelOptions(EventChannelCapacity)
             {
@@ -224,8 +228,11 @@ public sealed class EntropyMonitor : BackgroundService
                 _logger.LogError(ex, "Error processing entropy for {FilePath}", filePath);
             }
 
-            // Rate limit: ~100 calculations/sec (10ms delay per event)
-            await Task.Delay(10, ct);
+            // Rate limit: ~100 calculations/sec via token bucket (fallback to 10ms delay)
+            if (_rateLimiter is not null)
+                await _rateLimiter.AcquireAsync(ct);
+            else
+                await Task.Delay(10, ct);
         }
     }
 }

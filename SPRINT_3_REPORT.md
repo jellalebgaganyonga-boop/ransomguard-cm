@@ -1,8 +1,9 @@
 # Sprint 3 Report — Detection Engine Operational
 
-**Version:** v0.5.0-detection-engine
+**Version:** v0.5.1-zero-debt
 **Date:** 2026-05-18
 **Validation Date:** 2026-05-18
+**Closure Date:** 2026-05-18
 
 ## Summary
 
@@ -142,5 +143,30 @@ All SLOs: **PASS**
 - STRIDE: 13 threats per module (26 total)
 - All 5 validation confirmations verified with file:line evidence
 - 7/7 MITRE ATT&CK patterns implemented
+
+## Sprint 3.6 Closure — Zero Technical Debt
+
+8 gaps identified in the Sprint 3 evidence audit, all closed:
+
+| Gap | Resolution | Evidence |
+|-----|-----------|----------|
+| 1. Unified cross-module E2E | UnifiedRansomwareAttackE2E.cs: 50 files + SENTINEL + ENTROPY + GENEALOGY in one test | PASS (2s) |
+| 2. Formal TokenBucketRateLimiter | IOperationRateLimiter + TokenBucketRateLimiter wrapping BCL, 8 tests | 8 tests PASS |
+| 3. 1000-iteration stress tests | Extended from 100 to 1000 with [Trait("Category", "Stress")] | 3 stress tests |
+| 4. vssadmin live process test | MitreT1490LiveProcessTests: real snapshot + synthetic T1490 detection | 3 tests PASS |
+| 5. Audit log real entries | AuditLogVerificationWithEntriesTests: 10 entries + tamper detection | 4 tests PASS |
+| 6. Performance under load | 30 file encryptions during measurement: RAM 158.4MB, CPU 11.42%, handles var 17 | All SLOs PASS |
+| 7. Channel saturation test | 4 tests verifying DropOldest behavior, concurrent writers, no crash | 4 tests PASS |
+| 8. Migration rollback test | Apply, rollback to pre-Sprint 3, re-apply: all clean | 4 tests PASS |
+
+### Final Test Count: 300 (non-stress) + 3 stress = 303
+
+### Performance Under Load
+
+| Metric | SLO | Idle | Under Load | Status |
+|--------|-----|------|------------|--------|
+| Max RAM | 200 MB | 155.75 MB | 158.4 MB | PASS |
+| Avg CPU | 5% idle / 15% load | 0% | 11.42% | PASS |
+| Handle Variance | 50 idle / 100 load | 17 | 17 | PASS |
 
 Sprint 4 can start upon user approval.

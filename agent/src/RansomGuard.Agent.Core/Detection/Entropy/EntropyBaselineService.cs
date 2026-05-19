@@ -1,19 +1,21 @@
 using Microsoft.Extensions.Logging;
 using RansomGuard.Agent.Core.Persistence.Entities;
 using RansomGuard.Agent.Core.Persistence.Repositories;
+using RansomGuard.Agent.Core.Security.RateLimiting;
 
 namespace RansomGuard.Agent.Core.Detection.Entropy;
 
 /// <summary>
 /// Manages per-file entropy baselines. Builds baselines at startup by scanning
-/// directories, rate-limited at 50 files/sec. Baselines are frozen after alert
-/// to preserve forensic evidence.
+/// directories, rate-limited at 50 files/sec via TokenBucketRateLimiter.
+/// Baselines are frozen after alert to preserve forensic evidence.
 /// </summary>
 public sealed class EntropyBaselineService : IEntropyBaselineService
 {
     private readonly IEntropyBaselineRepository _repository;
     private readonly IEntropyCalculator _calculator;
     private readonly ILogger<EntropyBaselineService> _logger;
+    private readonly IOperationRateLimiter? _rateLimiter;
 
     /// <summary>
     /// Initializes the baseline service.
@@ -21,11 +23,13 @@ public sealed class EntropyBaselineService : IEntropyBaselineService
     public EntropyBaselineService(
         IEntropyBaselineRepository repository,
         IEntropyCalculator calculator,
-        ILogger<EntropyBaselineService> logger)
+        ILogger<EntropyBaselineService> logger,
+        IOperationRateLimiter? rateLimiter = null)
     {
         _repository = repository;
         _calculator = calculator;
         _logger = logger;
+        _rateLimiter = rateLimiter;
     }
 
     /// <inheritdoc />
@@ -77,8 +81,11 @@ public sealed class EntropyBaselineService : IEntropyBaselineService
                     processed, files.Length, directoryPath);
             }
 
-            // Rate limit: ~50 files/sec (20ms delay per file)
-            await Task.Delay(20, cancellationToken);
+            // Rate limit: ~50 files/sec via token bucket (fallback to 20ms delay)
+            if (_rateLimiter is not null)
+                await _rateLimiter.AcquireAsync(cancellationToken);
+            else
+                await Task.Delay(20, cancellationToken);
         }
 
         _logger.LogInformation("ENTROPY baseline complete for {Directory}: {Count} files profiled", directoryPath, processed);

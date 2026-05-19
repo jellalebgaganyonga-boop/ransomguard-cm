@@ -11,6 +11,7 @@ using RansomGuard.Agent.Core.Persistence;
 using RansomGuard.Agent.Core.Persistence.Repositories;
 using RansomGuard.Agent.Core.Security;
 using RansomGuard.Agent.Core.Security.Cryptography;
+using RansomGuard.Agent.Core.Security.RateLimiting;
 
 namespace RansomGuard.Agent.Service;
 
@@ -77,6 +78,9 @@ public static class ServiceRegistration
         services.AddScoped<ISentinelCanaryRepository, SentinelCanaryRepository>();
         services.AddScoped<ICanaryFileService, CanaryFileService>();
         services.AddSingleton<RestartManagerHelper>();
+
+        // Rate limiting
+        services.AddSingleton<RateLimiterFactory>();
 
         // ENTROPY
         services.AddSingleton<IEntropyCalculator, EntropyCalculator>();
