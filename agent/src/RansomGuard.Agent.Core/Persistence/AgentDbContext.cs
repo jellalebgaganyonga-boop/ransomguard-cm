@@ -64,6 +64,11 @@ public sealed class AgentDbContext : DbContext
     public DbSet<UsbPolicy> UsbPolicies => Set<UsbPolicy>();
 
     /// <summary>
+    /// Quarantined files from USB scanning.
+    /// </summary>
+    public DbSet<QuarantinedFile> QuarantinedFiles => Set<QuarantinedFile>();
+
+    /// <summary>
     /// Initializes a new instance of <see cref="AgentDbContext"/>.
     /// </summary>
     /// <param name="options">Database context options.</param>
@@ -189,6 +194,22 @@ public sealed class AgentDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Mode).HasConversion<string>().HasMaxLength(20);
             entity.Property(e => e.SuspiciousExtensionsJson).IsRequired();
+        });
+
+        modelBuilder.Entity<QuarantinedFile>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.QuarantinedAt);
+            entity.HasIndex(e => e.RetainUntil);
+            entity.Property(e => e.OriginalPath).IsRequired().HasMaxLength(1024);
+            entity.Property(e => e.QuarantinePath).IsRequired().HasMaxLength(1024);
+            entity.Property(e => e.OriginalSha256).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.QuarantineSha256).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.QuarantineReason).IsRequired().HasMaxLength(500);
+            entity.Property(e => e.Severity).HasConversion<string>().HasMaxLength(20);
+            entity.Property(e => e.SourceUsbSerial).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.QuarantinedByUser).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.RestoredByUser).HasMaxLength(100);
         });
     }
 }
