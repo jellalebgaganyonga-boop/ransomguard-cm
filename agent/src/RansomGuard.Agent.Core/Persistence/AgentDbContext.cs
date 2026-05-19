@@ -54,6 +54,16 @@ public sealed class AgentDbContext : DbContext
     public DbSet<GenealogyRecord> GenealogyRecords => Set<GenealogyRecord>();
 
     /// <summary>
+    /// USB device whitelist entries.
+    /// </summary>
+    public DbSet<UsbWhitelistEntry> UsbWhitelistEntries => Set<UsbWhitelistEntry>();
+
+    /// <summary>
+    /// USB policy configuration.
+    /// </summary>
+    public DbSet<UsbPolicy> UsbPolicies => Set<UsbPolicy>();
+
+    /// <summary>
     /// Initializes a new instance of <see cref="AgentDbContext"/>.
     /// </summary>
     /// <param name="options">Database context options.</param>
@@ -161,6 +171,24 @@ public sealed class AgentDbContext : DbContext
             entity.Property(e => e.SuspiciousPatternsJson).IsRequired();
             entity.Property(e => e.RootProcessName).IsRequired().HasMaxLength(255);
             entity.Property(e => e.Summary).IsRequired().HasMaxLength(1024);
+        });
+
+        modelBuilder.Entity<UsbWhitelistEntry>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.SerialNumberHash);
+            entity.HasIndex(e => e.IsActive);
+            entity.Property(e => e.SerialNumberHash).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.Description).IsRequired().HasMaxLength(500);
+            entity.Property(e => e.AddedByUser).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.PolicyLevel).HasConversion<string>().HasMaxLength(20);
+        });
+
+        modelBuilder.Entity<UsbPolicy>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Mode).HasConversion<string>().HasMaxLength(20);
+            entity.Property(e => e.SuspiciousExtensionsJson).IsRequired();
         });
     }
 }
