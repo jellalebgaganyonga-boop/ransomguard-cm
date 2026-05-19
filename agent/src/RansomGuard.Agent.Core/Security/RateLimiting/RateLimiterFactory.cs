@@ -17,11 +17,19 @@ public sealed class RateLimiterFactory : IDisposable
     /// <summary>Rate limiter for genealogy enrichment (50 ops/sec).</summary>
     public const string GenealogyEnrichment = "genealogy-enrichment";
 
+    /// <summary>Rate limiter for USB content scanning (50 files/sec).</summary>
+    public const string UsbScan = "usb-scan";
+
+    /// <summary>Rate limiter for ETW event processing (100 events/sec).</summary>
+    public const string EtwProcessing = "etw-processing";
+
     private static readonly Dictionary<string, (int OpsPerSec, int Burst)> Defaults = new()
     {
         [EntropyBaselineBuild] = (50, 50),
         [EntropyComputation] = (100, 100),
-        [GenealogyEnrichment] = (50, 50)
+        [GenealogyEnrichment] = (50, 50),
+        [UsbScan] = (50, 50),
+        [EtwProcessing] = (100, 100)
     };
 
     private readonly ConcurrentDictionary<string, TokenBucketRateLimiter> _limiters = new();

@@ -8,6 +8,7 @@ using RansomGuard.Agent.Core.Detection;
 using RansomGuard.Agent.Core.Detection.UsbGuard;
 using RansomGuard.Agent.Core.Detection.UsbGuard.Models;
 using RansomGuard.Agent.Core.Detection.UsbGuard.Wmi;
+using RansomGuard.Agent.Core.Security.RateLimiting;
 
 namespace RansomGuard.Agent.Service;
 
@@ -30,6 +31,7 @@ public sealed class UsbDeviceMonitor : BackgroundService, IUsbDeviceMonitor
     private readonly Channel<UsbConnectionEvent> _eventChannel;
     private readonly ConcurrentDictionary<string, CancellationTokenSource> _activeScanCts = new();
     private readonly ConcurrentDictionary<string, UsbDevice> _connectedDevices = new();
+    private readonly IOperationRateLimiter? _scanRateLimiter;
     private long _totalEventsProcessed;
 
     public int ConnectedDeviceCount => _connectedDevices.Count;
@@ -41,7 +43,8 @@ public sealed class UsbDeviceMonitor : BackgroundService, IUsbDeviceMonitor
         IFileEventDeduplicator deduplicator,
         BootableUsbDetector bootableDetector,
         IServiceScopeFactory scopeFactory,
-        IOptionsMonitor<AgentConfiguration> config)
+        IOptionsMonitor<AgentConfiguration> config,
+        RateLimiterFactory? rateLimiterFactory = null)
     {
         _logger = logger;
         _wmiSubscriber = wmiSubscriber;
@@ -49,6 +52,7 @@ public sealed class UsbDeviceMonitor : BackgroundService, IUsbDeviceMonitor
         _bootableDetector = bootableDetector;
         _scopeFactory = scopeFactory;
         _config = config.CurrentValue;
+        _scanRateLimiter = rateLimiterFactory?.GetLimiter("usb-scan");
         _eventChannel = Channel.CreateBounded<UsbConnectionEvent>(
             new BoundedChannelOptions(EventChannelCapacity)
             {
