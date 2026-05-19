@@ -52,6 +52,16 @@ public sealed record AgentConfiguration
     /// ENTROPY detection settings for Shannon entropy-based ransomware detection.
     /// </summary>
     public EntropyOptions? Entropy { get; init; }
+
+    /// <summary>
+    /// USB GUARD settings for removable media monitoring and scanning.
+    /// </summary>
+    public UsbGuardOptions? UsbGuard { get; init; }
+
+    /// <summary>
+    /// EXFIL WATCH settings for data exfiltration detection.
+    /// </summary>
+    public ExfilWatchOptions? ExfilWatch { get; init; }
 }
 
 /// <summary>
@@ -289,4 +299,83 @@ public sealed record EntropyOptions
     /// <summary>Maximum file size in MB for entropy analysis.</summary>
     [Range(1, 1000)]
     public int MaxFileSizeMB { get; init; } = 100;
+}
+
+/// <summary>
+/// USB GUARD module configuration for removable media monitoring.
+/// </summary>
+public sealed record UsbGuardOptions
+{
+    /// <summary>Whether USB monitoring is enabled.</summary>
+    public bool Enabled { get; init; } = true;
+
+    /// <summary>Operating mode: Audit (log only), Permissive (log+quarantine), Strict (block).</summary>
+    public string OperatingMode { get; init; } = "Permissive";
+
+    /// <summary>Maximum file size in MB for content scanning.</summary>
+    [Range(1, 1000)]
+    public int MaxFileSizeForScanMB { get; init; } = 100;
+
+    /// <summary>Maximum scan duration in seconds per USB device.</summary>
+    [Range(10, 600)]
+    public int MaxScanDurationSeconds { get; init; } = 120;
+
+    /// <summary>Whether to scan inside archives (ZIP, RAR, 7z).</summary>
+    public bool ScanArchiveContents { get; init; } = true;
+
+    /// <summary>Block bootable USB devices by default.</summary>
+    public bool BlockBootableUsb { get; init; } = true;
+
+    /// <summary>Alert on HID device connections (USB keyboards, mice).</summary>
+    public bool AlertOnHidDevice { get; init; } = true;
+
+    /// <summary>Alert on USB network device connections (WiFi adapters, 4G dongles).</summary>
+    public bool AlertOnNetworkDevice { get; init; } = true;
+
+    /// <summary>Scan rate limit in files per second.</summary>
+    [Range(10, 500)]
+    public int ScanRatePerSecond { get; init; } = 50;
+}
+
+/// <summary>
+/// EXFIL WATCH module configuration for data exfiltration detection.
+/// </summary>
+public sealed record ExfilWatchOptions
+{
+    /// <summary>Whether exfiltration monitoring is enabled.</summary>
+    public bool Enabled { get; init; } = true;
+
+    /// <summary>Learning phase duration in days before active detection.</summary>
+    [Range(1, 30)]
+    public int LearningPhaseDays { get; init; } = 7;
+
+    /// <summary>Volume anomaly threshold multiplier over baseline average.</summary>
+    [Range(2, 20)]
+    public int VolumeAnomalyMultiplier { get; init; } = 5;
+
+    /// <summary>DNS tunneling query threshold per 5 minutes.</summary>
+    [Range(100, 10000)]
+    public int DnsTunnelingQueryThreshold { get; init; } = 1000;
+
+    /// <summary>DNS tunneling subdomain entropy threshold.</summary>
+    public double DnsTunnelingEntropyThreshold { get; init; } = 4.5;
+
+    /// <summary>Working hours start (0-23).</summary>
+    [Range(0, 23)]
+    public int WorkingHoursStart { get; init; } = 7;
+
+    /// <summary>Working hours end (0-23).</summary>
+    [Range(0, 23)]
+    public int WorkingHoursEnd { get; init; } = 19;
+
+    /// <summary>Cloud provider upload threshold in GB/hour for alerting.</summary>
+    public double CloudAlertThresholdGbPerHour { get; init; } = 1.0;
+
+    /// <summary>Firewall block rule auto-expiry in hours.</summary>
+    [Range(1, 168)]
+    public int BlockRuleExpiryHours { get; init; } = 24;
+
+    /// <summary>ETW buffer count (each 64 KB).</summary>
+    [Range(16, 256)]
+    public int EtwBufferCount { get; init; } = 64;
 }
