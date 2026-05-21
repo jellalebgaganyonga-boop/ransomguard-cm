@@ -5,9 +5,15 @@ using RansomGuard.Agent.Core.Detection;
 using RansomGuard.Agent.Core.Detection.Entropy;
 using RansomGuard.Agent.Core.Detection.Genealogy;
 using RansomGuard.Agent.Core.Detection.Sentinel;
+using RansomGuard.Agent.Core.Detection.UsbGuard;
+using RansomGuard.Agent.Core.Detection.UsbGuard.Actions;
+using RansomGuard.Agent.Core.Detection.UsbGuard.Scanning;
+using RansomGuard.Agent.Core.Detection.UsbGuard.Wmi;
 using RansomGuard.Agent.Core.Persistence;
 using RansomGuard.Agent.Core.Security;
+using RansomGuard.Agent.Core.Security.AntiTampering;
 using RansomGuard.Agent.Core.Security.Cryptography;
+using RansomGuard.Agent.Core.Security.RateLimiting;
 using RansomGuard.Agent.Core.Persistence.Repositories;
 using RansomGuard.Agent.Service;
 using Serilog;
@@ -163,10 +169,39 @@ try
     builder.Services.AddSingleton<IProcessSnapshotService, ProcessSnapshotService>();
     builder.Services.AddScoped<IGenealogyEnricher, GenealogyEnricher>();
 
+    // Register rate limiting
+    builder.Services.AddSingleton<RateLimiterFactory>();
+
+    // Register USB GUARD services
+    builder.Services.AddScoped<IUsbWhitelistService>(sp =>
+        new UsbWhitelistService(
+            sp.GetRequiredService<AgentDbContext>(),
+            sp.GetRequiredService<ILogger<UsbWhitelistService>>(),
+            System.Text.Encoding.UTF8.GetBytes(dbKey[..32])));
+    builder.Services.AddSingleton<IMagicByteValidator, MagicByteValidator>();
+    builder.Services.AddSingleton<AutorunInfDetector>();
+    builder.Services.AddSingleton<SuspiciousLnkDetector>();
+    builder.Services.AddSingleton<ArchiveScanner>();
+    builder.Services.AddSingleton<UsbEntropyScanner>();
+    builder.Services.AddScoped<IUsbContentScanner, UsbContentScanner>();
+    builder.Services.AddSingleton<BootableUsbDetector>();
+    builder.Services.AddScoped<IUsbActionEngine, UsbActionEngine>();
+    builder.Services.AddSingleton<IWmiEventSubscriber, WmiEventSubscriber>();
+
+    // Register anti-tampering services
+    builder.Services.AddSingleton<IAgentProtector, AgentProtector>();
+    builder.Services.AddSingleton<RegistryWatcher>();
+    builder.Services.AddSingleton<DebuggerDetector>();
+    builder.Services.AddSingleton<CodeSectionIntegrity>();
+
     // SENTINEL deployment runs before Worker to ensure canaries exist
     builder.Services.AddHostedService<SentinelDeploymentService>();
     builder.Services.AddHostedService<SentinelMonitor>();
     builder.Services.AddHostedService<EntropyMonitor>();
+
+    // USB GUARD monitor
+    builder.Services.AddHostedService<UsbDeviceMonitor>();
+
     builder.Services.AddHostedService<Worker>();
 
     var host = builder.Build();

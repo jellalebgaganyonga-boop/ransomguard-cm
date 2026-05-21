@@ -7,9 +7,14 @@ using RansomGuard.Agent.Core.Detection;
 using RansomGuard.Agent.Core.Detection.Entropy;
 using RansomGuard.Agent.Core.Detection.Genealogy;
 using RansomGuard.Agent.Core.Detection.Sentinel;
+using RansomGuard.Agent.Core.Detection.UsbGuard;
+using RansomGuard.Agent.Core.Detection.UsbGuard.Actions;
+using RansomGuard.Agent.Core.Detection.UsbGuard.Scanning;
+using RansomGuard.Agent.Core.Detection.UsbGuard.Wmi;
 using RansomGuard.Agent.Core.Persistence;
 using RansomGuard.Agent.Core.Persistence.Repositories;
 using RansomGuard.Agent.Core.Security;
+using RansomGuard.Agent.Core.Security.AntiTampering;
 using RansomGuard.Agent.Core.Security.Cryptography;
 using RansomGuard.Agent.Core.Security.RateLimiting;
 
@@ -88,5 +93,47 @@ public static class ServiceRegistration
         // GENEALOGY
         services.AddSingleton<IProcessSnapshotService, ProcessSnapshotService>();
         services.AddScoped<IGenealogyEnricher, GenealogyEnricher>();
+
+        // USB GUARD
+        AddUsbGuardServices(services, dbKey);
+
+        // Anti-tampering
+        services.AddSingleton<IAgentProtector, AgentProtector>();
+        services.AddSingleton<RegistryWatcher>();
+        services.AddSingleton<DebuggerDetector>();
+        services.AddSingleton<CodeSectionIntegrity>();
+    }
+
+    /// <summary>
+    /// Registers all USB GUARD module services.
+    /// </summary>
+    public static void AddUsbGuardServices(IServiceCollection services, string dbKey)
+    {
+        // Salt derived from DB key (first 32 bytes)
+        byte[] salt = System.Text.Encoding.UTF8.GetBytes(dbKey.Length >= 32 ? dbKey[..32] : dbKey.PadRight(32, '0'));
+
+        // Whitelist
+        services.AddScoped<IUsbWhitelistService>(sp =>
+            new UsbWhitelistService(
+                sp.GetRequiredService<AgentDbContext>(),
+                sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<UsbWhitelistService>>(),
+                salt));
+
+        // Scanners
+        services.AddSingleton<IMagicByteValidator, MagicByteValidator>();
+        services.AddSingleton<AutorunInfDetector>();
+        services.AddSingleton<SuspiciousLnkDetector>();
+        services.AddSingleton<ArchiveScanner>();
+        services.AddSingleton<UsbEntropyScanner>();
+        services.AddScoped<IUsbContentScanner, UsbContentScanner>();
+
+        // Bootable detection
+        services.AddSingleton<BootableUsbDetector>();
+
+        // Actions
+        services.AddScoped<IUsbActionEngine, UsbActionEngine>();
+
+        // WMI subscriber
+        services.AddSingleton<IWmiEventSubscriber, WmiEventSubscriber>();
     }
 }
