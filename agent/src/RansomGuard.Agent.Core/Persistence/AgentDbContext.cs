@@ -84,6 +84,11 @@ public sealed class AgentDbContext : DbContext
     public DbSet<UsbAlert> UsbAlerts => Set<UsbAlert>();
 
     /// <summary>
+    /// EXFIL WATCH alerts for suspected data exfiltration.
+    /// </summary>
+    public DbSet<ExfilAlert> ExfilAlerts => Set<ExfilAlert>();
+
+    /// <summary>
     /// Initializes a new instance of <see cref="AgentDbContext"/>.
     /// </summary>
     /// <param name="options">Database context options.</param>
@@ -242,6 +247,20 @@ public sealed class AgentDbContext : DbContext
             entity.Property(e => e.Title).IsRequired().HasMaxLength(500);
             entity.Property(e => e.Description).IsRequired();
             entity.Property(e => e.Severity).IsRequired().HasMaxLength(20);
+            entity.Property(e => e.ActionTaken).IsRequired().HasMaxLength(50);
+        });
+
+        modelBuilder.Entity<ExfilAlert>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.DetectedAt);
+            entity.HasIndex(e => e.RuleName);
+            entity.HasIndex(e => e.ProcessName);
+            entity.Property(e => e.RuleName).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Severity).IsRequired().HasMaxLength(20);
+            entity.Property(e => e.ProcessName).IsRequired().HasMaxLength(255);
+            entity.Property(e => e.Destination).IsRequired().HasMaxLength(500);
+            entity.Property(e => e.Description).IsRequired();
             entity.Property(e => e.ActionTaken).IsRequired().HasMaxLength(50);
         });
 
