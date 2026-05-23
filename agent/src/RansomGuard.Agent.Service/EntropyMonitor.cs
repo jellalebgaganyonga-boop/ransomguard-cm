@@ -8,6 +8,7 @@ using RansomGuard.Agent.Core.Persistence;
 using RansomGuard.Agent.Core.Persistence.Entities;
 using RansomGuard.Agent.Core.Persistence.Repositories;
 using Microsoft.EntityFrameworkCore;
+using RansomGuard.Agent.Core.Detection.CrossModule;
 using RansomGuard.Agent.Core.Security.RateLimiting;
 
 namespace RansomGuard.Agent.Service;
@@ -29,6 +30,7 @@ public sealed class EntropyMonitor : BackgroundService
     private readonly Channel<string> _fileChannel;
     private readonly List<FileSystemWatcher> _watchers = [];
     private readonly IOperationRateLimiter? _rateLimiter;
+    private readonly IDetectionEventBus? _eventBus;
 
     /// <summary>
     /// Initializes the entropy monitor.
@@ -39,7 +41,8 @@ public sealed class EntropyMonitor : BackgroundService
         IServiceScopeFactory scopeFactory,
         IFileEventDeduplicator deduplicator,
         IEntropyCalculator calculator,
-        RateLimiterFactory? rateLimiterFactory = null)
+        RateLimiterFactory? rateLimiterFactory = null,
+        IDetectionEventBus? eventBus = null)
     {
         _logger = logger;
         _config = config.CurrentValue;
@@ -47,6 +50,7 @@ public sealed class EntropyMonitor : BackgroundService
         _deduplicator = deduplicator;
         _calculator = calculator;
         _rateLimiter = rateLimiterFactory?.GetLimiter(RateLimiterFactory.EntropyComputation);
+        _eventBus = eventBus;
         _fileChannel = Channel.CreateBounded<string>(
             new BoundedChannelOptions(EventChannelCapacity)
             {
@@ -207,6 +211,23 @@ public sealed class EntropyMonitor : BackgroundService
                         "ENTROPY ALERT: Rule {RuleId} ({RuleName}) on {FilePath} | Baseline: {Baseline:F2} Current: {Current:F2} Delta: {Delta:F2} | Severity: {Severity}",
                         alert.RuleId, alert.RuleName, filePath,
                         alert.BaselineEntropy, alert.CurrentEntropy, alert.Delta, alert.Severity);
+
+                    // Publish EntropySignal for cross-module correlation (fire-and-forget)
+                    if (_eventBus is not null)
+                    {
+                        _ = _eventBus.PublishAsync(new EntropySignal
+                        {
+                            SignalId = Guid.NewGuid(),
+                            SourceModule = "ENTROPY",
+                            EmittedAt = DateTime.UtcNow,
+                            FilePath = filePath,
+                            ProcessId = 0,
+                            ProcessName = string.Empty,
+                            EntropyValue = alert.CurrentEntropy,
+                            FileSize = size,
+                            EntropyAlertId = alert.Id
+                        }, ct);
+                    }
                 }
                 else if (baseline is null)
                 {

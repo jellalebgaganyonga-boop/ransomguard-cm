@@ -7,6 +7,7 @@ using RansomGuard.Agent.Core.Detection;
 using RansomGuard.Agent.Core.Detection.Entropy;
 using RansomGuard.Agent.Core.Detection.Genealogy;
 using RansomGuard.Agent.Core.Detection.Sentinel;
+using RansomGuard.Agent.Core.Detection.CrossModule;
 using RansomGuard.Agent.Core.Detection.UsbGuard;
 using RansomGuard.Agent.Core.Detection.UsbGuard.Actions;
 using RansomGuard.Agent.Core.Detection.UsbGuard.Scanning;
@@ -86,6 +87,9 @@ public static class ServiceRegistration
 
         // Rate limiting
         services.AddSingleton<RateLimiterFactory>();
+
+        // Cross-module event bus
+        services.AddSingleton<IDetectionEventBus, InMemoryDetectionEventBus>();
 
         // ENTROPY
         services.AddSingleton<IEntropyCalculator, EntropyCalculator>();
