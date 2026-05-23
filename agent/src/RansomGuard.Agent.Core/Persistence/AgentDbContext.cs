@@ -89,6 +89,16 @@ public sealed class AgentDbContext : DbContext
     public DbSet<ExfilAlert> ExfilAlerts => Set<ExfilAlert>();
 
     /// <summary>
+    /// Network activity baselines for adaptive detection.
+    /// </summary>
+    public DbSet<NetworkBaseline> NetworkBaselines => Set<NetworkBaseline>();
+
+    /// <summary>
+    /// Per-dimension metrics within network baselines.
+    /// </summary>
+    public DbSet<NetworkBaselineMetric> NetworkBaselineMetrics => Set<NetworkBaselineMetric>();
+
+    /// <summary>
     /// Initializes a new instance of <see cref="AgentDbContext"/>.
     /// </summary>
     /// <param name="options">Database context options.</param>
@@ -262,6 +272,26 @@ public sealed class AgentDbContext : DbContext
             entity.Property(e => e.Destination).IsRequired().HasMaxLength(500);
             entity.Property(e => e.Description).IsRequired();
             entity.Property(e => e.ActionTaken).IsRequired().HasMaxLength(50);
+        });
+
+        modelBuilder.Entity<NetworkBaseline>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.Scope).IsUnique();
+            entity.HasIndex(e => e.Phase);
+            entity.Property(e => e.Scope).IsRequired().HasMaxLength(255);
+            entity.Property(e => e.Phase).HasConversion<string>().HasMaxLength(20);
+        });
+
+        modelBuilder.Entity<NetworkBaselineMetric>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.NetworkBaselineId, e.MetricType, e.Dimension }).IsUnique();
+            entity.HasIndex(e => e.NetworkBaselineId);
+            entity.Property(e => e.Dimension).IsRequired().HasMaxLength(500);
+            entity.Property(e => e.MetricType).HasConversion<string>().HasMaxLength(50);
+            entity.Property(e => e.HourlyPatternJson).IsRequired();
+            entity.Property(e => e.WeeklyPatternJson).IsRequired();
         });
 
         modelBuilder.Entity<QuarantinedFile>(entity =>

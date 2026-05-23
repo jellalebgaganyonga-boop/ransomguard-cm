@@ -35,6 +35,20 @@ try
         return;
     }
 
+    // CLI command: --baseline-reset
+    if (args.Contains("--baseline-reset"))
+    {
+        await BaselineResetAsync();
+        return;
+    }
+
+    // CLI command: --baseline-export
+    if (args.Contains("--baseline-export"))
+    {
+        await BaselineExportAsync();
+        return;
+    }
+
     Log.Information("RansomGuard-CM Agent starting up");
 
     var builder = Host.CreateApplicationBuilder(args);
@@ -324,6 +338,110 @@ static async Task VerifyAuditLogAsync()
         Console.WriteLine("RESULT: FAIL — audit log integrity compromised");
         Environment.ExitCode = 1;
     }
+}
+
+/// <summary>
+/// CLI: --baseline-reset — resets the global network baseline to Learning phase.
+/// </summary>
+static async Task BaselineResetAsync()
+{
+    Console.WriteLine("=== Network Baseline Reset ===");
+
+    var builder = Host.CreateApplicationBuilder([]);
+
+    var dbConnectionString = builder.Configuration
+        .GetSection("Agent:Database:ConnectionString")
+        .Value ?? "Data Source=agent.db";
+    dbConnectionString = EnvironmentVariableResolver.ResolvePath(dbConnectionString);
+
+    SQLitePCL.Batteries_V2.Init();
+
+    string keyDir = EnvironmentVariableResolver.ResolvePath(
+        builder.Configuration.GetSection("Agent:Database:KeyDirectory").Value
+        ?? "%ProgramData%\\RansomGuard-CM\\keys");
+    var dbKeyManager = new DatabaseKeyManager(keyDir,
+        Microsoft.Extensions.Logging.Abstractions.NullLogger<DatabaseKeyManager>.Instance);
+    string dbKey = dbKeyManager.GetOrCreateKey();
+
+    string encryptedConnectionString = dbConnectionString.Contains("Password=")
+        ? dbConnectionString
+        : $"{dbConnectionString};Password={dbKey}";
+
+    var options = new DbContextOptionsBuilder<AgentDbContext>()
+        .UseSqlite(encryptedConnectionString)
+        .Options;
+
+    using var context = new AgentDbContext(options);
+    context.Database.Migrate();
+
+    var service = new RansomGuard.Agent.Core.Detection.ExfilWatch.NetworkBaselineService(
+        context,
+        Microsoft.Extensions.Logging.Abstractions.NullLogger<RansomGuard.Agent.Core.Detection.ExfilWatch.NetworkBaselineService>.Instance);
+
+    await service.ResetBaselineAsync("global", CancellationToken.None);
+    Console.WriteLine("Network baseline reset to Learning phase.");
+}
+
+/// <summary>
+/// CLI: --baseline-export — exports the current network baseline as JSON.
+/// </summary>
+static async Task BaselineExportAsync()
+{
+    Console.WriteLine("=== Network Baseline Export ===");
+
+    var builder = Host.CreateApplicationBuilder([]);
+
+    var dbConnectionString = builder.Configuration
+        .GetSection("Agent:Database:ConnectionString")
+        .Value ?? "Data Source=agent.db";
+    dbConnectionString = EnvironmentVariableResolver.ResolvePath(dbConnectionString);
+
+    SQLitePCL.Batteries_V2.Init();
+
+    string keyDir = EnvironmentVariableResolver.ResolvePath(
+        builder.Configuration.GetSection("Agent:Database:KeyDirectory").Value
+        ?? "%ProgramData%\\RansomGuard-CM\\keys");
+    var dbKeyManager = new DatabaseKeyManager(keyDir,
+        Microsoft.Extensions.Logging.Abstractions.NullLogger<DatabaseKeyManager>.Instance);
+    string dbKey = dbKeyManager.GetOrCreateKey();
+
+    string encryptedConnectionString = dbConnectionString.Contains("Password=")
+        ? dbConnectionString
+        : $"{dbConnectionString};Password={dbKey}";
+
+    var options = new DbContextOptionsBuilder<AgentDbContext>()
+        .UseSqlite(encryptedConnectionString)
+        .Options;
+
+    using var context = new AgentDbContext(options);
+    context.Database.Migrate();
+
+    var baselines = await context.NetworkBaselines.ToListAsync();
+    var metrics = await context.NetworkBaselineMetrics.ToListAsync();
+
+    var export = new
+    {
+        ExportedAt = DateTime.UtcNow,
+        Baselines = baselines.Select(b => new
+        {
+            b.Scope, Phase = b.Phase.ToString(), b.LearningStartedAt,
+            b.LearningCompletedAt, b.ObservationCount, b.ConfidenceScore
+        }),
+        Metrics = metrics.Select(m => new
+        {
+            MetricType = m.MetricType.ToString(), m.Dimension,
+            m.HourlyAverageBytes, m.HourlyStdDevBytes, m.DailyAverageBytes,
+            m.ObservationCount, m.ConfidenceScore
+        })
+    };
+
+    string json = System.Text.Json.JsonSerializer.Serialize(export,
+        new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+
+    string outputPath = Path.Combine(Environment.CurrentDirectory, "baseline-export.json");
+    await File.WriteAllTextAsync(outputPath, json);
+    Console.WriteLine($"Baseline exported to: {outputPath}");
+    Console.WriteLine(json);
 }
 
 /// <summary>

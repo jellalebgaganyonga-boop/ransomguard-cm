@@ -8,6 +8,7 @@ using RansomGuard.Agent.Core.Detection.Entropy;
 using RansomGuard.Agent.Core.Detection.Genealogy;
 using RansomGuard.Agent.Core.Detection.Sentinel;
 using RansomGuard.Agent.Core.Detection.CrossModule;
+using RansomGuard.Agent.Core.Detection.ExfilWatch;
 using RansomGuard.Agent.Core.Detection.UsbGuard;
 using RansomGuard.Agent.Core.Detection.UsbGuard.Actions;
 using RansomGuard.Agent.Core.Detection.UsbGuard.Scanning;
@@ -90,6 +91,9 @@ public static class ServiceRegistration
 
         // Cross-module event bus
         services.AddSingleton<IDetectionEventBus, InMemoryDetectionEventBus>();
+
+        // EXFIL WATCH — Network baseline
+        services.AddScoped<INetworkBaselineService, NetworkBaselineService>();
 
         // ENTROPY
         services.AddSingleton<IEntropyCalculator, EntropyCalculator>();
