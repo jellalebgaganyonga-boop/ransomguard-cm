@@ -11,6 +11,7 @@ using RansomGuard.Agent.Core.Detection.CrossModule;
 using RansomGuard.Agent.Core.Detection.ExfilWatch;
 using RansomGuard.Agent.Core.Detection.ExfilWatch.Rules;
 using RansomGuard.Agent.Core.Detection.IndicatorRemoval;
+using RansomGuard.Agent.Core.Detection.ThreatIntel;
 using RansomGuard.Agent.Core.Detection.UsbGuard;
 using RansomGuard.Agent.Core.Detection.UsbGuard.Actions;
 using RansomGuard.Agent.Core.Detection.UsbGuard.Scanning;
@@ -97,8 +98,9 @@ public static class ServiceRegistration
         // EXFIL WATCH — Network baseline
         services.AddScoped<INetworkBaselineService, NetworkBaselineService>();
 
-        // EXFIL WATCH — Threat intelligence
-        services.AddSingleton<IThreatIntelProvider, StaticThreatIntelProvider>();
+        // EXFIL WATCH — Threat intelligence (loaded from embedded JSON data)
+        services.AddSingleton<ThreatIntelDataLoader>();
+        services.AddSingleton<IThreatIntelProvider>(sp => sp.GetRequiredService<ThreatIntelDataLoader>());
 
         // EXFIL WATCH — Detection rules (DI-dependent)
         services.AddSingleton<IExfilDetectionRule, LolbasExfilRule>();

@@ -1,0 +1,23 @@
+{
+  "version": "1.0.0",
+  "lastUpdated": "2026-05-23T00:00:00Z",
+  "source": "AWS, Azure, GCP, OneDrive, Dropbox, Google Drive published IP ranges",
+  "description": "Known cloud provider CIDR prefixes for whitelist suppression.",
+  "providers": {
+    "aws": ["3.", "13.", "15.", "18.", "52.", "54."],
+    "azure": ["13.", "20.", "40.", "51.", "52.", "104."],
+    "gcp": ["34.", "35."],
+    "onedrive": ["13.", "40.", "52.", "104."],
+    "dropbox": ["162.125.", "45.58."],
+    "google_drive": ["142.250.", "172.217.", "216.58.", "74.125."]
+  },
+  "whitelisted_domains": [
+    "windowsupdate.microsoft.com", "update.microsoft.com",
+    "ctldl.windowsupdate.com", "download.windowsupdate.com",
+    "login.microsoftonline.com", "graph.microsoft.com",
+    "www.google.com", "googleapis.com",
+    "ocsp.digicert.com", "crl.microsoft.com",
+    "onedrive.live.com", "dropbox.com", "drive.google.com",
+    "aka.ms", "go.microsoft.com", "officeapps.live.com"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "version": "1.0.0",
+  "lastUpdated": "2026-05-23T00:00:00Z",
+  "source": "LOLBAS Project (lolbas-project.github.io)",
+  "description": "Living-Off-the-Land Binaries and Scripts. 30 Windows executables abused for exfiltration.",
+  "count": 30,
+  "entries": [
+    "certutil.exe", "bitsadmin.exe", "wmic.exe", "regsvr32.exe", "mshta.exe",
+    "rundll32.exe", "msbuild.exe", "installutil.exe", "regasm.exe", "regsvcs.exe",
+    "csc.exe", "msxsl.exe", "xwizard.exe", "esentutl.exe", "extexport.exe",
+    "extrac32.exe", "findstr.exe", "hh.exe", "ieexec.exe", "imewdbld.exe",
+    "makecab.exe", "msconfig.exe", "msdt.exe", "odbcconf.exe", "pcalua.exe",
+    "presentationhost.exe", "print.exe", "psr.exe", "scriptrunner.exe",
+    "syncappvpublishingserver.exe"
+  ]
+}

@@ -38,12 +38,17 @@ public sealed class SuspiciousDestinationRule : IExfilDetectionRule
         if (_threatIntel.IsKnownCloudProvider(evt.DestinationAddress))
             return null;
 
+        // Elevate to Critical if destination is a known C2 server
+        bool isC2 = _threatIntel.IsKnownC2Server(evt.DestinationAddress);
+        var severity = isC2 ? ExfilSeverity.Critical : ExfilSeverity.Medium;
+
         return new ExfilFinding
         {
             RuleName = RuleName,
-            Severity = ExfilSeverity.Medium,
-            Description = $"Suspicious destination: {evt.DestinationAddress}, " +
-                          $"{sentLastHour / 1024 / 1024} MB sent in 1 hour",
+            Severity = severity,
+            Description = isC2
+                ? $"KNOWN C2 SERVER: {evt.DestinationAddress}, {sentLastHour / 1024 / 1024} MB sent in 1 hour"
+                : $"Suspicious destination: {evt.DestinationAddress}, {sentLastHour / 1024 / 1024} MB sent in 1 hour",
             ProcessId = evt.ProcessId,
             ProcessName = evt.ProcessName,
             Destination = evt.DestinationAddress,

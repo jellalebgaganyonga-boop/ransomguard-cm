@@ -34,4 +34,8 @@
     <PackageReference Include="System.Threading.RateLimiting" Version="8.0.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="Detection\ThreatIntel\Data\*.json" />
+  </ItemGroup>
+
 </Project>

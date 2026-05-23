@@ -49,6 +49,20 @@ try
         return;
     }
 
+    // CLI command: --check-threat-intel-updates
+    if (args.Contains("--check-threat-intel-updates"))
+    {
+        CheckThreatIntelUpdates();
+        return;
+    }
+
+    // CLI command: --apply-threat-intel-update
+    if (args.Contains("--apply-threat-intel-update"))
+    {
+        await ApplyThreatIntelUpdateAsync();
+        return;
+    }
+
     Log.Information("RansomGuard-CM Agent starting up");
 
     var builder = Host.CreateApplicationBuilder(args);
@@ -442,6 +456,113 @@ static async Task BaselineExportAsync()
     await File.WriteAllTextAsync(outputPath, json);
     Console.WriteLine($"Baseline exported to: {outputPath}");
     Console.WriteLine(json);
+}
+
+/// <summary>
+/// CLI: --check-threat-intel-updates — checks for available threat intel update packages.
+/// </summary>
+static void CheckThreatIntelUpdates()
+{
+    Console.WriteLine("=== Threat Intel Update Check ===");
+
+    string updateDir = EnvironmentVariableResolver.ResolvePath(
+        "%ProgramData%\\RansomGuard-CM\\updates");
+
+    var validator = new RansomGuard.Agent.Core.Detection.ThreatIntel.ThreatIntelUpdateValidator(
+        Microsoft.Extensions.Logging.Abstractions.NullLogger<RansomGuard.Agent.Core.Detection.ThreatIntel.ThreatIntelUpdateValidator>.Instance,
+        updateDir,
+        EnvironmentVariableResolver.ResolvePath("%ProgramData%\\RansomGuard-CM\\threat-intel"));
+
+    string? packagePath = validator.CheckForUpdates();
+    if (packagePath is null)
+    {
+        Console.WriteLine("No update packages found.");
+        Console.WriteLine($"Place packages in: {updateDir}");
+        return;
+    }
+
+    Console.WriteLine($"Update package found: {packagePath}");
+    Console.WriteLine("Run --apply-threat-intel-update to apply.");
+}
+
+/// <summary>
+/// CLI: --apply-threat-intel-update — applies a signed threat intel update.
+/// </summary>
+static async Task ApplyThreatIntelUpdateAsync()
+{
+    Console.WriteLine("=== Apply Threat Intel Update ===");
+
+    var builder = Host.CreateApplicationBuilder([]);
+
+    string updateDir = EnvironmentVariableResolver.ResolvePath(
+        "%ProgramData%\\RansomGuard-CM\\updates");
+    string dataDir = EnvironmentVariableResolver.ResolvePath(
+        "%ProgramData%\\RansomGuard-CM\\threat-intel");
+
+    string keyDir = EnvironmentVariableResolver.ResolvePath(
+        builder.Configuration.GetSection("Agent:Database:KeyDirectory").Value
+        ?? "%ProgramData%\\RansomGuard-CM\\keys");
+
+    var validator = new RansomGuard.Agent.Core.Detection.ThreatIntel.ThreatIntelUpdateValidator(
+        Microsoft.Extensions.Logging.Abstractions.NullLogger<RansomGuard.Agent.Core.Detection.ThreatIntel.ThreatIntelUpdateValidator>.Instance,
+        updateDir, dataDir);
+
+    string? packagePath = validator.CheckForUpdates();
+    if (packagePath is null)
+    {
+        Console.WriteLine("No update packages found.");
+        return;
+    }
+
+    Console.WriteLine($"Package: {packagePath}");
+    Console.WriteLine("Applying update...");
+
+    // Load provider and apply
+    var provider = new RansomGuard.Agent.Core.Detection.ThreatIntel.ThreatIntelDataLoader(
+        Microsoft.Extensions.Logging.Abstractions.NullLogger<RansomGuard.Agent.Core.Detection.ThreatIntel.ThreatIntelDataLoader>.Instance);
+
+    bool success = validator.Apply(packagePath, provider);
+    if (success)
+    {
+        Console.WriteLine($"Update applied. New version: {provider.Version}");
+        Console.WriteLine($"Tor exit nodes: {provider.TorExitNodeCount}");
+        Console.WriteLine($"C2 servers: {provider.C2ServerCount}");
+        Console.WriteLine($"LOLBAS binaries: {provider.LolbasBinaryCount}");
+
+        // Log to audit trail
+        var dbConnectionString = builder.Configuration
+            .GetSection("Agent:Database:ConnectionString")
+            .Value ?? "Data Source=agent.db";
+        dbConnectionString = EnvironmentVariableResolver.ResolvePath(dbConnectionString);
+
+        SQLitePCL.Batteries_V2.Init();
+        var dbKeyManager = new DatabaseKeyManager(keyDir,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<DatabaseKeyManager>.Instance);
+        string dbKey = dbKeyManager.GetOrCreateKey();
+        string encryptedConnectionString = dbConnectionString.Contains("Password=")
+            ? dbConnectionString : $"{dbConnectionString};Password={dbKey}";
+
+        var options = new DbContextOptionsBuilder<AgentDbContext>()
+            .UseSqlite(encryptedConnectionString).Options;
+
+        using var context = new AgentDbContext(options);
+        context.Database.Migrate();
+
+        var signer = new AuditLogSigner(keyDir,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<AuditLogSigner>.Instance);
+        var repo = new AuditLogRepository(context, signer);
+
+        await repo.AppendAsync("ThreatIntelUpdate",
+            $"Applied threat intel update v{provider.Version} from {packagePath}",
+            "ThreatIntel", Guid.NewGuid(), CancellationToken.None);
+
+        Console.WriteLine("Audit log entry created with Ed25519 signature.");
+    }
+    else
+    {
+        Console.WriteLine("Update FAILED. Previous data restored from backup.");
+        Environment.ExitCode = 1;
+    }
 }
 
 /// <summary>
