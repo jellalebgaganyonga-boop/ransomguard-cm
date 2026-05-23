@@ -9,6 +9,7 @@ using RansomGuard.Agent.Core.Detection.Genealogy;
 using RansomGuard.Agent.Core.Detection.Sentinel;
 using RansomGuard.Agent.Core.Detection.CrossModule;
 using RansomGuard.Agent.Core.Detection.ExfilWatch;
+using RansomGuard.Agent.Core.Detection.ExfilWatch.Rules;
 using RansomGuard.Agent.Core.Detection.UsbGuard;
 using RansomGuard.Agent.Core.Detection.UsbGuard.Actions;
 using RansomGuard.Agent.Core.Detection.UsbGuard.Scanning;
@@ -94,6 +95,12 @@ public static class ServiceRegistration
 
         // EXFIL WATCH — Network baseline
         services.AddScoped<INetworkBaselineService, NetworkBaselineService>();
+
+        // EXFIL WATCH — Threat intelligence
+        services.AddSingleton<IThreatIntelProvider, StaticThreatIntelProvider>();
+
+        // EXFIL WATCH — Detection rules (DI-dependent)
+        services.AddSingleton<IExfilDetectionRule, LolbasExfilRule>();
 
         // ENTROPY
         services.AddSingleton<IEntropyCalculator, EntropyCalculator>();

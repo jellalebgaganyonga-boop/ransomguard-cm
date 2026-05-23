@@ -40,4 +40,7 @@ public sealed class ExfilAlert
 
     /// <summary>Cross-link to GenealogyRecord for process attribution.</summary>
     public Guid? GenealogyId { get; init; }
+
+    /// <summary>Cross-link to EntropyAlert for double extortion correlation (Rule 8).</summary>
+    public Guid? CrossLinkedEntropyAlertId { get; set; }
 }
