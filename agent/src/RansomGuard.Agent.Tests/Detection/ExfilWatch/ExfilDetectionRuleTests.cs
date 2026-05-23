@@ -44,7 +44,7 @@ public sealed class ExfilDetectionRuleTests
 
         finding.ShouldNotBeNull();
         finding.RuleName.ShouldBe("VolumeAnomaly");
-        finding.MitreId.ShouldBe("T1048");
+        finding.MitreId.ShouldBe("T1041");
     }
 
     [Fact]
@@ -91,7 +91,7 @@ public sealed class ExfilDetectionRuleTests
 
         finding.ShouldNotBeNull();
         finding.RuleName.ShouldBe("DnsTunneling");
-        finding.MitreId.ShouldBe("T1048.003");
+        finding.MitreId.ShouldBe("T1071.004");
         finding.Severity.ShouldBe(ExfilSeverity.Critical);
     }
 
@@ -132,12 +132,12 @@ public sealed class ExfilDetectionRuleTests
         none.ShouldBe(0);
     }
 
-    // ===== Rule 3: OffHoursTransfer =====
+    // ===== Rule 6: AfterHoursExfil =====
 
     [Fact]
-    public void OffHoursTransfer_LargeTransferOutsideHours_Fires()
+    public void AfterHoursExfil_LargeTransferOutsideHours_Fires()
     {
-        var rule = new OffHoursTransferRule();
+        var rule = new AfterHoursExfilRule();
         var tracker = new Mock<IDataVolumeTracker>();
         tracker.Setup(t => t.GetBytesSent(1000, TimeSpan.FromMinutes(5)))
             .Returns(100_000_000L); // 100 MB
@@ -148,14 +148,14 @@ public sealed class ExfilDetectionRuleTests
         var finding = rule.Evaluate(CreateTcpSend(1000, "10.0.0.1", 1024), tracker.Object, offHoursOptions);
 
         finding.ShouldNotBeNull();
-        finding.RuleName.ShouldBe("OffHoursTransfer");
-        finding.MitreId.ShouldBe("T1029");
+        finding.RuleName.ShouldBe("AfterHoursExfil");
+        finding.MitreId.ShouldBe("T1041");
     }
 
     [Fact]
-    public void OffHoursTransfer_SmallTransfer_DoesNotFire()
+    public void AfterHoursExfil_SmallTransfer_DoesNotFire()
     {
-        var rule = new OffHoursTransferRule();
+        var rule = new AfterHoursExfilRule();
         var tracker = new Mock<IDataVolumeTracker>();
         tracker.Setup(t => t.GetBytesSent(1000, TimeSpan.FromMinutes(5))).Returns(1024L);
 

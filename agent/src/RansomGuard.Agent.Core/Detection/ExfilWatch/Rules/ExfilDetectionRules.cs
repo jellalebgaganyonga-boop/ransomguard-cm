@@ -6,7 +6,7 @@ namespace RansomGuard.Agent.Core.Detection.ExfilWatch.Rules;
 /// <summary>
 /// Rule 1: Volume anomaly — detects when a process sends more than
 /// VolumeAnomalyMultiplier * baseline bytes/hour to a destination.
-/// MITRE T1048 — Exfiltration Over Alternative Protocol.
+/// MITRE T1041 — Exfiltration Over C2 Channel.
 /// </summary>
 public sealed class VolumeAnomalyRule : IExfilDetectionRule
 {
@@ -43,15 +43,15 @@ public sealed class VolumeAnomalyRule : IExfilDetectionRule
             Destination = evt.DestinationAddress,
             DestinationPort = evt.DestinationPort,
             BytesTransferred = sentLastHour,
-            MitreId = "T1048"
+            MitreId = "T1041"
         };
     }
 }
 
 /// <summary>
-/// Rule 2: DNS tunneling — detects high-frequency DNS queries with high-entropy
+/// Rule 4: DNS tunneling — detects high-frequency DNS queries with high-entropy
 /// subdomain labels (data encoded in DNS queries).
-/// MITRE T1048.003 — Exfiltration Over Unencrypted Non-C2 Protocol (DNS).
+/// MITRE T1071.004 — Application Layer Protocol: DNS.
 /// </summary>
 public sealed class DnsTunnelingRule : IExfilDetectionRule
 {
@@ -84,7 +84,7 @@ public sealed class DnsTunnelingRule : IExfilDetectionRule
             ProcessName = evt.ProcessName,
             Destination = evt.DnsQueryName,
             BytesTransferred = queryCount * 253, // Max DNS label length estimate
-            MitreId = "T1048.003"
+            MitreId = "T1071.004"
         };
     }
 
@@ -126,13 +126,13 @@ public sealed class DnsTunnelingRule : IExfilDetectionRule
 }
 
 /// <summary>
-/// Rule 3: Off-hours transfer — detects large uploads outside working hours.
-/// MITRE T1029 — Scheduled Transfer.
+/// Rule 6: After-hours exfiltration — detects large uploads outside working hours.
+/// MITRE T1041 — Exfiltration Over C2 Channel.
 /// </summary>
-public sealed class OffHoursTransferRule : IExfilDetectionRule
+public sealed class AfterHoursExfilRule : IExfilDetectionRule
 {
     /// <inheritdoc />
-    public string RuleName => "OffHoursTransfer";
+    public string RuleName => "AfterHoursExfil";
 
     /// <inheritdoc />
     public ExfilFinding? Evaluate(NetworkEvent evt, IDataVolumeTracker tracker, ExfilWatchOptions options)
@@ -162,7 +162,7 @@ public sealed class OffHoursTransferRule : IExfilDetectionRule
             Destination = evt.DestinationAddress,
             DestinationPort = evt.DestinationPort,
             BytesTransferred = sentLast5Min,
-            MitreId = "T1029"
+            MitreId = "T1041"
         };
     }
 }

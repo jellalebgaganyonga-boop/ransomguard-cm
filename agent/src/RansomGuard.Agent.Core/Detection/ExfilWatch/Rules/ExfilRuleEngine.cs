@@ -21,7 +21,7 @@ public sealed class ExfilRuleEngine
         [
             new VolumeAnomalyRule(),
             new DnsTunnelingRule(),
-            new OffHoursTransferRule(),
+            new AfterHoursExfilRule(),
             new CloudUploadSpikeRule(),
             new BeaconingRule(),
             new RareDestinationRule(),
