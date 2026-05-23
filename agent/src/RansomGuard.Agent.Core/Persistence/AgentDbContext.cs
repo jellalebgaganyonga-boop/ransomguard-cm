@@ -99,6 +99,11 @@ public sealed class AgentDbContext : DbContext
     public DbSet<NetworkBaselineMetric> NetworkBaselineMetrics => Set<NetworkBaselineMetric>();
 
     /// <summary>
+    /// Indicator removal detection events (T1070, T1562).
+    /// </summary>
+    public DbSet<IndicatorRemovalEvent> IndicatorRemovalEvents => Set<IndicatorRemovalEvent>();
+
+    /// <summary>
     /// Initializes a new instance of <see cref="AgentDbContext"/>.
     /// </summary>
     /// <param name="options">Database context options.</param>
@@ -270,6 +275,22 @@ public sealed class AgentDbContext : DbContext
             entity.Property(e => e.Severity).IsRequired().HasMaxLength(20);
             entity.Property(e => e.ProcessName).IsRequired().HasMaxLength(255);
             entity.Property(e => e.Destination).IsRequired().HasMaxLength(500);
+            entity.Property(e => e.Description).IsRequired();
+            entity.Property(e => e.ActionTaken).IsRequired().HasMaxLength(50);
+        });
+
+        modelBuilder.Entity<IndicatorRemovalEvent>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.DetectedAt);
+            entity.HasIndex(e => e.EventType);
+            entity.HasIndex(e => e.KillChainCorrelationId);
+            entity.Property(e => e.EventType).HasConversion<string>().HasMaxLength(50);
+            entity.Property(e => e.MitreTechniqueId).IsRequired().HasMaxLength(20);
+            entity.Property(e => e.ProcessName).IsRequired().HasMaxLength(255);
+            entity.Property(e => e.CommandLine).IsRequired().HasMaxLength(2048);
+            entity.Property(e => e.TargetResource).IsRequired().HasMaxLength(500);
+            entity.Property(e => e.Severity).IsRequired().HasMaxLength(20);
             entity.Property(e => e.Description).IsRequired();
             entity.Property(e => e.ActionTaken).IsRequired().HasMaxLength(50);
         });

@@ -10,6 +10,7 @@ using RansomGuard.Agent.Core.Detection.Sentinel;
 using RansomGuard.Agent.Core.Detection.CrossModule;
 using RansomGuard.Agent.Core.Detection.ExfilWatch;
 using RansomGuard.Agent.Core.Detection.ExfilWatch.Rules;
+using RansomGuard.Agent.Core.Detection.IndicatorRemoval;
 using RansomGuard.Agent.Core.Detection.UsbGuard;
 using RansomGuard.Agent.Core.Detection.UsbGuard.Actions;
 using RansomGuard.Agent.Core.Detection.UsbGuard.Scanning;
@@ -101,6 +102,13 @@ public static class ServiceRegistration
 
         // EXFIL WATCH — Detection rules (DI-dependent)
         services.AddSingleton<IExfilDetectionRule, LolbasExfilRule>();
+
+        // INDICATOR REMOVAL — Detectors
+        services.AddSingleton<IIndicatorRemovalDetector, EventLogClearingDetector>();
+        services.AddSingleton<IIndicatorRemovalDetector, UsnJournalClearingDetector>();
+        services.AddSingleton<IIndicatorRemovalDetector, DefenderTamperingDetector>();
+        services.AddSingleton<IIndicatorRemovalDetector, SchedTaskTamperingDetector>();
+        services.AddSingleton<MultiStageKillChainDetector>();
 
         // ENTROPY
         services.AddSingleton<IEntropyCalculator, EntropyCalculator>();
