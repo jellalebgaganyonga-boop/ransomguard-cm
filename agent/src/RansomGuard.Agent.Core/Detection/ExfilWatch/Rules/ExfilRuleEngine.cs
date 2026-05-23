@@ -13,21 +13,24 @@ public sealed class ExfilRuleEngine
     private readonly IReadOnlyList<IExfilDetectionRule> _rules;
     private readonly ILogger<ExfilRuleEngine> _logger;
 
-    /// <summary>Initializes the rule engine with all 8 detection rules.</summary>
+    /// <summary>Initializes the rule engine with spec detection rules.</summary>
     public ExfilRuleEngine(ILogger<ExfilRuleEngine> logger)
+        : this(logger, [])
+    {
+    }
+
+    /// <summary>Initializes the rule engine with injected rules (for DI-dependent rules).</summary>
+    public ExfilRuleEngine(ILogger<ExfilRuleEngine> logger, IEnumerable<IExfilDetectionRule> injectedRules)
     {
         _logger = logger;
-        _rules =
-        [
+        var rules = new List<IExfilDetectionRule>
+        {
             new VolumeAnomalyRule(),
             new DnsTunnelingRule(),
-            new AfterHoursExfilRule(),
-            new CloudUploadSpikeRule(),
-            new BeaconingRule(),
-            new RareDestinationRule(),
-            new DestinationSprayRule(),
-            new LargeSingleTransferRule()
-        ];
+            new AfterHoursExfilRule()
+        };
+        rules.AddRange(injectedRules);
+        _rules = rules;
     }
 
     /// <summary>Number of registered rules.</summary>
