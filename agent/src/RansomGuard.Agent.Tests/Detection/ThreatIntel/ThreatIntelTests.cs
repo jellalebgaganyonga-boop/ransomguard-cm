@@ -27,11 +27,10 @@ public sealed class ThreatIntelTests : IDisposable
     public void Static_Lists_Loaded_Successfully_At_Startup()
     {
         // Embedded resources should load automatically in constructor
-        _loader.TorExitNodeCount.ShouldBeGreaterThan(0);
-        _loader.C2ServerCount.ShouldBeGreaterThan(0);
+        _loader.TorExitNodeCount.ShouldBeGreaterThan(1000); // Real Tor Project snapshot
+        _loader.C2ServerCount.ShouldBeGreaterThan(1000); // Real ThreatFox C2 indicators
         _loader.LolbasBinaryCount.ShouldBe(30);
         _loader.WhitelistedDomainCount.ShouldBeGreaterThan(0);
-        _loader.Version.ShouldBe("1.0.0");
     }
 
     [Fact]
@@ -45,16 +44,40 @@ public sealed class ThreatIntelTests : IDisposable
     [Fact]
     public void C2_Server_Lookup_Works()
     {
-        _loader.IsKnownC2Server("198.51.100.1").ShouldBeTrue();
+        // Real ThreatFox C2 IP (first entry in sorted list)
+        _loader.IsKnownC2Server("1.13.247.208").ShouldBeTrue();
         _loader.IsKnownC2Server("8.8.8.8").ShouldBeFalse();
     }
 
     [Fact]
-    public void Cloud_Provider_Lookup_Works()
+    public void C2_Server_List_Contains_No_RFC5737_IPs()
     {
-        _loader.IsKnownCloudProvider("3.5.140.2").ShouldBeTrue(); // AWS
-        _loader.IsKnownCloudProvider("34.120.0.1").ShouldBeTrue(); // GCP
+        // RFC 5737 documentation ranges must not appear in production data
+        _loader.IsKnownC2Server("198.51.100.1").ShouldBeFalse();
+        _loader.IsKnownC2Server("203.0.113.1").ShouldBeFalse();
+        _loader.IsKnownC2Server("192.0.2.1").ShouldBeFalse();
+    }
+
+    [Fact]
+    public void Cloud_Provider_Lookup_Uses_CIDR_Matching()
+    {
+        _loader.IsKnownCloudProvider("3.5.140.2").ShouldBeTrue(); // AWS 3.5.140.0/22
+        _loader.IsKnownCloudProvider("3.5.143.255").ShouldBeTrue(); // AWS end of 3.5.140.0/22
+        _loader.IsKnownCloudProvider("34.120.0.1").ShouldBeTrue(); // GCP 34.120.0.0/16
+        _loader.IsKnownCloudProvider("192.168.1.1").ShouldBeFalse(); // Private, not cloud
+        _loader.IsKnownCloudProvider("8.8.8.8").ShouldBeFalse(); // Google DNS, not cloud CIDR
+    }
+
+    [Fact]
+    public void Cloud_Provider_CIDR_Rejects_NonCloud_IPs()
+    {
+        // Private ranges and link-local are never cloud provider CIDRs
         _loader.IsKnownCloudProvider("192.168.1.1").ShouldBeFalse();
+        _loader.IsKnownCloudProvider("10.0.0.1").ShouldBeFalse();
+        _loader.IsKnownCloudProvider("169.254.1.1").ShouldBeFalse();
+        _loader.IsKnownCloudProvider("127.0.0.1").ShouldBeFalse();
+        // Invalid input returns false
+        _loader.IsKnownCloudProvider("not-an-ip").ShouldBeFalse();
     }
 
     [Fact]
@@ -297,7 +320,7 @@ public sealed class ThreatIntelTests : IDisposable
         AddJsonEntry(archive, "lists/cloud-providers.json", new
         {
             version = "2.0.0",
-            providers = new { aws = new[] { "3." } },
+            cidrs = new { aws = new[] { "3.0.0.0/8" } },
             whitelisted_domains = new[] { "test.com" }
         });
         AddJsonEntry(archive, "lists/known-c2-servers.json", new { version = "2.0.0", entries = new[] { "5.6.7.8" } });

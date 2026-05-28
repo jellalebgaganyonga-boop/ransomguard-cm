@@ -257,8 +257,9 @@ public sealed class ThreatIntelUpdateValidator
             bool hasEntries = root.TryGetProperty("entries", out var entries) &&
                               entries.ValueKind == JsonValueKind.Array;
             bool hasProviders = root.TryGetProperty("providers", out _);
+            bool hasCidrs = root.TryGetProperty("cidrs", out _);
 
-            return hasEntries || hasProviders;
+            return hasEntries || hasProviders || hasCidrs;
         }
         catch
         {

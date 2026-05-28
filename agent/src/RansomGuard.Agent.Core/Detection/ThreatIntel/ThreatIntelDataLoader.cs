@@ -1,3 +1,4 @@
+using System.Net;
 using System.Reflection;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
@@ -8,6 +9,7 @@ namespace RansomGuard.Agent.Core.Detection.ThreatIntel;
 /// <summary>
 /// Loads threat intel data from embedded JSON resources or an external directory.
 /// Implements <see cref="IThreatIntelProvider"/> with HashSet-based O(1) lookups.
+/// Cloud provider matching uses proper CIDR range checks via <see cref="IPNetwork"/>.
 /// </summary>
 public sealed class ThreatIntelDataLoader : IThreatIntelProvider
 {
@@ -18,7 +20,7 @@ public sealed class ThreatIntelDataLoader : IThreatIntelProvider
     private HashSet<string> _knownC2Servers = new(StringComparer.OrdinalIgnoreCase);
     private HashSet<string> _whitelistedDomains = new(StringComparer.OrdinalIgnoreCase);
     private HashSet<string> _lolbasBinaries = new(StringComparer.OrdinalIgnoreCase);
-    private List<string> _cloudPrefixes = new();
+    private List<IPNetwork> _cloudNetworks = new();
     private string _version = "1.0.0";
 
     /// <inheritdoc />
@@ -52,9 +54,12 @@ public sealed class ThreatIntelDataLoader : IThreatIntelProvider
     /// <inheritdoc />
     public bool IsKnownCloudProvider(string remoteAddress)
     {
-        foreach (var prefix in _cloudPrefixes)
+        if (!IPAddress.TryParse(remoteAddress, out var addr))
+            return false;
+
+        foreach (var network in _cloudNetworks)
         {
-            if (remoteAddress.StartsWith(prefix, StringComparison.Ordinal))
+            if (network.Contains(addr))
                 return true;
         }
         return false;
@@ -165,17 +170,22 @@ public sealed class ThreatIntelDataLoader : IThreatIntelProvider
         if (stream is null) return;
         var doc = JsonDocument.Parse(stream);
 
-        // Load cloud prefixes
-        var prefixes = new List<string>();
-        if (doc.RootElement.TryGetProperty("providers", out var providers))
+        var networks = new List<IPNetwork>();
+
+        // New format: "cidrs" object with provider arrays of CIDR strings
+        if (doc.RootElement.TryGetProperty("cidrs", out var cidrs))
         {
-            foreach (var provider in providers.EnumerateObject())
+            foreach (var provider in cidrs.EnumerateObject())
             {
-                foreach (var prefix in provider.Value.EnumerateArray())
-                    prefixes.Add(prefix.GetString()!);
+                foreach (var cidr in provider.Value.EnumerateArray())
+                {
+                    if (IPNetwork.TryParse(cidr.GetString(), out var network))
+                        networks.Add(network);
+                }
             }
         }
-        _cloudPrefixes = prefixes.Distinct().ToList();
+
+        _cloudNetworks = networks;
 
         // Load whitelisted domains
         if (doc.RootElement.TryGetProperty("whitelisted_domains", out var domains))
