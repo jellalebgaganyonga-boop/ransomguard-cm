@@ -31,15 +31,15 @@ namespace RansomGuard.Agent.Core.Persistence.Migrations
                 });
 
             migrationBuilder.CreateIndex(
+                name: "IX_NetworkBaselines_Phase",
+                table: "NetworkBaselines",
+                column: "Phase");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_NetworkBaselines_Scope",
                 table: "NetworkBaselines",
                 column: "Scope",
                 unique: true);
-
-            migrationBuilder.CreateIndex(
-                name: "IX_NetworkBaselines_Phase",
-                table: "NetworkBaselines",
-                column: "Phase");
         }
 
         /// <inheritdoc />
