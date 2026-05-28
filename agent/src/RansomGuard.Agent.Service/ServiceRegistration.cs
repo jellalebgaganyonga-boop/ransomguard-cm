@@ -128,7 +128,8 @@ public static class ServiceRegistration
                 sp.GetRequiredService<IDataVolumeTracker>(),
                 sp.GetRequiredService<IAuditLogRepository>(),
                 config.ExfilWatch ?? new ExfilWatchOptions(),
-                sp.GetRequiredService<ILogger<ExfilActionEngine>>());
+                sp.GetRequiredService<ILogger<ExfilActionEngine>>(),
+                sp.GetService<IGenealogyEnricher>());
         });
 
         // INDICATOR REMOVAL — Detectors

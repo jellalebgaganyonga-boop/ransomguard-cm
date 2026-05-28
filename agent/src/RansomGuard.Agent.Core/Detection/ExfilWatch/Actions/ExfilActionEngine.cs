@@ -1,6 +1,8 @@
+using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using RansomGuard.Agent.Core.Configuration;
 using RansomGuard.Agent.Core.Detection.ExfilWatch.Rules;
+using RansomGuard.Agent.Core.Detection.Genealogy;
 using RansomGuard.Agent.Core.Persistence.Repositories;
 
 namespace RansomGuard.Agent.Core.Detection.ExfilWatch.Actions;
@@ -22,6 +24,7 @@ public sealed class ExfilActionEngine : IExfilActionEngine
     private readonly IThreatIntelProvider _threatIntel;
     private readonly IDataVolumeTracker _tracker;
     private readonly IAuditLogRepository _auditLog;
+    private readonly IGenealogyEnricher? _genealogyEnricher;
     private readonly ExfilWatchOptions _options;
     private readonly ILogger<ExfilActionEngine> _logger;
 
@@ -34,7 +37,8 @@ public sealed class ExfilActionEngine : IExfilActionEngine
         IDataVolumeTracker tracker,
         IAuditLogRepository auditLog,
         ExfilWatchOptions options,
-        ILogger<ExfilActionEngine> logger)
+        ILogger<ExfilActionEngine> logger,
+        IGenealogyEnricher? genealogyEnricher = null)
     {
         _alertAction = alertAction;
         _throttleAction = throttleAction;
@@ -44,6 +48,7 @@ public sealed class ExfilActionEngine : IExfilActionEngine
         _auditLog = auditLog;
         _options = options;
         _logger = logger;
+        _genealogyEnricher = genealogyEnricher;
     }
 
     /// <inheritdoc />
@@ -64,6 +69,40 @@ public sealed class ExfilActionEngine : IExfilActionEngine
         foreach (var action in actions)
         {
             await ExecuteWithTimeoutAndFallback(action, finding, ct);
+        }
+
+        // Fire-and-forget genealogy enrichment for action attribution
+        if (_genealogyEnricher is not null)
+        {
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    string? exePath = ResolveProcessPath(finding.ProcessId);
+                    if (exePath is not null)
+                    {
+                        await _genealogyEnricher.EnrichAlertAsync(
+                            Guid.NewGuid(), exePath, CancellationToken.None);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "Genealogy enrichment failed for PID {Pid}", finding.ProcessId);
+                }
+            }, CancellationToken.None);
+        }
+    }
+
+    private static string? ResolveProcessPath(int processId)
+    {
+        try
+        {
+            using var proc = Process.GetProcessById(processId);
+            return proc.MainModule?.FileName;
+        }
+        catch
+        {
+            return null;
         }
     }
 
