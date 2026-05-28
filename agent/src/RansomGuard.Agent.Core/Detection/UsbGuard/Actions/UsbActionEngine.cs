@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using RansomGuard.Agent.Core.Detection.IronClad.Actions;
 using RansomGuard.Agent.Core.Detection.UsbGuard.Models;
 using RansomGuard.Agent.Core.Detection.UsbGuard.Scanning;
 using RansomGuard.Agent.Core.Persistence.Entities;
@@ -8,6 +9,7 @@ namespace RansomGuard.Agent.Core.Detection.UsbGuard.Actions;
 /// <summary>
 /// Executes USB response actions with graceful fallback chain.
 /// Decision matrix: Mode x Severity -> Action.
+/// Sprint 5: Strict+Critical tries IronClad physical cut first, then software fallback.
 /// Eject -> ReadOnly -> AlertOnly fallback chain on failure.
 /// All actions audit-logged. 10-second timeout per action.
 /// </summary>
@@ -15,11 +17,13 @@ public sealed class UsbActionEngine : IUsbActionEngine
 {
     private static readonly TimeSpan ActionTimeout = TimeSpan.FromSeconds(10);
     private readonly ILogger<UsbActionEngine> _logger;
+    private readonly IIronCladActionEngine? _ironCladEngine;
 
-    /// <summary>Initializes the USB action engine.</summary>
-    public UsbActionEngine(ILogger<UsbActionEngine> logger)
+    /// <summary>Initializes the USB action engine with optional IronClad integration.</summary>
+    public UsbActionEngine(ILogger<UsbActionEngine> logger, IIronCladActionEngine? ironCladEngine = null)
     {
         _logger = logger;
+        _ironCladEngine = ironCladEngine;
     }
 
     /// <inheritdoc />
@@ -27,6 +31,35 @@ public sealed class UsbActionEngine : IUsbActionEngine
         UsbDevice device, ScanSeverity severity, UsbOperatingMode mode,
         string reason, CancellationToken ct = default)
     {
+        // Sprint 5: IronClad physical port cut for Strict + Critical
+        if (mode == UsbOperatingMode.Strict && severity == ScanSeverity.Critical
+            && _ironCladEngine is not null && _ironCladEngine.IsAvailable)
+        {
+            var portNumber = MapDriveLetterToPort(device.DriveLetter);
+            if (portNumber > 0)
+            {
+                var ironCladResult = await _ironCladEngine.CutUsbPortAsync(
+                    portNumber,
+                    $"USB Critical severity: {device.ProductDescription}, reason: {reason}",
+                    null, ct).ConfigureAwait(false);
+
+                if (ironCladResult.IsSuccess)
+                {
+                    _logger.LogCritical("IronClad CUT executed for USB device {Device} on port {Port}",
+                        device.ProductDescription, portNumber);
+                    return new UsbActionResult
+                    {
+                        ActionType = UsbActionType.BlockAndEject,
+                        Success = true,
+                        Description = $"IronClad physical port cut on port {portNumber}: {reason}"
+                    };
+                }
+
+                _logger.LogWarning("IronClad CUT failed ({Outcome}), falling back to software action",
+                    ironCladResult.Outcome);
+            }
+        }
+
         UsbActionType selectedAction = SelectAction(mode, severity);
 
         _logger.LogInformation(
@@ -140,6 +173,21 @@ public sealed class UsbActionEngine : IUsbActionEngine
                 FallbackAction = UsbActionType.ReadOnlyUsb
             };
         }
+    }
+
+    /// <summary>Maps a drive letter to a physical relay port number. Returns 0 if no mapping.</summary>
+    private static int MapDriveLetterToPort(string? driveLetter)
+    {
+        if (string.IsNullOrEmpty(driveLetter)) return 0;
+        var letter = driveLetter.TrimEnd(':', '\\', '/').ToUpperInvariant();
+        return letter switch
+        {
+            "E" => 1,
+            "F" => 2,
+            "G" => 3,
+            "H" => 4,
+            _ => 0
+        };
     }
 
     private async Task<UsbActionResult> ExecuteBlockAndEjectAsync(UsbDevice device, string reason, CancellationToken ct)

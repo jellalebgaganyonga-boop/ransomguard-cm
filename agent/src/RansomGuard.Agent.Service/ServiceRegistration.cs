@@ -16,6 +16,9 @@ using RansomGuard.Agent.Core.Detection.ExfilWatch.Rules;
 using RansomGuard.Agent.Core.Detection.IndicatorRemoval;
 using RansomGuard.Agent.Core.Detection.ThreatIntel;
 using RansomGuard.Agent.Core.Detection.UsbGuard;
+using RansomGuard.Agent.Core.Detection.IronClad;
+using RansomGuard.Agent.Core.Detection.IronClad.Actions;
+using RansomGuard.Agent.Core.Detection.IronClad.Communication;
 using RansomGuard.Agent.Core.Detection.UsbGuard.Actions;
 using RansomGuard.Agent.Core.Detection.UsbGuard.Scanning;
 using RansomGuard.Agent.Core.Detection.UsbGuard.Wmi;
@@ -149,6 +152,9 @@ public static class ServiceRegistration
         // USB GUARD
         AddUsbGuardServices(services, dbKey);
 
+        // IRONCLAD
+        AddIronCladServices(services, configuration);
+
         // Anti-tampering
         services.AddSingleton<IAgentProtector, AgentProtector>();
         services.AddSingleton<RegistryWatcher>();
@@ -187,5 +193,35 @@ public static class ServiceRegistration
 
         // WMI subscriber
         services.AddSingleton<IWmiEventSubscriber, WmiEventSubscriber>();
+    }
+
+    /// <summary>
+    /// Registers IronClad hardware response module services.
+    /// Conditionally registers MockArduinoServer only in TcpMock mode.
+    /// </summary>
+    public static void AddIronCladServices(IServiceCollection services, IConfiguration configuration)
+    {
+        services.Configure<IronCladOptions>(configuration.GetSection("IronClad"));
+
+        var ironCladOptions = configuration.GetSection("IronClad").Get<IronCladOptions>() ?? new IronCladOptions();
+
+        // Communicators
+        services.AddTransient<TcpMockCommunicator>();
+        services.AddTransient(sp => new SerialPortCommunicator(ironCladOptions));
+        services.AddSingleton<IIronCladCommunicatorFactory>(sp =>
+            new IronCladCommunicatorFactory(ironCladOptions, sp));
+        services.AddSingleton<IIronCladCommunicator>(sp =>
+            sp.GetRequiredService<IIronCladCommunicatorFactory>().Create());
+
+        // Action engine
+        services.AddScoped<IIronCladActionEngine, IronCladActionEngine>();
+
+        // Repositories
+        services.AddScoped<IIronCladEventRepository, IronCladEventRepository>();
+        services.AddScoped<IIronCladDeviceStateRepository, IronCladDeviceStateRepository>();
+
+        // Background services
+        services.AddHostedService<IronCladHeartbeatService>();
+        services.AddHostedService<IronCladStateReconciliationService>();
     }
 }
