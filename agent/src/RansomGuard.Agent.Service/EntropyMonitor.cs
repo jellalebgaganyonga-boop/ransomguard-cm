@@ -9,6 +9,7 @@ using RansomGuard.Agent.Core.Persistence.Entities;
 using RansomGuard.Agent.Core.Persistence.Repositories;
 using Microsoft.EntityFrameworkCore;
 using RansomGuard.Agent.Core.Detection.CrossModule;
+using RansomGuard.Agent.Core.Detection.Genealogy;
 using RansomGuard.Agent.Core.Security.RateLimiting;
 
 namespace RansomGuard.Agent.Service;
@@ -211,6 +212,21 @@ public sealed class EntropyMonitor : BackgroundService
                         "ENTROPY ALERT: Rule {RuleId} ({RuleName}) on {FilePath} | Baseline: {Baseline:F2} Current: {Current:F2} Delta: {Delta:F2} | Severity: {Severity}",
                         alert.RuleId, alert.RuleName, filePath,
                         alert.BaselineEntropy, alert.CurrentEntropy, alert.Delta, alert.Severity);
+
+                    // Fire-and-forget genealogy enrichment for process attribution
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            using var enrichScope = _scopeFactory.CreateScope();
+                            var enricher = enrichScope.ServiceProvider.GetRequiredService<IGenealogyEnricher>();
+                            await enricher.EnrichAlertAsync(alert.Id, filePath, default);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogDebug(ex, "Genealogy enrichment failed for entropy alert {AlertId}", alert.Id);
+                        }
+                    }, CancellationToken.None);
 
                     // Publish EntropySignal for cross-module correlation (fire-and-forget)
                     if (_eventBus is not null)

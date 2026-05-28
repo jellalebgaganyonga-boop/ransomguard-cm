@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using RansomGuard.Agent.Core.Configuration;
 using RansomGuard.Agent.Core.Detection;
+using RansomGuard.Agent.Core.Detection.Genealogy;
 using RansomGuard.Agent.Core.Detection.Sentinel;
 using RansomGuard.Agent.Core.Persistence.Entities;
 using RansomGuard.Agent.Core.Persistence.Repositories;
@@ -271,6 +272,21 @@ public sealed class SentinelMonitor : BackgroundService
             "SENTINEL ALERT: {AlertType} on canary {CanaryPath} | Process: {ProcessName} (PID: {ProcessId}) | Severity: {Severity}",
             alertType, canary.FilePath, attribution?.ProcessName ?? "unknown",
             attribution?.ProcessId.ToString() ?? "N/A", alert.Severity);
+
+        // Fire-and-forget genealogy enrichment for process attribution
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var enrichScope = _scopeFactory.CreateScope();
+                var enricher = enrichScope.ServiceProvider.GetRequiredService<IGenealogyEnricher>();
+                await enricher.EnrichAlertAsync(alert.Id, canary.FilePath, default);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Genealogy enrichment failed for canary alert {AlertId}", alert.Id);
+            }
+        }, CancellationToken.None);
     }
 
     private ProcessAttribution? TryAttributeProcess(string filePath)

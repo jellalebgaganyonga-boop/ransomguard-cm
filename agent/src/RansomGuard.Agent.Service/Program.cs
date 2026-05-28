@@ -230,6 +230,10 @@ try
     // USB GUARD monitor
     builder.Services.AddHostedService<UsbDeviceMonitor>();
 
+    // EXFIL WATCH monitor + firewall rule cleanup
+    builder.Services.AddHostedService<ExfilWatchMonitor>();
+    builder.Services.AddHostedService<ExfilFirewallRuleCleanupService>();
+
     builder.Services.AddHostedService<Worker>();
 
     var host = builder.Build();
