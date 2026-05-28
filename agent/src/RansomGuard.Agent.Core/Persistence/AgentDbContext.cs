@@ -104,6 +104,16 @@ public sealed class AgentDbContext : DbContext
     public DbSet<IndicatorRemovalEvent> IndicatorRemovalEvents => Set<IndicatorRemovalEvent>();
 
     /// <summary>
+    /// IronClad hardware response command events.
+    /// </summary>
+    public DbSet<IronCladEvent> IronCladEvents => Set<IronCladEvent>();
+
+    /// <summary>
+    /// IronClad device relay port states.
+    /// </summary>
+    public DbSet<IronCladDeviceState> IronCladDeviceStates => Set<IronCladDeviceState>();
+
+    /// <summary>
     /// Initializes a new instance of <see cref="AgentDbContext"/>.
     /// </summary>
     /// <param name="options">Database context options.</param>
@@ -329,6 +339,28 @@ public sealed class AgentDbContext : DbContext
             entity.Property(e => e.SourceUsbSerial).IsRequired().HasMaxLength(64);
             entity.Property(e => e.QuarantinedByUser).IsRequired().HasMaxLength(100);
             entity.Property(e => e.RestoredByUser).HasMaxLength(100);
+        });
+
+        modelBuilder.Entity<IronCladEvent>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.CommandId);
+            entity.HasIndex(e => e.IssuedAt);
+            entity.HasIndex(e => e.SourceAlertId);
+            entity.Property(e => e.Action).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.Parameter).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.Justification).IsRequired().HasMaxLength(500);
+            entity.Property(e => e.Outcome).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.IssuedByUser).IsRequired().HasMaxLength(100);
+        });
+
+        modelBuilder.Entity<IronCladDeviceState>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.PortNumber).IsUnique();
+            entity.HasIndex(e => e.LastChangedAt);
+            entity.Property(e => e.State).IsRequired().HasMaxLength(20);
+            entity.Property(e => e.Reason).IsRequired().HasMaxLength(500);
         });
     }
 }
