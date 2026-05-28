@@ -4,7 +4,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using RansomGuard.Agent.Core.Configuration;
 using RansomGuard.Agent.Core.Detection.ExfilWatch;
+using RansomGuard.Agent.Core.Detection.ExfilWatch.Actions;
 using RansomGuard.Agent.Core.Detection.ExfilWatch.Models;
+using RansomGuard.Agent.Core.Detection.ExfilWatch.Rules;
 using RansomGuard.Agent.Core.Security.RateLimiting;
 
 namespace RansomGuard.Agent.Service;
@@ -98,6 +100,26 @@ public sealed class ExfilWatchMonitor : BackgroundService
 
                 // Feed event to data volume tracker
                 tracker?.RecordEvent(evt);
+
+                // Evaluate detection rules and dispatch actions for findings >= Medium
+                if (tracker is not null)
+                {
+                    var ruleEngine = scope.ServiceProvider.GetService<ExfilRuleEngine>();
+                    var findings = ruleEngine?.Evaluate(evt, tracker, _config.ExfilWatch!);
+
+                    if (findings is { Count: > 0 })
+                    {
+                        var actionEngine = scope.ServiceProvider.GetService<IExfilActionEngine>();
+                        if (actionEngine is not null)
+                        {
+                            foreach (var finding in findings.Where(f => f.Severity >= ExfilSeverity.Medium))
+                            {
+                                // Fire-and-forget for non-blocking pipeline
+                                _ = Task.Run(() => actionEngine.ExecuteAsync(finding, ct), ct);
+                            }
+                        }
+                    }
+                }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { break; }
             catch (Exception ex)

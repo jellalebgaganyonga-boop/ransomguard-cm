@@ -2,6 +2,8 @@ using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using RansomGuard.Agent.Core.Configuration;
 using RansomGuard.Agent.Core.Detection;
 using RansomGuard.Agent.Core.Detection.Entropy;
@@ -9,6 +11,7 @@ using RansomGuard.Agent.Core.Detection.Genealogy;
 using RansomGuard.Agent.Core.Detection.Sentinel;
 using RansomGuard.Agent.Core.Detection.CrossModule;
 using RansomGuard.Agent.Core.Detection.ExfilWatch;
+using RansomGuard.Agent.Core.Detection.ExfilWatch.Actions;
 using RansomGuard.Agent.Core.Detection.ExfilWatch.Rules;
 using RansomGuard.Agent.Core.Detection.IndicatorRemoval;
 using RansomGuard.Agent.Core.Detection.ThreatIntel;
@@ -104,6 +107,29 @@ public static class ServiceRegistration
 
         // EXFIL WATCH — Detection rules (DI-dependent)
         services.AddSingleton<IExfilDetectionRule, LolbasExfilRule>();
+
+        // EXFIL WATCH — Rule engine
+        services.AddScoped<ExfilRuleEngine>();
+
+        // EXFIL WATCH — Action engine (B.6)
+        services.AddSingleton<IFirewallManager, WindowsFirewallManager>();
+        services.AddSingleton<IProcessThrottler, WindowsProcessThrottler>();
+        services.AddScoped<AlertOnlyAction>();
+        services.AddScoped<ThrottleProcessAction>();
+        services.AddScoped<BlockIpAction>();
+        services.AddScoped<IExfilActionEngine>(sp =>
+        {
+            var config = sp.GetRequiredService<IOptionsMonitor<AgentConfiguration>>().CurrentValue;
+            return new ExfilActionEngine(
+                sp.GetRequiredService<AlertOnlyAction>(),
+                sp.GetRequiredService<ThrottleProcessAction>(),
+                sp.GetRequiredService<BlockIpAction>(),
+                sp.GetRequiredService<IThreatIntelProvider>(),
+                sp.GetRequiredService<IDataVolumeTracker>(),
+                sp.GetRequiredService<IAuditLogRepository>(),
+                config.ExfilWatch ?? new ExfilWatchOptions(),
+                sp.GetRequiredService<ILogger<ExfilActionEngine>>());
+        });
 
         // INDICATOR REMOVAL — Detectors
         services.AddSingleton<IIndicatorRemovalDetector, EventLogClearingDetector>();
