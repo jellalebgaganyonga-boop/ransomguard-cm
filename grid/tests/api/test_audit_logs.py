@@ -1,113 +1,170 @@
-"""Tests for audit log ingestion endpoint."""
+"""Tests for audit log ingestion with real Ed25519 signature verification."""
 
 import base64
+import json
 from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from ransomguard_grid.db.models.agent import Agent, AgentCertificate
-from ransomguard_grid.db.models.enums import AgentStatus, TenantStatus
-from ransomguard_grid.db.models.tenant_user import Tenant
+from tests.conftest import AgentFixture
 
 
-async def _setup(db: AsyncSession, serial: str) -> tuple[Tenant, Agent]:
-    """Create tenant + agent + cert for test."""
-    tenant = Tenant(id=str(uuid4()), name="T", code=f"al-{uuid4().hex[:6]}", contact_email="t@t.local", status=TenantStatus.active)
-    db.add(tenant)
-    agent = Agent(id=str(uuid4()), tenant_id=tenant.id, hostname="h", fqdn="h.local", os_version="10", agent_version="1.0", hardware_fingerprint=f"fp-al-{uuid4().hex[:6]}", status=AgentStatus.active)
-    db.add(agent)
-    cert = AgentCertificate(id=str(uuid4()), agent_id=agent.id, serial_number=serial, fingerprint_sha256="f" * 64, not_before=datetime.now(UTC), not_after=datetime(2027, 1, 1, tzinfo=UTC))
-    db.add(cert)
-    await db.flush()
-    await db.commit()
-    return tenant, agent
-
-
-def _make_entry(seq: int) -> dict:
-    """Create a valid audit log entry dict."""
-    sig = base64.b64encode(b"test-signature-placeholder").decode()
+def _sign_and_make_entry(
+    seq: int,
+    payload: dict[str, object],
+    private_key: Ed25519PrivateKey,
+) -> dict[str, object]:
+    """Create an audit log entry with real Ed25519 signature."""
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    signature = private_key.sign(canonical.encode("utf-8"))
     return {
         "sequence_number": seq,
-        "payload": {"action": "test", "details": f"entry-{seq}"},
-        "ed25519_signature_base64": sig,
-        "signing_key_id": "key-001",
+        "payload": payload,
+        "ed25519_signature_base64": base64.b64encode(signature).decode(),
+        "signing_key_id": "test-key-1",
         "timestamp": datetime.now(UTC).isoformat(),
     }
 
 
 @pytest.mark.asyncio
-async def test_audit_log_accepted_with_valid_sequence(
-    client: AsyncClient, db_session: AsyncSession, test_cert_serial: str, test_cert_pem: str,
+async def test_audit_log_valid_signature_accepted(
+    client: AsyncClient, test_agent: AgentFixture,
 ) -> None:
-    """Contiguous sequence numbers should be accepted."""
-    _, agent = await _setup(db_session, test_cert_serial)
+    """Correctly signed audit log entry is accepted."""
+    payload: dict[str, object] = {"action": "alert_created", "alert_id": str(uuid4())}
+    entry = _sign_and_make_entry(1, payload, test_agent.ed25519_private_key)
 
     response = await client.post(
-        f"/api/v1/agents/{agent.id}/audit-logs",
-        json={"entries": [_make_entry(1), _make_entry(2), _make_entry(3)]},
-        headers={"X-Client-Cert": test_cert_pem},
+        f"/api/v1/agents/{test_agent.agent_id}/audit-logs",
+        json={"entries": [entry]},
+        headers={"X-Client-Cert": test_agent.cert_pem},
     )
     assert response.status_code == 200
     data = response.json()
-    assert data["accepted_count"] == 3
+    assert data["accepted_count"] == 1
     assert data["rejected_count"] == 0
 
 
 @pytest.mark.asyncio
-async def test_audit_log_sequence_gap_returns_409(
-    client: AsyncClient, db_session: AsyncSession, test_cert_serial: str, test_cert_pem: str,
-) -> None:
-    """Non-contiguous sequence number should be rejected."""
-    _, agent = await _setup(db_session, test_cert_serial)
-
-    response = await client.post(
-        f"/api/v1/agents/{agent.id}/audit-logs",
-        json={"entries": [_make_entry(5)]},  # gap: expected 1, got 5
-        headers={"X-Client-Cert": test_cert_pem},
-    )
-    assert response.status_code == 409
-
-
-@pytest.mark.asyncio
 async def test_audit_log_invalid_signature_rejected(
-    client: AsyncClient, db_session: AsyncSession, test_cert_serial: str, test_cert_pem: str,
+    client: AsyncClient, test_agent: AgentFixture,
 ) -> None:
-    """Invalid base64 signature should be rejected."""
-    _, agent = await _setup(db_session, test_cert_serial)
+    """Tampered payload (signed then modified) is rejected."""
+    original_payload: dict[str, object] = {"action": "alert_created", "alert_id": str(uuid4())}
+    entry = _sign_and_make_entry(1, original_payload, test_agent.ed25519_private_key)
 
-    bad_entry = _make_entry(1)
-    bad_entry["ed25519_signature_base64"] = "NOT-VALID-BASE64!!!"
+    # Tamper with payload AFTER signing
+    entry["payload"] = {"action": "data_deletion", "alert_id": "tampered"}
 
     response = await client.post(
-        f"/api/v1/agents/{agent.id}/audit-logs",
-        json={"entries": [bad_entry]},
-        headers={"X-Client-Cert": test_cert_pem},
+        f"/api/v1/agents/{test_agent.agent_id}/audit-logs",
+        json={"entries": [entry]},
+        headers={"X-Client-Cert": test_agent.cert_pem},
     )
     assert response.status_code == 409
     data = response.json()
-    assert "invalid base64" in str(data).lower()
+    assert "Invalid Ed25519 signature" in str(data)
+
+
+@pytest.mark.asyncio
+async def test_audit_log_wrong_key_rejected(
+    client: AsyncClient, test_agent: AgentFixture,
+) -> None:
+    """Signature from a different Ed25519 key is rejected."""
+    wrong_key = Ed25519PrivateKey.generate()
+    payload: dict[str, object] = {"action": "test"}
+    entry = _sign_and_make_entry(1, payload, wrong_key)
+
+    response = await client.post(
+        f"/api/v1/agents/{test_agent.agent_id}/audit-logs",
+        json={"entries": [entry]},
+        headers={"X-Client-Cert": test_agent.cert_pem},
+    )
+    assert response.status_code == 409
+    data = response.json()
+    assert "Invalid Ed25519 signature" in str(data)
+
+
+@pytest.mark.asyncio
+async def test_audit_log_unicode_payload_verified(
+    client: AsyncClient, test_agent: AgentFixture,
+) -> None:
+    """Canonical JSON handles unicode and nested structures correctly."""
+    payload: dict[str, object] = {
+        "message": "USB detectee avec caracteres speciaux",
+        "files": ["file1.docx", "file2.pdf"],
+        "metadata": {"size": 1024, "user": "Dr Mballa"},
+    }
+    entry = _sign_and_make_entry(1, payload, test_agent.ed25519_private_key)
+
+    response = await client.post(
+        f"/api/v1/agents/{test_agent.agent_id}/audit-logs",
+        json={"entries": [entry]},
+        headers={"X-Client-Cert": test_agent.cert_pem},
+    )
+    assert response.status_code == 200
+    assert response.json()["accepted_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_audit_log_contiguous_sequence_accepted(
+    client: AsyncClient, test_agent: AgentFixture,
+) -> None:
+    """Multiple entries with contiguous sequence numbers are accepted."""
+    entries = []
+    for seq in range(1, 4):
+        payload: dict[str, object] = {"action": f"event-{seq}", "seq": seq}
+        entries.append(_sign_and_make_entry(seq, payload, test_agent.ed25519_private_key))
+
+    response = await client.post(
+        f"/api/v1/agents/{test_agent.agent_id}/audit-logs",
+        json={"entries": entries},
+        headers={"X-Client-Cert": test_agent.cert_pem},
+    )
+    assert response.status_code == 200
+    assert response.json()["accepted_count"] == 3
+
+
+@pytest.mark.asyncio
+async def test_audit_log_sequence_gap_rejected(
+    client: AsyncClient, test_agent: AgentFixture,
+) -> None:
+    """Non-contiguous sequence number is rejected."""
+    payload: dict[str, object] = {"action": "gap-test"}
+    entry = _sign_and_make_entry(5, payload, test_agent.ed25519_private_key)  # gap: expected 1
+
+    response = await client.post(
+        f"/api/v1/agents/{test_agent.agent_id}/audit-logs",
+        json={"entries": [entry]},
+        headers={"X-Client-Cert": test_agent.cert_pem},
+    )
+    assert response.status_code == 409
 
 
 @pytest.mark.asyncio
 async def test_audit_log_requires_mtls(client: AsyncClient) -> None:
     """No cert should return 401."""
-    response = await client.post("/api/v1/agents/fake/audit-logs", json={"entries": []})
-    assert response.status_code in (401, 422)
+    response = await client.post(
+        "/api/v1/agents/fake/audit-logs",
+        json={"entries": [{"sequence_number": 1, "payload": {}, "ed25519_signature_base64": "dGVzdA==", "signing_key_id": "k", "timestamp": "2026-01-01T00:00:00Z"}]},
+    )
+    assert response.status_code == 401
 
 
 @pytest.mark.asyncio
 async def test_audit_log_agent_id_mismatch(
-    client: AsyncClient, db_session: AsyncSession, test_cert_serial: str, test_cert_pem: str,
+    client: AsyncClient, test_agent: AgentFixture,
 ) -> None:
-    """Wrong agent_id in path should return 403."""
-    await _setup(db_session, test_cert_serial)
+    """Wrong agent_id in path returns 403."""
+    payload: dict[str, object] = {"action": "test"}
+    entry = _sign_and_make_entry(1, payload, test_agent.ed25519_private_key)
 
     response = await client.post(
-        "/api/v1/agents/wrong-agent/audit-logs",
-        json={"entries": [_make_entry(1)]},
-        headers={"X-Client-Cert": test_cert_pem},
+        "/api/v1/agents/wrong-agent-id/audit-logs",
+        json={"entries": [entry]},
+        headers={"X-Client-Cert": test_agent.cert_pem},
     )
     assert response.status_code == 403

@@ -20,6 +20,7 @@ class EnrollmentResponse(BaseModel):
     agent_id: str
     tenant_id: str
     message: str
+    ed25519_private_key_pem: str | None = None
 
 
 class HeartbeatRequest(BaseModel):

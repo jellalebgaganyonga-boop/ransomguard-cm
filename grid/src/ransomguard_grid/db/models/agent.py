@@ -46,6 +46,7 @@ class AgentCertificate(Base):
     not_after: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     revocation_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    ed25519_public_key_pem: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     agent: Mapped["Agent"] = relationship(back_populates="certificates")
 
