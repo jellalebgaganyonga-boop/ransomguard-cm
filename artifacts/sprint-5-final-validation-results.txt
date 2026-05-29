@@ -1,0 +1,27 @@
+
+Gate Description                            Status Detail
+---- -----------                            ------ ------
+   1 Build Release 0/0                      PASS   errors=0
+   2 Tests 555+ passing                     PASS   passed=576 failed=0 (<=2 timing flakes allowed)
+   3 Communication layer files (6)          PASS   found=6/6
+   4 Action engine files (2)                PASS   
+   5 IronClad migration                     PASS   found=1
+   6 Persistence entities (2)               PASS   
+   7 Background services (2)                PASS   
+   8 UsbActionEngine wired to IronClad      PASS   
+   9 AddIronCladServices in DI              PASS   
+  10 Audit log Ed25519 used in ActionEngine PASS   
+  11 Default Enabled=false (safe)           PASS   
+  12 FailSafe default true                  PASS   
+  13 Both communication modes wired         PASS   
+  14 MockArduinoServer full protocol        PASS   
+  15 Mock server 30s fail-safe              PASS   
+  16 Sprint 5 SQL script                    PASS   
+  17 ADR-022 software-only decision         PASS   
+  18 IronClad README                        PASS   
+  19 Protocol Serialize/Parse with Span     PASS   
+  20 Heartbeat timeout detection            PASS   
+  21 State reconciliation logic             PASS   
+  22 Zero TODO/FIXME in IronClad            PASS   found=0
+
+
