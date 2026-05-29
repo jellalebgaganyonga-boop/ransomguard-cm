@@ -102,6 +102,13 @@ def create_app() -> FastAPI:
 
     app.include_router(threat_intel_router, prefix="/api/v1")
 
+    # Dashboard API routes (JWT authenticated)
+    from ransomguard_grid.api.v1.routes.auth import router as auth_router
+    from ransomguard_grid.api.v1.routes.dashboard import router as dashboard_router
+
+    app.include_router(auth_router, prefix="/api/v1")
+    app.include_router(dashboard_router, prefix="/api/v1")
+
     return app
 
 
