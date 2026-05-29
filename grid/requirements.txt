@@ -1,6 +1,8 @@
 fastapi[standard]>=0.115.0
 sqlalchemy[asyncio]>=2.0.30
 aiosqlite>=0.20.0
+aiomysql>=0.2.0
+asyncmy>=0.2.10
 alembic>=1.14.0
 pydantic>=2.10.0
 pydantic-settings>=2.6.0
