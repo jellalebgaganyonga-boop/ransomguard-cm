@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy import BigInteger, DateTime, Enum, ForeignKey, String, Text
 from sqlalchemy.dialects.sqlite import JSON
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ransomguard_grid.db.base import Base
 from ransomguard_grid.db.models.enums import AgentStatus
@@ -27,6 +27,8 @@ class Agent(Base):
     enrolled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False)
 
+    certificates: Mapped[list["AgentCertificate"]] = relationship(back_populates="agent")
+
     def __repr__(self) -> str:
         return f"<Agent {self.hostname}>"
 
@@ -44,6 +46,8 @@ class AgentCertificate(Base):
     not_after: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     revocation_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+    agent: Mapped["Agent"] = relationship(back_populates="certificates")
 
     def __repr__(self) -> str:
         return f"<AgentCertificate serial={self.serial_number[:16]}>"

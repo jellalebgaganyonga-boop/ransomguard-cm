@@ -86,6 +86,17 @@ def create_app() -> FastAPI:
             db_ok = False
         return {"status": "ready" if db_ok else "degraded", "database": db_ok}
 
+    # Agent API routes (mTLS authenticated except enrollment)
+    from ransomguard_grid.api.v1.routes.enrollment import router as enrollment_router
+    from ransomguard_grid.api.v1.routes.alerts import router as alerts_router
+    from ransomguard_grid.api.v1.routes.audit_log import router as audit_log_router
+    from ransomguard_grid.api.v1.routes.heartbeat import router as heartbeat_router
+
+    app.include_router(enrollment_router, prefix="/api/v1")
+    app.include_router(alerts_router, prefix="/api/v1")
+    app.include_router(audit_log_router, prefix="/api/v1")
+    app.include_router(heartbeat_router, prefix="/api/v1")
+
     return app
 
 

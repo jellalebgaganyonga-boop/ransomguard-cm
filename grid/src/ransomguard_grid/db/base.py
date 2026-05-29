@@ -1,6 +1,6 @@
 """SQLAlchemy declarative base with naming conventions and common column types."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Annotated
 from uuid import uuid4
 
@@ -37,7 +37,7 @@ created_at_col = Annotated[
     datetime,
     mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     ),
 ]
