@@ -14,13 +14,14 @@ RUN groupadd -r ransomguard --gid 1000 && \
     useradd -r -g ransomguard --uid 1000 --no-create-home --home-dir /app ransomguard
 
 WORKDIR /app
-COPY --from=builder /root/.local /home/ransomguard/.local
+COPY --from=builder --chown=ransomguard:ransomguard /root/.local /home/ransomguard/.local
 COPY grid/src /app/src
 COPY grid/alembic /app/alembic
 COPY grid/alembic.ini /app/
 
 ENV PATH=/home/ransomguard/.local/bin:$PATH
 ENV PYTHONPATH=/app/src
+ENV PYTHONUSERBASE=/home/ransomguard/.local
 
 RUN mkdir -p /var/lib/ransomguard-grid/threat-intel-packages && \
     chown -R ransomguard:ransomguard /app /var/lib/ransomguard-grid
