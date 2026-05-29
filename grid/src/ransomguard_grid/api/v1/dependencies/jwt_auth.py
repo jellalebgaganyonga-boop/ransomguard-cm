@@ -38,7 +38,7 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication credentials",
             headers={"WWW-Authenticate": "Bearer"},
-        )
+        ) from None
 
     if payload.token_type != "access":
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Refresh token cannot be used for API access")

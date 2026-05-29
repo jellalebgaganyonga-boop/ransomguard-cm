@@ -74,7 +74,7 @@ async def refresh(
     try:
         payload = jwt_svc.decode(body.refresh_token)
     except AuthenticationError:
-        raise HTTPException(401, "Invalid refresh token")
+        raise HTTPException(401, "Invalid refresh token") from None
 
     if payload.token_type != "refresh":
         raise HTTPException(401, "Not a refresh token")

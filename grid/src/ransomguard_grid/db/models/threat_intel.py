@@ -32,7 +32,9 @@ class ThreatIntelPackage(Base):
     __tablename__ = "threat_intel_packages"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    version_id: Mapped[str] = mapped_column(String(36), ForeignKey("threat_intel_versions.id", ondelete="RESTRICT"), nullable=False)
+    version_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("threat_intel_versions.id", ondelete="RESTRICT"), nullable=False,
+    )
     file_name: Mapped[str] = mapped_column(String(255), nullable=False)
     file_path: Mapped[str] = mapped_column(String(1000), nullable=False)
     file_size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
@@ -50,7 +52,9 @@ class AgentThreatIntelVersion(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id", ondelete="RESTRICT"), index=True, nullable=False)
     agent_id: Mapped[str] = mapped_column(String(36), ForeignKey("agents.id", ondelete="RESTRICT"), nullable=False)
-    version_id: Mapped[str] = mapped_column(String(36), ForeignKey("threat_intel_versions.id", ondelete="RESTRICT"), nullable=False)
+    version_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("threat_intel_versions.id", ondelete="RESTRICT"), nullable=False,
+    )
     applied_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False)
     applied_status: Mapped[str] = mapped_column(String(50), nullable=False)
     error_message: Mapped[str | None] = mapped_column(String(2000), nullable=True)

@@ -1,7 +1,6 @@
 """Alert repository with idempotency lookup via client_message_id."""
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from ransomguard_grid.db.models.alerts import Alert
 from ransomguard_grid.db.repositories.base_repository import BaseRepository

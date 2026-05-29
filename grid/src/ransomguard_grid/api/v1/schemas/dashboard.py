@@ -5,7 +5,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ransomguard_grid.db.models.enums import AlertStatus, Severity
+from ransomguard_grid.db.models.enums import AlertStatus
 
 
 class PaginatedResponse(BaseModel):

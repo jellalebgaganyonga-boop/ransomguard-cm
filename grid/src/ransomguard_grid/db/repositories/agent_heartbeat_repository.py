@@ -3,7 +3,6 @@
 from collections.abc import Sequence
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from ransomguard_grid.db.models.agent import AgentHeartbeat
 from ransomguard_grid.db.repositories.base_repository import BaseRepository

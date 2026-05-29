@@ -40,7 +40,7 @@ async def get_authenticated_agent(
         cert = x509.load_pem_x509_certificate(cert_pem.encode(), default_backend())
         serial_number = format(cert.serial_number, "x").upper()
     except Exception:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid client certificate format")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid client certificate format") from None
 
     cert_repo = AgentCertificateRepository(db)
     agent_cert = await cert_repo.find_by_serial_number(serial_number)

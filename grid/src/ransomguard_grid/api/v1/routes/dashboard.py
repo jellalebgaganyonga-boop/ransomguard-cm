@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ransomguard_grid.api.v1.dependencies.jwt_auth import get_current_user, require_roles
+from ransomguard_grid.api.v1.dependencies.jwt_auth import require_roles
 from ransomguard_grid.api.v1.schemas.dashboard import (
     AgentItem,
     AlertItem,

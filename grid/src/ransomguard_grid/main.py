@@ -22,16 +22,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     import httpx
 
     from ransomguard_grid.db.session import AsyncSessionLocal
-    from ransomguard_grid.db.repositories.threat_intel_repository import ThreatIntelVersionRepository
     from ransomguard_grid.services.grid_signing_key_service import GridSigningKeyService
     from ransomguard_grid.services.threat_intel_aggregator import ThreatIntelAggregator
     from ransomguard_grid.services.threat_intel_package_builder import ThreatIntelPackageBuilder
-    from ransomguard_grid.services.threat_intel_sources.tor_project import TorProjectSource
-    from ransomguard_grid.services.threat_intel_sources.threatfox import ThreatFoxSource
+    from ransomguard_grid.services.threat_intel_sources import ThreatIntelSource
+    from ransomguard_grid.services.threat_intel_sources.alienvault_otx import AlienVaultOtxSource
     from ransomguard_grid.services.threat_intel_sources.aws import AwsIpRangesSource
     from ransomguard_grid.services.threat_intel_sources.gcp import GcpIpRangesSource
-    from ransomguard_grid.services.threat_intel_sources.alienvault_otx import AlienVaultOtxSource
-    from ransomguard_grid.services.threat_intel_sources import ThreatIntelSource
+    from ransomguard_grid.services.threat_intel_sources.threatfox import ThreatFoxSource
+    from ransomguard_grid.services.threat_intel_sources.tor_project import TorProjectSource
     from ransomguard_grid.workers.threat_intel_updater_worker import ThreatIntelUpdaterWorker
 
     settings = get_settings()
@@ -139,9 +138,9 @@ def create_app() -> FastAPI:
         return {"status": "ready" if db_ok else "degraded", "database": db_ok}
 
     # Agent API routes (mTLS authenticated except enrollment)
-    from ransomguard_grid.api.v1.routes.enrollment import router as enrollment_router
     from ransomguard_grid.api.v1.routes.alerts import router as alerts_router
     from ransomguard_grid.api.v1.routes.audit_log import router as audit_log_router
+    from ransomguard_grid.api.v1.routes.enrollment import router as enrollment_router
     from ransomguard_grid.api.v1.routes.heartbeat import router as heartbeat_router
 
     app.include_router(enrollment_router, prefix="/api/v1")

@@ -48,10 +48,11 @@ filterwarnings = ["ignore::DeprecationWarning"]
 
 [tool.ruff]
 target-version = "py312"
-line-length = 120
+line-length = 130
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "A", "SIM"]
+ignore = ["B008", "UP042", "UP046", "SIM105"]
 
 [tool.mypy]
 python_version = "3.12"

@@ -1,7 +1,6 @@
 """Background worker that periodically updates threat intel packages."""
 
 import asyncio
-import hashlib
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -10,7 +9,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from ransomguard_grid.core.logging import get_logger
 from ransomguard_grid.db.models.enums import ThreatIntelStatus
 from ransomguard_grid.db.models.threat_intel import ThreatIntelPackage, ThreatIntelVersion
-from ransomguard_grid.db.repositories.threat_intel_repository import ThreatIntelVersionRepository
 from ransomguard_grid.services.threat_intel_aggregator import ThreatIntelAggregator
 from ransomguard_grid.services.threat_intel_package_builder import ThreatIntelPackageBuilder
 
@@ -52,7 +50,7 @@ class ThreatIntelUpdaterWorker:
         if self._task:
             try:
                 await asyncio.wait_for(self._task, timeout=10)
-            except (asyncio.TimeoutError, asyncio.CancelledError):
+            except (TimeoutError, asyncio.CancelledError):
                 pass
         logger.info("Threat intel worker stopped", iterations=self._iteration_count)
 
@@ -70,11 +68,10 @@ class ThreatIntelUpdaterWorker:
             package_size = zip_path.stat().st_size
             package_sha256 = ThreatIntelPackageBuilder.compute_sha256(zip_path)
 
-            with open(zip_path, "rb") as f:
-                # Read signature from ZIP (last file)
-                import zipfile
-                with zipfile.ZipFile(zip_path) as zf:
-                    signature = zf.read("signature.bin")
+            import zipfile
+
+            with zipfile.ZipFile(zip_path) as zf:
+                signature = zf.read("signature.bin")
 
             async with self.session_factory() as session:
                 version = ThreatIntelVersion(
@@ -118,5 +115,5 @@ class ThreatIntelUpdaterWorker:
                     self._stop_event.wait(),
                     timeout=self.interval_hours * 3600,
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pass  # Normal interval expiry
