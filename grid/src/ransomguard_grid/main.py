@@ -1,7 +1,7 @@
 """FastAPI application factory for GRID central server."""
 
-from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from uuid import uuid4
 
 from fastapi import FastAPI, Request
@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from ransomguard_grid.core.config import get_settings
-from ransomguard_grid.core.exceptions import GridBaseException
+from ransomguard_grid.core.exceptions import GridBaseError
 from ransomguard_grid.core.logging import configure_logging, get_logger
 from ransomguard_grid.db.session import engine
 
@@ -62,8 +62,8 @@ def create_app() -> FastAPI:
         return response
 
     # Exception handlers
-    @app.exception_handler(GridBaseException)
-    async def grid_exception_handler(request: Request, exc: GridBaseException) -> JSONResponse:
+    @app.exception_handler(GridBaseError)
+    async def grid_exception_handler(request: Request, exc: GridBaseError) -> JSONResponse:
         return JSONResponse(
             status_code=exc.status_code,
             content={"detail": exc.message},

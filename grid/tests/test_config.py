@@ -46,10 +46,12 @@ def test_default_values_applied(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GRID_JWT_SECRET_KEY", "a-very-long-secret-key-with-32-or-more-chars!")
     monkeypatch.delenv("GRID_DEBUG", raising=False)
     monkeypatch.delenv("GRID_DATABASE_URL", raising=False)
+    monkeypatch.delenv("GRID_REDIS_URL", raising=False)
+    monkeypatch.delenv("GRID_LOG_LEVEL", raising=False)
 
     from ransomguard_grid.core.config import Settings
 
-    s = Settings()  # type: ignore[call-arg]
+    s = Settings(_env_file=None)  # type: ignore[call-arg]
     assert s.environment == "development"
     assert s.debug is False
     assert s.rate_limit_per_minute == 120

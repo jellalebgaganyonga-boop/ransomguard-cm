@@ -1,10 +1,10 @@
 """Security utilities: JWT creation/verification, password hashing."""
 
 import calendar
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import bcrypt
-from jose import JWTError, jwt
+from jose import JWTError, jwt  # type: ignore[import-untyped]
 
 from ransomguard_grid.core.config import get_settings
 
@@ -27,11 +27,12 @@ def create_access_token(
 ) -> str:
     """Create a JWT access token with integer exp claim."""
     to_encode: dict[str, object] = dict(data)
-    expire = datetime.now(timezone.utc) + (
+    expire = datetime.now(UTC) + (
         expires_delta or timedelta(minutes=_settings.jwt_access_token_expire_minutes)
     )
     to_encode["exp"] = calendar.timegm(expire.utctimetuple())
-    return jwt.encode(to_encode, _settings.jwt_secret_key, algorithm=_settings.jwt_algorithm)
+    encoded: str = jwt.encode(to_encode, _settings.jwt_secret_key, algorithm=_settings.jwt_algorithm)
+    return encoded
 
 
 def decode_access_token(token: str) -> dict[str, str | list[str]]:

@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     database_pool_size: int = Field(default=20, ge=5, le=100)
     database_max_overflow: int = Field(default=10, ge=0, le=50)
 
+    # Redis (optional, for rate limiting and cache)
+    redis_url: str = Field(default="redis://localhost:6379/0")
+
     # JWT (dashboard)
     jwt_secret_key: str = Field(default="dev-secret-key-minimum-32-characters-long!", min_length=32)
     jwt_algorithm: str = "HS256"
@@ -50,4 +53,4 @@ class Settings(BaseSettings):
 
 def get_settings() -> Settings:
     """Factory function for settings, enables test override."""
-    return Settings()  # type: ignore[call-arg]
+    return Settings()  # type: ignore[call-arg,unused-ignore]
