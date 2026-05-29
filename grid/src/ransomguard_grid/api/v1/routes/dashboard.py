@@ -11,15 +11,19 @@ from ransomguard_grid.api.v1.dependencies.jwt_auth import get_current_user, requ
 from ransomguard_grid.api.v1.schemas.dashboard import (
     AgentItem,
     AlertItem,
+    AuditLogItem,
     CommandItem,
     CreateUserRequest,
     IssueCommandRequest,
     MetricsSummary,
     PaginatedAgentResponse,
     PaginatedAlertResponse,
+    PaginatedAuditLogResponse,
     PaginatedUserResponse,
     UpdateAlertStatusRequest,
+    UpdateUserRolesRequest,
     UserItem,
+    UserWithRolesItem,
 )
 from ransomguard_grid.core.security import hash_password
 from ransomguard_grid.db.models.agent import Agent
@@ -287,3 +291,78 @@ async def disable_user(
     target.is_active = False
     await db.flush()
     return UserItem.model_validate(target)
+
+
+# --- AUDIT LOGS ---
+
+
+@router.get("/audit-logs", response_model=PaginatedAuditLogResponse)
+async def search_audit_logs(
+    agent_id: str | None = None,
+    received_after: datetime | None = None,
+    received_before: datetime | None = None,
+    sequence_after: int | None = None,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=200),
+    user: User = Depends(require_roles("tenant_admin", "read_only_auditor")),
+    db: AsyncSession = Depends(get_db),
+) -> PaginatedAuditLogResponse:
+    """Search audit logs. Read-only for compliance auditors and admins. NOT security analysts."""
+    from ransomguard_grid.db.repositories.audit_log_repository import AuditLogRepository
+
+    repo = AuditLogRepository(db, tenant_id=user.tenant_id)
+    items, total = await repo.search(
+        agent_id=agent_id,
+        received_after=received_after,
+        received_before=received_before,
+        sequence_after=sequence_after,
+        offset=offset,
+        limit=limit,
+    )
+    return PaginatedAuditLogResponse(
+        items=[AuditLogItem.model_validate(log) for log in items],
+        total=total, offset=offset, limit=limit,
+    )
+
+
+# --- USER ROLE UPDATE ---
+
+
+@router.put("/users/{user_id}/roles", response_model=UserWithRolesItem)
+async def update_user_roles(
+    user_id: str,
+    body: UpdateUserRolesRequest,
+    admin: User = Depends(require_roles("tenant_admin")),
+    db: AsyncSession = Depends(get_db),
+) -> UserWithRolesItem:
+    """Replace user's roles. Admin only. Cannot self-demote."""
+    from ransomguard_grid.db.repositories.role_repository import RoleRepository, UserRoleRepository
+    from ransomguard_grid.db.repositories.user_repository import UserRepository
+
+    user_repo = UserRepository(db, tenant_id=admin.tenant_id)
+    target = await user_repo.get_by_id(user_id)
+    if not target:
+        raise HTTPException(404, "User not found")
+
+    if target.id == admin.id and "tenant_admin" not in body.role_names:
+        raise HTTPException(400, "Cannot remove tenant_admin role from yourself")
+
+    role_repo = RoleRepository(db)
+    valid_roles = []
+    for name in body.role_names:
+        role = await role_repo.get_by_name(name)
+        if not role:
+            raise HTTPException(400, f"Unknown role: {name}")
+        valid_roles.append(role)
+
+    user_role_repo = UserRoleRepository(db)
+    await user_role_repo.revoke_all_for_user(user_id)
+    for role in valid_roles:
+        await user_role_repo.grant_role(user_id, role.id, admin.id)
+
+    await db.flush()
+    updated_roles = await user_role_repo.get_user_role_names(user_id)
+    return UserWithRolesItem(
+        id=target.id, email=target.email, full_name=target.full_name,
+        is_active=target.is_active, roles=updated_roles,
+    )

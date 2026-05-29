@@ -2,7 +2,7 @@
 
 from collections.abc import Sequence
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ransomguard_grid.db.models.tenant_user import Role, UserRole
@@ -49,3 +49,10 @@ class UserRoleRepository:
             granted_at=datetime.now(UTC), granted_by_user_id=granted_by,
         ))
         await self.session.flush()
+
+    async def revoke_all_for_user(self, user_id: str) -> int:
+        """Remove all role assignments for a user. Returns count removed."""
+        stmt = delete(UserRole).where(UserRole.user_id == user_id)
+        result = await self.session.execute(stmt)
+        await self.session.flush()
+        return result.rowcount  # type: ignore[return-value]

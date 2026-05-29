@@ -103,3 +103,31 @@ class UserItem(BaseModel):
 
 class PaginatedUserResponse(PaginatedResponse):
     items: list[UserItem]
+
+
+class UpdateUserRolesRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    role_names: list[str] = Field(max_length=10)
+
+
+class UserWithRolesItem(BaseModel):
+    id: str
+    email: str
+    full_name: str
+    is_active: bool
+    roles: list[str]
+
+
+class AuditLogItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    agent_id: str
+    sequence_number: int
+    signing_key_id: str
+    received_at: datetime
+
+
+class PaginatedAuditLogResponse(PaginatedResponse):
+    items: list[AuditLogItem]
