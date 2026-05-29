@@ -18,14 +18,66 @@ logger = get_logger("main")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """Startup and shutdown lifecycle."""
+    """Startup and shutdown lifecycle with worker wiring."""
+    import httpx
+
+    from ransomguard_grid.db.session import AsyncSessionLocal
+    from ransomguard_grid.db.repositories.threat_intel_repository import ThreatIntelVersionRepository
+    from ransomguard_grid.services.grid_signing_key_service import GridSigningKeyService
+    from ransomguard_grid.services.threat_intel_aggregator import ThreatIntelAggregator
+    from ransomguard_grid.services.threat_intel_package_builder import ThreatIntelPackageBuilder
+    from ransomguard_grid.services.threat_intel_sources.tor_project import TorProjectSource
+    from ransomguard_grid.services.threat_intel_sources.threatfox import ThreatFoxSource
+    from ransomguard_grid.services.threat_intel_sources.aws import AwsIpRangesSource
+    from ransomguard_grid.services.threat_intel_sources.gcp import GcpIpRangesSource
+    from ransomguard_grid.services.threat_intel_sources.alienvault_otx import AlienVaultOtxSource
+    from ransomguard_grid.services.threat_intel_sources import ThreatIntelSource
+    from ransomguard_grid.workers.threat_intel_updater_worker import ThreatIntelUpdaterWorker
+
     settings = get_settings()
     configure_logging(
         log_level=settings.log_level,
         json_output=settings.environment != "development",
     )
     logger.info("GRID server starting", environment=settings.environment)
+
+    # Initialize GRID Ed25519 signing service
+    signing_service = GridSigningKeyService(settings.threat_intel_signing_key_path)
+    signing_service.initialize()
+    app.state.grid_signing_service = signing_service
+
+    # Initialize threat intel worker
+    http_client = httpx.AsyncClient(timeout=30.0)
+    sources: list[ThreatIntelSource] = [
+        TorProjectSource(http_client),
+        ThreatFoxSource(http_client),
+        AwsIpRangesSource(http_client),
+        GcpIpRangesSource(http_client),
+    ]
+    if settings.alienvault_otx_api_key:
+        sources.append(AlienVaultOtxSource(http_client, settings.alienvault_otx_api_key))
+
+    aggregator = ThreatIntelAggregator(sources)
+    builder = ThreatIntelPackageBuilder(signing_service, settings.threat_intel_packages_dir)
+    worker = ThreatIntelUpdaterWorker(
+        aggregator=aggregator, builder=builder,
+        session_factory=AsyncSessionLocal,
+        interval_hours=settings.threat_intel_update_interval_hours,
+    )
+
+    app.state.threat_intel_worker = worker
+    app.state.threat_intel_http_client = http_client
+
+    # Skip auto-start in test/debug (worker runs real HTTP calls)
+    if settings.environment != "development":
+        await worker.start()
+
     yield
+
+    # Shutdown
+    if worker._task is not None:
+        await worker.stop()
+    await http_client.aclose()
     await engine.dispose()
     logger.info("GRID server stopped")
 
