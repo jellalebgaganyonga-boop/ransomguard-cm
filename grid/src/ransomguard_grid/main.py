@@ -97,6 +97,11 @@ def create_app() -> FastAPI:
     app.include_router(audit_log_router, prefix="/api/v1")
     app.include_router(heartbeat_router, prefix="/api/v1")
 
+    # Threat intel endpoints (mTLS authenticated)
+    from ransomguard_grid.api.v1.routes.threat_intel import router as threat_intel_router
+
+    app.include_router(threat_intel_router, prefix="/api/v1")
+
     return app
 
 
