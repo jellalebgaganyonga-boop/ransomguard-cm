@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      Per Definition Phase Day 5 §2 (CSP spec):
+      - No inline scripts (script-src 'self')
+      - Tailwind JIT requires 'unsafe-inline' for styles in Sprint 7
+        (migration to nonces planned Sprint 8, ADR-FE-002 risk RDS4)
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; media-src 'none'; manifest-src 'self'; worker-src 'self';"
+    />
+    <title>RansomGuard-CM — Console de sécurité</title>
+    <meta
+      name="description"
+      content="Plateforme anti-ransomware EDR pour hôpitaux francophones d'Afrique sub-saharienne."
+    />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,89 @@
+{
+  "app": {
+    "name": "RansomGuard-CM",
+    "tagline": "Security Console"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "alerts": "Alerts",
+    "agents": "Agents",
+    "users": "Users",
+    "audit": "Audit log",
+    "settings": "Settings"
+  },
+  "header": {
+    "notifications": "Notifications",
+    "language": "Language",
+    "profile": "Profile",
+    "logout": "Sign out"
+  },
+  "auth": {
+    "login": {
+      "title": "Sign in",
+      "email": "Email",
+      "password": "Password",
+      "rememberMe": "Remember me",
+      "submit": "Sign in",
+      "showPassword": "Show password",
+      "hidePassword": "Hide password",
+      "errors": {
+        "invalidCredentials": "Incorrect email or password",
+        "serverError": "Server error, please try again",
+        "networkError": "Connection lost, check your network",
+        "emailRequired": "Email is required",
+        "emailInvalid": "Invalid email format",
+        "passwordRequired": "Password is required"
+      }
+    }
+  },
+  "severity": {
+    "critical": "Critical",
+    "high": "High",
+    "medium": "Medium",
+    "low": "Low",
+    "info": "Info"
+  },
+  "status": {
+    "new": "New",
+    "in_progress": "In progress",
+    "acknowledged": "In progress",
+    "resolved": "Resolved",
+    "closed": "Resolved",
+    "isolated": "Isolated",
+    "online": "Active",
+    "offline": "Offline",
+    "stale": "Stale"
+  },
+  "common": {
+    "loading": "Loading...",
+    "error": "An error occurred",
+    "retry": "Retry",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "save": "Save",
+    "close": "Close",
+    "search": "Search",
+    "filters": "Filters",
+    "resetFilters": "Reset filters",
+    "noResults": "No results",
+    "previous": "Previous",
+    "next": "Next",
+    "page": "Page {page} / {totalPages}",
+    "comingInSprint8": "Available from Sprint 8"
+  },
+  "errors": {
+    "notFound": {
+      "title": "Page not found",
+      "description": "The page you are looking for does not exist.",
+      "backToDashboard": "Back to dashboard"
+    },
+    "forbidden": {
+      "title": "Access denied",
+      "description": "You do not have the necessary permissions to access this page."
+    },
+    "generic": {
+      "title": "Error",
+      "description": "An unexpected error occurred. Please try again."
+    }
+  }
+}

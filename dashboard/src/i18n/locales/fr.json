@@ -1,0 +1,89 @@
+{
+  "app": {
+    "name": "RansomGuard-CM",
+    "tagline": "Console de sécurité"
+  },
+  "nav": {
+    "dashboard": "Tableau de bord",
+    "alerts": "Alertes",
+    "agents": "Agents",
+    "users": "Utilisateurs",
+    "audit": "Journal d'audit",
+    "settings": "Paramètres"
+  },
+  "header": {
+    "notifications": "Notifications",
+    "language": "Langue",
+    "profile": "Profil",
+    "logout": "Se déconnecter"
+  },
+  "auth": {
+    "login": {
+      "title": "Connexion",
+      "email": "Email",
+      "password": "Mot de passe",
+      "rememberMe": "Se souvenir de moi",
+      "submit": "Se connecter",
+      "showPassword": "Afficher le mot de passe",
+      "hidePassword": "Masquer le mot de passe",
+      "errors": {
+        "invalidCredentials": "Email ou mot de passe incorrect",
+        "serverError": "Erreur serveur, veuillez réessayer",
+        "networkError": "Connexion perdue, vérifiez votre réseau",
+        "emailRequired": "L'email est requis",
+        "emailInvalid": "Format d'email invalide",
+        "passwordRequired": "Le mot de passe est requis"
+      }
+    }
+  },
+  "severity": {
+    "critical": "Critique",
+    "high": "Haut",
+    "medium": "Moyen",
+    "low": "Faible",
+    "info": "Info"
+  },
+  "status": {
+    "new": "Nouveau",
+    "in_progress": "En cours",
+    "acknowledged": "En cours",
+    "resolved": "Résolu",
+    "closed": "Résolu",
+    "isolated": "Isolé",
+    "online": "Actif",
+    "offline": "Hors ligne",
+    "stale": "Obsolète"
+  },
+  "common": {
+    "loading": "Chargement...",
+    "error": "Une erreur est survenue",
+    "retry": "Réessayer",
+    "cancel": "Annuler",
+    "confirm": "Confirmer",
+    "save": "Enregistrer",
+    "close": "Fermer",
+    "search": "Rechercher",
+    "filters": "Filtres",
+    "resetFilters": "Réinitialiser les filtres",
+    "noResults": "Aucun résultat",
+    "previous": "Précédent",
+    "next": "Suivant",
+    "page": "Page {page} / {totalPages}",
+    "comingInSprint8": "Disponible à partir de Sprint 8"
+  },
+  "errors": {
+    "notFound": {
+      "title": "Page introuvable",
+      "description": "La page que vous recherchez n'existe pas.",
+      "backToDashboard": "Retour au tableau de bord"
+    },
+    "forbidden": {
+      "title": "Accès refusé",
+      "description": "Vous n'avez pas les autorisations nécessaires pour accéder à cette page."
+    },
+    "generic": {
+      "title": "Erreur",
+      "description": "Une erreur inattendue est survenue. Veuillez réessayer."
+    }
+  }
+}

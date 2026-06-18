@@ -6,8 +6,10 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
-from ransomguard_grid.api.v1.dependencies.jwt_auth import require_roles
+from ransomguard_grid.api.v1.dependencies.jwt_auth import get_current_user, require_roles
+from ransomguard_grid.schemas.dashboard.me import MeResponse, TenantContext, UserPreferences
 from ransomguard_grid.api.v1.schemas.dashboard import (
     AgentItem,
     AlertItem,
@@ -36,6 +38,68 @@ from ransomguard_grid.db.repositories.role_repository import UserRoleRepository
 from ransomguard_grid.db.session import get_db
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
+
+
+# --- ME ---
+
+
+@router.get("/me", response_model=MeResponse)
+async def get_me(
+    current_user: "User" = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> MeResponse:
+    """Return the authenticated user's identity, tenant context, roles, and preferences.
+
+    Defense-in-depth: re-queries DB to catch state changes since JWT was issued
+    (e.g., user disabled, tenant suspended). No audit log — this is a pure read.
+    """
+    stmt = (
+        select(User)
+        .where(User.id == current_user.id)
+        .options(selectinload(User.tenant))
+    )
+    result = await db.execute(stmt)
+    user = result.scalar_one_or_none()
+
+    if user is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Utilisateur introuvable",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail="Compte utilisateur désactivé")
+
+    if user.tenant is None:
+        raise HTTPException(status_code=500, detail="Configuration tenant invalide")
+
+    if user.tenant.status != "active":
+        raise HTTPException(status_code=403, detail="Tenant inactif ou suspendu")
+
+    role_repo = UserRoleRepository(db)
+    role_names = await role_repo.get_user_role_names(user.id)
+
+    preferences = UserPreferences(
+        language=getattr(user, "preferred_language", "fr") or "fr",
+        timezone=getattr(user, "preferred_timezone", "Africa/Douala") or "Africa/Douala",
+    )
+
+    return MeResponse(
+        user_id=user.id,
+        email=user.email,
+        full_name=user.full_name,
+        is_active=user.is_active,
+        tenant=TenantContext(
+            id=user.tenant.id,
+            name=user.tenant.name,
+            status=user.tenant.status,
+        ),
+        roles=role_names,
+        last_login_at=user.last_login_at,
+        preferences=preferences,
+    )
+
 
 # --- ALERTS ---
 
@@ -289,6 +353,27 @@ async def disable_user(
     if not target:
         raise HTTPException(404, "User not found")
     target.is_active = False
+    await db.flush()
+    return UserItem.model_validate(target)
+
+
+@router.post("/users/{user_id}/enable", response_model=UserItem)
+async def enable_user(
+    user_id: str,
+    admin: User = Depends(require_roles("tenant_admin")),
+    db: AsyncSession = Depends(get_db),
+) -> UserItem:
+    """Reactivate a previously disabled user. Idempotent: returns 200 if already active."""
+    from ransomguard_grid.db.repositories.user_repository import UserRepository
+
+    if user_id == admin.id:
+        raise HTTPException(422, "Vous ne pouvez pas modifier votre propre statut d'activation")
+
+    repo = UserRepository(db, tenant_id=admin.tenant_id)
+    target = await repo.get_by_id(user_id)
+    if not target:
+        raise HTTPException(404, "User not found")
+    target.is_active = True
     await db.flush()
     return UserItem.model_validate(target)
 
