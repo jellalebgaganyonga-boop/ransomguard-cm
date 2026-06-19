@@ -125,7 +125,65 @@
     }
   },
   "alerts": {
-    "acknowledge": "Prendre en charge"
+    "acknowledge": "Prendre en charge",
+    "backToList": "Retour aux alertes",
+    "notFound": "Alerte non trouvée",
+    "id": "Alerte",
+    "copyId": "Copier l'ID",
+    "detectedAt": "Détecté",
+    "agent": "Agent",
+    "module": "Module",
+    "close": "Fermer l'incident",
+    "markFalsePositive": "Marquer faux positif",
+    "readOnlyNotice": "Mode lecture seule — aucune action disponible",
+    "whatHappened": "QUE S'EST-IL PASSÉ ?",
+    "confidence": "Confiance de détection",
+    "artifacts": "Artefacts associés",
+    "technicalDetails": "Détails techniques",
+    "timeline": "Chronologie",
+    "statusChange": "{{from}} → {{to}}",
+    "created": "Alerte créée",
+    "list": {
+      "searchPlaceholder": "Rechercher (hôte...)",
+      "allSeverities": "Toutes sévérités",
+      "allStatuses": "Tous statuts",
+      "empty": {
+        "title": "Aucune alerte ne correspond à vos filtres",
+        "body": "Essayez d'élargir votre recherche ou de réinitialiser les filtres."
+      },
+      "col": {
+        "id": "ID",
+        "score": "Score",
+        "detected": "Détecté",
+        "severity": "Sévérité",
+        "status": "Statut",
+        "agent": "Hôte",
+        "module": "Module",
+        "actions": "Actions"
+      }
+    },
+    "ackModal": {
+      "title": "Prendre en charge cette alerte ?",
+      "description": "Vous allez vous assigner cette alerte.",
+      "noteLabel": "Note (facultative, 0-500 caractères)",
+      "notePlaceholder": "Investigation en cours..."
+    },
+    "closeModal": {
+      "title": "Fermer l'incident",
+      "categoryLabel": "Catégorie de résolution",
+      "categoryPlaceholder": "Sélectionner...",
+      "category": {
+        "fp": "Faux positif",
+        "tpContained": "Vrai positif — Contenu",
+        "tpEscalated": "Vrai positif — Escaladé",
+        "inconclusive": "Non concluant"
+      },
+      "notesLabel": "Notes de résolution",
+      "notesHint": "20-2000 caractères",
+      "notesPlaceholder": "Détail de l'investigation et des actions prises...",
+      "minChars": "{{count}} caractères minimum",
+      "submit": "Fermer l'incident"
+    }
   },
   "agents": {
     "hostname": "Hôte",
@@ -152,7 +210,8 @@
     "all": "Tous",
     "viewAll": "Voir tout →",
     "view": "Voir →",
-    "access": "Accéder →"
+    "access": "Accéder →",
+    "copied": "Copié !"
   },
   "errors": {
     "notFound": {

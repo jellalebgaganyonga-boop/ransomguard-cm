@@ -14,6 +14,8 @@ import { LoginPage } from '@/pages/login-page';
 import { DashboardPage } from '@/pages/dashboard-page';
 import { NotFoundPage } from '@/pages/not-found-page';
 import { PlaceholderPage } from '@/pages/placeholder-page';
+import { AlertsListPage } from '@/pages/alerts/alerts-list-page';
+import { AlertDetailPage } from '@/pages/alerts/alert-detail-page';
 
 /**
  * Boot sequence (AC1.3.4):
@@ -63,24 +65,8 @@ export function App() {
           <Route path="/dashboard" element={<DashboardPage />} />
 
           {/* Day 4-5: EPIC-ALERTS */}
-          <Route
-            path="/alerts"
-            element={
-              <PlaceholderPage
-                titleKey="nav.alerts"
-                dayLabel="Sprint 7 — Day 4-5 (EPIC-ALERTS)"
-              />
-            }
-          />
-          <Route
-            path="/alerts/:id"
-            element={
-              <PlaceholderPage
-                titleKey="nav.alerts"
-                dayLabel="Sprint 7 — Day 4-5 (Alert Detail)"
-              />
-            }
-          />
+          <Route path="/alerts" element={<AlertsListPage />} />
+          <Route path="/alerts/:id" element={<AlertDetailPage />} />
 
           {/* Day 6-7: EPIC-AGENTS */}
           <Route

@@ -125,7 +125,65 @@
     }
   },
   "alerts": {
-    "acknowledge": "Acknowledge"
+    "acknowledge": "Acknowledge",
+    "backToList": "Back to alerts",
+    "notFound": "Alert not found",
+    "id": "Alert",
+    "copyId": "Copy ID",
+    "detectedAt": "Detected",
+    "agent": "Agent",
+    "module": "Module",
+    "close": "Close incident",
+    "markFalsePositive": "Mark as false positive",
+    "readOnlyNotice": "Read-only mode — no action available",
+    "whatHappened": "WHAT HAPPENED?",
+    "confidence": "Detection confidence",
+    "artifacts": "Associated artifacts",
+    "technicalDetails": "Technical details",
+    "timeline": "Timeline",
+    "statusChange": "{{from}} → {{to}}",
+    "created": "Alert created",
+    "list": {
+      "searchPlaceholder": "Search (hostname...)",
+      "allSeverities": "All severities",
+      "allStatuses": "All statuses",
+      "empty": {
+        "title": "No alerts match your filters",
+        "body": "Try widening your search or resetting filters."
+      },
+      "col": {
+        "id": "ID",
+        "score": "Score",
+        "detected": "Detected",
+        "severity": "Severity",
+        "status": "Status",
+        "agent": "Host",
+        "module": "Module",
+        "actions": "Actions"
+      }
+    },
+    "ackModal": {
+      "title": "Acknowledge this alert?",
+      "description": "You will assign this alert to yourself.",
+      "noteLabel": "Note (optional, 0-500 characters)",
+      "notePlaceholder": "Investigation in progress..."
+    },
+    "closeModal": {
+      "title": "Close incident",
+      "categoryLabel": "Resolution category",
+      "categoryPlaceholder": "Select...",
+      "category": {
+        "fp": "False positive",
+        "tpContained": "True positive — Contained",
+        "tpEscalated": "True positive — Escalated",
+        "inconclusive": "Inconclusive"
+      },
+      "notesLabel": "Resolution notes",
+      "notesHint": "20-2000 characters",
+      "notesPlaceholder": "Detail of the investigation and actions taken...",
+      "minChars": "{{count}} characters minimum",
+      "submit": "Close incident"
+    }
   },
   "agents": {
     "hostname": "Host",
@@ -152,7 +210,8 @@
     "all": "All",
     "viewAll": "View all →",
     "view": "View →",
-    "access": "Access →"
+    "access": "Access →",
+    "copied": "Copied!"
   },
   "errors": {
     "notFound": {
