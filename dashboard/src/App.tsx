@@ -1,3 +1,9 @@
+// ============================================================
+// src/App.tsx  — REMPLACEMENT COMPLET
+// Boot sequence: refresh → /me → role routing (AC1.3.4)
+// Routes: auth + protected (avec placeholders Day 4-8)
+// ============================================================
+
 import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/auth.store';
@@ -10,21 +16,15 @@ import { NotFoundPage } from '@/pages/not-found-page';
 import { PlaceholderPage } from '@/pages/placeholder-page';
 
 /**
- * App — root component. Router + boot sequence.
+ * Boot sequence (AC1.3.4):
+ * 1. App mounts → attempt POST /auth/refresh (HttpOnly cookie)
+ * 2a. Success → setAccessToken → isInitializing=false
+ *     → ProtectedRoute renders → calls useMe() → role-based routing
+ * 2b. Failure → isInitializing=false (no token)
+ *     → ProtectedRoute → Navigate to /auth/login
  *
- * Boot sequence (per ADR-FE-009): on mount, attempt a silent token
- * refresh via the HttpOnly refresh cookie (POST /auth/refresh,
- * withCredentials). This runs ONCE before any protected route renders:
- * - Success: in-memory access token is populated -> protected routes
- *   render normally (ProtectedRoute sees accessToken !== null).
- * - Failure (401 — no valid refresh cookie, e.g. first visit or
- *   expired session): isInitializing becomes false with accessToken
- *   still null -> ProtectedRoute redirects to /auth/login.
- *
- * This effect runs exactly once (empty dependency array) — it is NOT
- * the same refresh-on-401 logic in api/client.ts's response
- * interceptor (that handles mid-session token expiry during normal
- * use; this handles the initial page-load state).
+ * This runs ONCE on mount. Mid-session 401 refresh is handled by
+ * the Axios interceptor in src/api/client.ts (AC1.3.1-2 + AC1.3.5).
  */
 export function App() {
   const setAccessToken = useAuthStore((s) => s.setAccessToken);
@@ -36,63 +36,110 @@ export function App() {
     async function bootRefresh() {
       try {
         const { access_token } = await refresh();
-        if (!cancelled) {
-          setAccessToken(access_token);
-        }
+        if (!cancelled) setAccessToken(access_token);
       } catch {
-        // No valid refresh cookie — expected on first visit / logged out.
-        // accessToken remains null; ProtectedRoute will redirect to login.
+        // No valid refresh cookie — expected on first visit.
+        // accessToken stays null → ProtectedRoute redirects to login.
       } finally {
-        if (!cancelled) {
-          setInitializing(false);
-        }
+        if (!cancelled) setInitializing(false);
       }
     }
 
     void bootRefresh();
-
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [setAccessToken, setInitializing]);
 
   return (
     <BrowserRouter>
       <Routes>
-        {/* Public routes */}
+        {/* ── Public ── */}
         <Route element={<AuthLayout />}>
           <Route path="/auth/login" element={<LoginPage />} />
         </Route>
 
-        {/* Protected routes — AppShellLayout + RBAC via ProtectedRoute */}
+        {/* ── Protected (AppShell + RBAC + idle timeout) ── */}
         <Route element={<ProtectedRoute />}>
+          {/* Day 2-3: done */}
           <Route path="/dashboard" element={<DashboardPage />} />
+
+          {/* Day 4-5: EPIC-ALERTS */}
           <Route
             path="/alerts"
-            element={<PlaceholderPage titleKey="nav.alerts" dayLabel="Sprint 7 — Day 4-5 (EPIC-ALERTS)" />}
+            element={
+              <PlaceholderPage
+                titleKey="nav.alerts"
+                dayLabel="Sprint 7 — Day 4-5 (EPIC-ALERTS)"
+              />
+            }
           />
+          <Route
+            path="/alerts/:id"
+            element={
+              <PlaceholderPage
+                titleKey="nav.alerts"
+                dayLabel="Sprint 7 — Day 4-5 (Alert Detail)"
+              />
+            }
+          />
+
+          {/* Day 6-7: EPIC-AGENTS */}
           <Route
             path="/agents"
-            element={<PlaceholderPage titleKey="nav.agents" dayLabel="Sprint 7 — Day 6-7 (EPIC-AGENTS)" />}
+            element={
+              <PlaceholderPage
+                titleKey="nav.agents"
+                dayLabel="Sprint 7 — Day 6-7 (EPIC-AGENTS)"
+              />
+            }
           />
+          <Route
+            path="/agents/:id"
+            element={
+              <PlaceholderPage
+                titleKey="nav.agents"
+                dayLabel="Sprint 7 — Day 6-7 (Agent Detail)"
+              />
+            }
+          />
+
+          {/* Day 6-7: EPIC-USERS */}
           <Route
             path="/users"
-            element={<PlaceholderPage titleKey="nav.users" dayLabel="Sprint 7 — Day 6-7 (EPIC-USERS)" />}
+            element={
+              <PlaceholderPage
+                titleKey="nav.users"
+                dayLabel="Sprint 7 — Day 6-7 (EPIC-USERS)"
+              />
+            }
           />
+
+          {/* Day 8: EPIC-AUDIT */}
           <Route
             path="/audit"
-            element={<PlaceholderPage titleKey="nav.audit" dayLabel="Sprint 7 — Day 8 (EPIC-AUDIT)" />}
+            element={
+              <PlaceholderPage
+                titleKey="nav.audit"
+                dayLabel="Sprint 7 — Day 8 (EPIC-AUDIT)"
+              />
+            }
           />
+
+          {/* Settings: deferred */}
           <Route
             path="/settings"
-            element={<PlaceholderPage titleKey="nav.settings" dayLabel="Reporté (hors périmètre Sprint 7)" />}
+            element={
+              <PlaceholderPage
+                titleKey="nav.settings"
+                dayLabel="Hors périmètre Sprint 7"
+              />
+            }
           />
         </Route>
 
-        {/* Root redirect */}
+        {/* ── Root redirect ── */}
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
 
-        {/* 404 */}
+        {/* ── 404 ── */}
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </BrowserRouter>

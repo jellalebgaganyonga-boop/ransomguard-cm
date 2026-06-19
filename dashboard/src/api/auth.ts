@@ -52,8 +52,9 @@ export async function refresh(): Promise<LoginResponse> {
 }
 
 /**
- * POST /auth/logout — Day 2-3. Revokes the refresh cookie server-side.
+ * POST /auth/logout — Revokes the refresh cookie server-side.
+ * logoutAll=true invalidates all sessions for the user (AC1.2.2).
  */
-export async function logout(): Promise<void> {
-  await apiClient.post('/auth/logout');
+export async function logout(logoutAll = false): Promise<void> {
+  await apiClient.post('/auth/logout', { logout_all: logoutAll });
 }

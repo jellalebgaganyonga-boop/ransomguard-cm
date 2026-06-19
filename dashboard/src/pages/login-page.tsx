@@ -1,27 +1,32 @@
+// ============================================================
+// src/pages/login-page.tsx  — REMPLACEMENT COMPLET
+// US1.1 AC1.1.1-6 — Login wirée backend
+// US1.3 AC1.3.4 — app boot sequence déjà dans App.tsx
+//
+// AC1.1.1: valid credentials → access_token in memory + redirect
+// AC1.1.2: 401 → inline generic error (no enumeration)
+// AC1.1.3: disabled account → same 401 message
+// AC1.1.4: client-side validation (Zod) before any API call
+// AC1.1.5: bilingual FR/EN
+// AC1.1.6: login → /me fetch → role-based redirect
+// ============================================================
+
 import { useState, type KeyboardEvent } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useTranslation } from 'react-i18next';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { isAxiosError } from 'axios';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
+import { useLogin } from '@/hooks/use-auth';
 
-/**
- * LoginPage — per Low-Fi Wireframe 1 (Design Phase Day 7-8 §4).
- *
- * Day 1 scope: form structure, client-side validation (Zod via
- * ADR-FE-005), password visibility toggle, Caps Lock detection.
- *
- * Day 2-3 EPIC-AUTH wires onSubmit to the `login` mutation (api/auth.ts),
- * maps 401 -> auth.login.errors.invalidCredentials (shake animation),
- * 5xx -> serverError toast, network errors -> networkError toast, and
- * navigates to the role-based dashboard on success.
- */
+// ── Zod schema (AC1.1.4 — client-side validation) ─────────
 
-function buildLoginSchema(t: (key: string) => string) {
+function buildLoginSchema(t: (k: string) => string) {
   return z.object({
     email: z
       .string()
@@ -34,10 +39,15 @@ function buildLoginSchema(t: (key: string) => string) {
 
 type LoginFormValues = z.infer<ReturnType<typeof buildLoginSchema>>;
 
+// ── Component ──────────────────────────────────────────────
+
 export function LoginPage() {
   const { t } = useTranslation();
   const [showPassword, setShowPassword] = useState(false);
-  const [capsLockOn, setCapsLockOn] = useState(false);
+  const [capsLock, setCapsLock] = useState(false);
+  const [serverError, setServerError] = useState<string | null>(null);
+
+  const loginMutation = useLogin();
 
   const schema = buildLoginSchema(t);
   const {
@@ -50,25 +60,44 @@ export function LoginPage() {
     defaultValues: { email: '', password: '', rememberMe: false },
   });
 
-  const onSubmit = (_values: LoginFormValues) => {
-    // TODO(Day 2-3 EPIC-AUTH): wire to useMutation(login), handle
-    // 401/5xx/network errors, set access token, navigate to dashboard.
-    // Intentionally left as a no-op stub for Day 1 bootstrap so the
-    // form's validation behavior can be reviewed/tested in isolation.
+  const onSubmit = async (values: LoginFormValues) => {
+    setServerError(null);
+    try {
+      await loginMutation.mutateAsync({
+        email: values.email,
+        password: values.password,
+      });
+      // AC1.1.1 + AC1.1.6: on success, useLogin redirects automatically
+    } catch (err) {
+      // AC1.1.2: 401 or any error → same generic message (no enumeration)
+      if (isAxiosError(err) && err.response?.status === 401) {
+        setServerError(t('auth.login.errors.invalidCredentials'));
+      } else if (isAxiosError(err) && !err.response) {
+        setServerError(t('auth.login.errors.networkError'));
+      } else {
+        setServerError(t('auth.login.errors.serverError'));
+      }
+    }
   };
 
-  const handlePasswordKeyEvent = (e: KeyboardEvent<HTMLInputElement>) => {
+  const handlePasswordKey = (e: KeyboardEvent<HTMLInputElement>) => {
     if (typeof e.getModifierState === 'function') {
-      setCapsLockOn(e.getModifierState('CapsLock'));
+      setCapsLock(e.getModifierState('CapsLock'));
     }
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4" noValidate>
+    <form
+      onSubmit={handleSubmit(onSubmit)}
+      className="flex flex-col gap-4"
+      noValidate
+      aria-label={t('auth.login.title')}
+    >
       <h1 className="text-center text-xl font-semibold text-text-primary">
         {t('auth.login.title')}
       </h1>
 
+      {/* ── Email field ── */}
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="email">{t('auth.login.email')}</Label>
         <Input
@@ -86,6 +115,7 @@ export function LoginPage() {
         )}
       </div>
 
+      {/* ── Password field ── */}
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="password">{t('auth.login.password')}</Label>
         <div className="relative">
@@ -95,18 +125,20 @@ export function LoginPage() {
             autoComplete="current-password"
             hasError={!!errors.password}
             aria-describedby={errors.password ? 'password-error' : undefined}
-            onKeyUp={handlePasswordKeyEvent}
-            onKeyDown={handlePasswordKeyEvent}
+            onKeyUp={handlePasswordKey}
+            onKeyDown={handlePasswordKey}
             className="pr-10"
             {...register('password')}
           />
           <button
             type="button"
             onClick={() => setShowPassword((v) => !v)}
-            className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-text-tertiary hover:text-text-primary"
             aria-label={
-              showPassword ? t('auth.login.hidePassword') : t('auth.login.showPassword')
+              showPassword
+                ? t('auth.login.hidePassword')
+                : t('auth.login.showPassword')
             }
+            className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-text-tertiary hover:text-text-primary"
             tabIndex={-1}
           >
             {showPassword ? (
@@ -121,13 +153,16 @@ export function LoginPage() {
             {errors.password.message}
           </p>
         )}
-        {capsLockOn && (
+        {/* Caps Lock warning */}
+        {capsLock && (
           <p className="flex items-center gap-1 text-xs text-warning" role="status">
-            ⚠ Verr. Maj activé
+            <AlertCircle className="size-3" aria-hidden="true" />
+            {t('auth.login.capsLockWarning', 'Verrouillage majuscules activé')}
           </p>
         )}
       </div>
 
+      {/* ── Remember me ── */}
       <div className="flex items-center gap-2">
         <Controller
           name="rememberMe"
@@ -145,7 +180,25 @@ export function LoginPage() {
         </Label>
       </div>
 
-      <Button type="submit" size="lg" isLoading={isSubmitting} className="w-full">
+      {/* ── Server error (AC1.1.2 — generic, no enumeration) ── */}
+      {serverError && (
+        <div
+          className="flex items-center gap-2 rounded-md border border-error-border bg-error-subtle px-3 py-2"
+          role="alert"
+          aria-live="polite"
+        >
+          <AlertCircle className="size-4 shrink-0 text-error" aria-hidden="true" />
+          <span className="text-sm text-error">{serverError}</span>
+        </div>
+      )}
+
+      {/* ── Submit ── */}
+      <Button
+        type="submit"
+        size="lg"
+        isLoading={isSubmitting || loginMutation.isPending}
+        className="w-full"
+      >
         {t('auth.login.submit')}
       </Button>
     </form>

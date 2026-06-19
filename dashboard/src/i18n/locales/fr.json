@@ -26,6 +26,7 @@
       "submit": "Se connecter",
       "showPassword": "Afficher le mot de passe",
       "hidePassword": "Masquer le mot de passe",
+      "capsLockWarning": "Verrouillage majuscules activé",
       "errors": {
         "invalidCredentials": "Email ou mot de passe incorrect",
         "serverError": "Erreur serveur, veuillez réessayer",
@@ -34,6 +35,11 @@
         "emailInvalid": "Format d'email invalide",
         "passwordRequired": "Le mot de passe est requis"
       }
+    },
+    "sessionExpired": {
+      "title": "Votre session a expiré",
+      "body": "Vous avez été déconnecté après 30 minutes d'inactivité.",
+      "cta": "Se reconnecter"
     }
   },
   "severity": {
@@ -54,6 +60,79 @@
     "offline": "Hors ligne",
     "stale": "Obsolète"
   },
+  "dashboard": {
+    "exec": {
+      "title": "Tableau de bord exécutif",
+      "subtitle": "Vue d'ensemble de la sécurité de l'hôpital",
+      "criticalStatus": "{{count}} incidents critiques requièrent votre attention",
+      "highStatus": "{{count}} alertes à examiner",
+      "allNormal": "Tous les systèmes normaux",
+      "viewDetails": "Voir les détails →",
+      "recentAlerts": "ALERTES RÉCENTES",
+      "noAlerts": "Aucune alerte récente",
+      "quickActions": "Actions rapides",
+      "manageUsers": "Gérer les utilisateurs",
+      "viewAudit": "Consulter les journaux d'audit",
+      "report": "Rapport trimestriel (Sprint 8)",
+      "compliance": "Conformité réglementaire",
+      "anticLaw": "Loi 2024/017 :",
+      "nextAudit": "Prochain audit ANTIC : 15 septembre 2026",
+      "downloadReport": "Télécharger le rapport (Sprint 8)",
+      "kpi": {
+        "agents": "Postes protégés",
+        "alerts24h": "Alertes 24h",
+        "critical24h": "Critiques 24h",
+        "daysSince": "Jours sans incident critique",
+        "offline": "hors ligne",
+        "todayReset": "Reset aujourd'hui"
+      }
+    },
+    "ops": {
+      "title": "Console opérationnelle",
+      "commandHint": "pour la palette de commandes",
+      "staleWarning": "{{count}} agents n'ont pas envoyé de heartbeat depuis plus d'1 heure",
+      "agents": {
+        "title": "AGENTS",
+        "active": "actifs",
+        "stale": "obsolètes",
+        "offline": "hors ligne"
+      },
+      "feed": {
+        "title": "FLUX D'ALERTES",
+        "refresh": "Toutes les 15s",
+        "lastHour": "Dernière heure"
+      }
+    },
+    "readonly": {
+      "title": "Vue de conformité",
+      "subtitle": "Accès en lecture seule",
+      "compliance": "CONFORMITÉ ACTUELLE : 98%",
+      "law": "Loi 2024/017 : Conforme",
+      "nextAudit": "Prochain audit ANTIC : 15 septembre 2026",
+      "auditBtn": "Consulter les journaux d'audit",
+      "auditSub": "Recherche, filtres par date, exportation CSV",
+      "alertsBtn": "Consulter les alertes",
+      "alertsSub": "Lecture seule des alertes de sécurité",
+      "reportBtn": "Rapport de conformité trimestriel",
+      "soon": "Bientôt",
+      "notice": "Vous êtes connectée en mode auditeur. Aucune modification n'est possible.",
+      "kpi": {
+        "alerts24h": "Alertes dernières 24h",
+        "critical": "dont",
+        "auditEntries": "Journal derniers 7 jours",
+        "auditSub": "entrées d'audit"
+      }
+    }
+  },
+  "alerts": {
+    "acknowledge": "Prendre en charge"
+  },
+  "agents": {
+    "hostname": "Hôte",
+    "os": "OS",
+    "heartbeat": "Heartbeat",
+    "status": "État"
+  },
   "common": {
     "loading": "Chargement...",
     "error": "Une erreur est survenue",
@@ -69,7 +148,11 @@
     "previous": "Précédent",
     "next": "Suivant",
     "page": "Page {page} / {totalPages}",
-    "comingInSprint8": "Disponible à partir de Sprint 8"
+    "comingInSprint8": "Disponible à partir de Sprint 8",
+    "all": "Tous",
+    "viewAll": "Voir tout →",
+    "view": "Voir →",
+    "access": "Accéder →"
   },
   "errors": {
     "notFound": {

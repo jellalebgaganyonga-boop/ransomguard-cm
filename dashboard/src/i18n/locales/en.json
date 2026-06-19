@@ -26,6 +26,7 @@
       "submit": "Sign in",
       "showPassword": "Show password",
       "hidePassword": "Hide password",
+      "capsLockWarning": "Caps Lock is on",
       "errors": {
         "invalidCredentials": "Incorrect email or password",
         "serverError": "Server error, please try again",
@@ -34,6 +35,11 @@
         "emailInvalid": "Invalid email format",
         "passwordRequired": "Password is required"
       }
+    },
+    "sessionExpired": {
+      "title": "Your session has expired",
+      "body": "You were logged out after 30 minutes of inactivity.",
+      "cta": "Sign in again"
     }
   },
   "severity": {
@@ -54,6 +60,79 @@
     "offline": "Offline",
     "stale": "Stale"
   },
+  "dashboard": {
+    "exec": {
+      "title": "Executive dashboard",
+      "subtitle": "Hospital security overview",
+      "criticalStatus": "{{count}} critical incidents require your attention",
+      "highStatus": "{{count}} alerts to review",
+      "allNormal": "All systems normal",
+      "viewDetails": "View details →",
+      "recentAlerts": "RECENT ALERTS",
+      "noAlerts": "No recent alerts",
+      "quickActions": "Quick actions",
+      "manageUsers": "Manage users",
+      "viewAudit": "View audit logs",
+      "report": "Quarterly report (Sprint 8)",
+      "compliance": "Regulatory compliance",
+      "anticLaw": "Law 2024/017:",
+      "nextAudit": "Next ANTIC audit: September 15, 2026",
+      "downloadReport": "Download report (Sprint 8)",
+      "kpi": {
+        "agents": "Protected endpoints",
+        "alerts24h": "Alerts 24h",
+        "critical24h": "Critical 24h",
+        "daysSince": "Days since last critical",
+        "offline": "offline",
+        "todayReset": "Reset today"
+      }
+    },
+    "ops": {
+      "title": "Operational console",
+      "commandHint": "for command palette",
+      "staleWarning": "{{count}} agents have not sent a heartbeat in over 1 hour",
+      "agents": {
+        "title": "AGENTS",
+        "active": "active",
+        "stale": "stale",
+        "offline": "offline"
+      },
+      "feed": {
+        "title": "LIVE ALERT FEED",
+        "refresh": "Every 15s",
+        "lastHour": "Last hour"
+      }
+    },
+    "readonly": {
+      "title": "Compliance view",
+      "subtitle": "Read-only access",
+      "compliance": "CURRENT COMPLIANCE: 98%",
+      "law": "Law 2024/017: Compliant",
+      "nextAudit": "Next ANTIC audit: September 15, 2026",
+      "auditBtn": "View audit logs",
+      "auditSub": "Search, date filters, CSV export",
+      "alertsBtn": "View alerts",
+      "alertsSub": "Read-only security alerts",
+      "reportBtn": "Quarterly compliance report",
+      "soon": "Coming soon",
+      "notice": "You are connected in auditor mode. No modifications are possible.",
+      "kpi": {
+        "alerts24h": "Alerts last 24h",
+        "critical": "including",
+        "auditEntries": "Audit log — last 7 days",
+        "auditSub": "audit entries"
+      }
+    }
+  },
+  "alerts": {
+    "acknowledge": "Acknowledge"
+  },
+  "agents": {
+    "hostname": "Host",
+    "os": "OS",
+    "heartbeat": "Heartbeat",
+    "status": "Status"
+  },
   "common": {
     "loading": "Loading...",
     "error": "An error occurred",
@@ -69,7 +148,11 @@
     "previous": "Previous",
     "next": "Next",
     "page": "Page {page} / {totalPages}",
-    "comingInSprint8": "Available from Sprint 8"
+    "comingInSprint8": "Available from Sprint 8",
+    "all": "All",
+    "viewAll": "View all →",
+    "view": "View →",
+    "access": "Access →"
   },
   "errors": {
     "notFound": {
