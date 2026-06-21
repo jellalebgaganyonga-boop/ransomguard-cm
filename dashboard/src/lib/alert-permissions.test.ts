@@ -10,22 +10,22 @@ import { getAlertActionPermissions } from './alert-permissions';
 describe('getAlertActionPermissions', () => {
   // ── tenant_admin ──────────────────────────────────────────
 
-  it('admin + new → can acknowledge, cannot close', () => {
-    expect(getAlertActionPermissions('tenant_admin', 'new')).toEqual({
+  it('admin + New → can acknowledge, cannot close', () => {
+    expect(getAlertActionPermissions('tenant_admin', 'New')).toEqual({
       canAcknowledge: true,
       canClose: false,
     });
   });
 
-  it('admin + acknowledged → cannot acknowledge, can close', () => {
-    expect(getAlertActionPermissions('tenant_admin', 'acknowledged')).toEqual({
+  it('admin + Investigating → cannot acknowledge, can close', () => {
+    expect(getAlertActionPermissions('tenant_admin', 'Investigating')).toEqual({
       canAcknowledge: false,
       canClose: true,
     });
   });
 
-  it('admin + closed → no actions (AC3.4.3, read-only)', () => {
-    expect(getAlertActionPermissions('tenant_admin', 'closed')).toEqual({
+  it('admin + Resolved → no actions (AC3.4.3, read-only)', () => {
+    expect(getAlertActionPermissions('tenant_admin', 'Resolved')).toEqual({
       canAcknowledge: false,
       canClose: false,
     });
@@ -33,22 +33,22 @@ describe('getAlertActionPermissions', () => {
 
   // ── security_analyst ──────────────────────────────────────
 
-  it('analyst + new → can acknowledge, cannot close', () => {
-    expect(getAlertActionPermissions('security_analyst', 'new')).toEqual({
+  it('analyst + New → can acknowledge, cannot close', () => {
+    expect(getAlertActionPermissions('security_analyst', 'New')).toEqual({
       canAcknowledge: true,
       canClose: false,
     });
   });
 
-  it('analyst + acknowledged → cannot acknowledge, can close', () => {
-    expect(getAlertActionPermissions('security_analyst', 'acknowledged')).toEqual({
+  it('analyst + Investigating → cannot acknowledge, can close', () => {
+    expect(getAlertActionPermissions('security_analyst', 'Investigating')).toEqual({
       canAcknowledge: false,
       canClose: true,
     });
   });
 
-  it('analyst + closed → no actions', () => {
-    expect(getAlertActionPermissions('security_analyst', 'closed')).toEqual({
+  it('analyst + Resolved → no actions', () => {
+    expect(getAlertActionPermissions('security_analyst', 'Resolved')).toEqual({
       canAcknowledge: false,
       canClose: false,
     });
@@ -56,22 +56,22 @@ describe('getAlertActionPermissions', () => {
 
   // ── read_only_auditor (AC3.3.3 — never write, regardless of status) ──
 
-  it('auditor + new → no actions (AC3.3.3)', () => {
-    expect(getAlertActionPermissions('read_only_auditor', 'new')).toEqual({
+  it('auditor + New → no actions (AC3.3.3)', () => {
+    expect(getAlertActionPermissions('read_only_auditor', 'New')).toEqual({
       canAcknowledge: false,
       canClose: false,
     });
   });
 
-  it('auditor + acknowledged → no actions (AC3.3.3)', () => {
-    expect(getAlertActionPermissions('read_only_auditor', 'acknowledged')).toEqual({
+  it('auditor + Investigating → no actions (AC3.3.3)', () => {
+    expect(getAlertActionPermissions('read_only_auditor', 'Investigating')).toEqual({
       canAcknowledge: false,
       canClose: false,
     });
   });
 
-  it('auditor + closed → no actions', () => {
-    expect(getAlertActionPermissions('read_only_auditor', 'closed')).toEqual({
+  it('auditor + Resolved → no actions', () => {
+    expect(getAlertActionPermissions('read_only_auditor', 'Resolved')).toEqual({
       canAcknowledge: false,
       canClose: false,
     });
@@ -80,11 +80,13 @@ describe('getAlertActionPermissions', () => {
   // ── Security regression guards ────────────────────────────
 
   it('NEVER returns canAcknowledge=true for read_only_auditor regardless of status', () => {
-    const statuses: Array<'new' | 'acknowledged' | 'closed'> = [
-      'new',
-      'acknowledged',
-      'closed',
-    ];
+    const statuses = [
+      'New',
+      'Investigating',
+      'Resolved',
+      'FalsePositive',
+      'Suppressed',
+    ] as const;
     for (const status of statuses) {
       const perms = getAlertActionPermissions('read_only_auditor', status);
       expect(perms.canAcknowledge).toBe(false);
@@ -93,16 +95,18 @@ describe('getAlertActionPermissions', () => {
   });
 
   it('NEVER allows both canAcknowledge and canClose simultaneously (mutually exclusive statuses)', () => {
-    const roles: Array<'tenant_admin' | 'security_analyst' | 'read_only_auditor'> = [
+    const roles = [
       'tenant_admin',
       'security_analyst',
       'read_only_auditor',
-    ];
-    const statuses: Array<'new' | 'acknowledged' | 'closed'> = [
-      'new',
-      'acknowledged',
-      'closed',
-    ];
+    ] as const;
+    const statuses = [
+      'New',
+      'Investigating',
+      'Resolved',
+      'FalsePositive',
+      'Suppressed',
+    ] as const;
     for (const role of roles) {
       for (const status of statuses) {
         const perms = getAlertActionPermissions(role, status);

@@ -27,7 +27,6 @@
   "dotnet.defaultSolution": "agent/src/RansomGuard.Agent.sln",
   "omnisharp.enableRoslynAnalyzers": true,
   "omnisharp.enableEditorConfigSupport": true,
-  "omnisharp.organizeImportsOnFormat": true,
   "csharp.format.enable": true,
   "[csharp]": {
     "editor.defaultFormatter": "ms-dotnettools.csharp",
@@ -48,5 +47,6 @@
     "editor.tabSize": 4
   },
   "typescript.preferences.quoteStyle": "single",
-  "git.autofetch": true
+  "git.autofetch": true,
+  "dotnet.formatting.organizeImportsOnFormat": true
 }

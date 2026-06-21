@@ -31,16 +31,17 @@ export function getAlertActionPermissions(
   status: AlertStatus
 ): AlertActionPermissions {
   // AC3.3.3: read_only_auditor never gets write actions
-  // AC3.4.3: closed alerts are read-only for every role
-  if (!WRITE_ROLES.includes(role) || status === 'closed') {
+  // AC3.4.3: resolved/closed alerts are read-only for every role
+  const closedStatuses: AlertStatus[] = ['Resolved', 'FalsePositive', 'Suppressed'];
+  if (!WRITE_ROLES.includes(role) || closedStatuses.includes(status)) {
     return { canAcknowledge: false, canClose: false };
   }
 
-  // AC3.2.5 + AC3.3.2: Acknowledge only valid from "new"
-  // AC3.2.5 + AC3.4.2: Close only valid from "acknowledged"
+  // AC3.2.5 + AC3.3.2: Acknowledge only valid from "New"
+  // AC3.2.5 + AC3.4.2: Close only valid from "Investigating"
   return {
-    canAcknowledge: status === 'new',
-    canClose: status === 'acknowledged',
+    canAcknowledge: status === 'New',
+    canClose: status === 'Investigating',
   };
 }
 

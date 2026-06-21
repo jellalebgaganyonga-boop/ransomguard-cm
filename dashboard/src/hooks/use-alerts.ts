@@ -74,18 +74,19 @@ export function useUpdateAlertStatus(alertId: string) {
       const previousDetail = queryClient.getQueryData<AlertDetail>(detailKey);
 
       if (previousDetail) {
+        const currentHistory = previousDetail.status_history ?? [];
         queryClient.setQueryData<AlertDetail>(detailKey, {
           ...previousDetail,
-          status: payload.status,
+          status: payload.new_status,
           status_history: [
-            ...previousDetail.status_history,
+            ...currentHistory,
             {
               from_status: previousDetail.status,
-              to_status: payload.status,
+              to_status: payload.new_status,
               changed_at: new Date().toISOString(),
               actor_user_id: null, // filled by server on refetch
               actor_name: null,
-              note: payload.note ?? null,
+              note: payload.justification,
             },
           ],
         });

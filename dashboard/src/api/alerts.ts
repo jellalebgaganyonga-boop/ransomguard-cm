@@ -1,17 +1,14 @@
 /**
  * EPIC-ALERTS — API layer
  *
- * Endpoints (PRD v2 §8 "Endpoints consumed — real, from audit"):
- *   GET  /api/v1/dashboard/alerts                   — list with filters
- *   GET  /api/v1/dashboard/alerts/{alert_id}         — detail
- *   POST /api/v1/dashboard/alerts/{alert_id}/status  — status transition
- *
- * Status enum resolved per AC3.4.1: "False positive" is a RESOLUTION
- * CATEGORY sent inside the closing note, not a distinct backend status.
- * Backend status values used by the frontend: new, acknowledged, closed.
- * (PRD §8 technical note flags `false_positive` as a 4th enum value to
- * verify against the backend OpenAPI — if the real backend exposes it
- * as a distinct status, this is the single file to update.)
+ * Schemas match real backend OpenAPI (verified via smoke test, 2026-06-19).
+ * Key differences from PRD v2 draft assumptions:
+ *   - AlertStatus: PascalCase enum (New/Investigating/Resolved/FalsePositive/Suppressed)
+ *   - AlertSeverity: PascalCase, no "Info" variant
+ *   - Pagination: offset/limit, not page/page_size
+ *   - Status update: { new_status, justification(min=5) }, not { status, note }
+ *   - AlertItem: no agent_hostname, no priority_score, no module; has alert_type/detected_at/ingested_at
+ *   - AlertDetail: confidence_score, artifacts, status_history are optional (not yet in backend)
  */
 
 import { z } from 'zod';
@@ -19,12 +16,21 @@ import { apiClient } from './client';
 
 // ── Enums ───────────────────────────────────────────────────
 
-export const AlertSeveritySchema = z.enum(['critical', 'high', 'medium', 'low', 'info']);
+/** PascalCase — matches backend enum exactly (case-sensitive). */
+export const AlertSeveritySchema = z.enum(['Low', 'Medium', 'High', 'Critical']);
 export type AlertSeverity = z.infer<typeof AlertSeveritySchema>;
 
-export const AlertStatusSchema = z.enum(['new', 'acknowledged', 'closed']);
+/** PascalCase — matches backend AlertStatus enum exactly. */
+export const AlertStatusSchema = z.enum([
+  'New',
+  'Investigating',
+  'Resolved',
+  'FalsePositive',
+  'Suppressed',
+]);
 export type AlertStatus = z.infer<typeof AlertStatusSchema>;
 
+/** Frontend-only concept: resolution category structures the justification text in the close flow. */
 export const ResolutionCategorySchema = z.enum([
   'false_positive',
   'true_positive_contained',
@@ -33,27 +39,17 @@ export const ResolutionCategorySchema = z.enum([
 ]);
 export type ResolutionCategory = z.infer<typeof ResolutionCategorySchema>;
 
-export const DetectionModuleSchema = z.enum([
-  'SENTINEL',
-  'ENTROPY',
-  'GENEALOGY',
-  'USB_GUARD',
-  'EXFIL_WATCH',
-  'IRONCLAD',
-]);
-export type DetectionModule = z.infer<typeof DetectionModuleSchema>;
-
 // ── List item (AC3.1.1 columns) ────────────────────────────
 
 export const AlertListItemSchema = z.object({
   id: z.string(),
-  created_at: z.string().datetime(),
+  detected_at: z.string().datetime({ offset: true }),
+  ingested_at: z.string().datetime({ offset: true }),
   severity: AlertSeveritySchema,
   status: AlertStatusSchema,
-  priority_score: z.number().int().min(0).max(100),
   agent_id: z.string(),
-  agent_hostname: z.string(),
-  module: z.string(), // kept loose (z.string) — backend may add modules beyond DetectionModuleSchema
+  alert_type: z.string(),
+  mitre_technique_id: z.string().nullable(),
   summary: z.string(),
 });
 export type AlertListItem = z.infer<typeof AlertListItemSchema>;
@@ -61,44 +57,55 @@ export type AlertListItem = z.infer<typeof AlertListItemSchema>;
 export const AlertListResponseSchema = z.object({
   items: z.array(AlertListItemSchema),
   total: z.number().int().nonnegative(),
-  page: z.number().int().positive(),
-  page_size: z.number().int().positive(),
+  offset: z.number().int().nonnegative(),
+  limit: z.number().int().positive(),
 });
 export type AlertListResponse = z.infer<typeof AlertListResponseSchema>;
 
 // ── List params (AC3.1.2 filters, URL-shareable) ───────────
 
 export interface AlertListParams {
-  page?: number;
-  page_size?: number;
+  offset?: number;
+  limit?: number;
   date_from?: string; // ISO date
   date_to?: string;
   severity?: AlertSeverity;
   status?: AlertStatus;
-  agent?: string; // hostname text search
-  module?: string;
-  sort_by?: 'created_at' | 'severity' | 'status';
+  agent?: string; // agent_id or hostname text search
+  sort_by?: 'detected_at' | 'severity' | 'status';
   sort_dir?: 'asc' | 'desc';
 }
 
 export async function fetchAlertList(params: AlertListParams = {}): Promise<AlertListResponse> {
-  const res = await apiClient.get('/dashboard/alerts', { params });
+  // Map frontend param names to actual backend param names.
+  // Backend: detected_after/detected_before (not date_from/date_to)
+  // Backend: agent_id (not agent)
+  // Backend does NOT support sort_by/sort_dir — always sorts detected_at desc.
+  const { date_from, date_to, agent, sort_by: _sb, sort_dir: _sd, ...rest } = params;
+  const backendParams: Record<string, unknown> = { ...rest };
+  if (date_from)  backendParams['detected_after']  = date_from;
+  if (date_to)    backendParams['detected_before'] = date_to;
+  if (agent)      backendParams['agent_id']        = agent;
+
+  const res = await apiClient.get('/dashboard/alerts', { params: backendParams });
   return AlertListResponseSchema.parse(res.data);
 }
 
 // ── Detail (AC3.2.1-4) ─────────────────────────────────────
+// Fields not yet implemented in backend are optional so the schema
+// validates real responses without hard-crashing.
 
 export const AlertArtifactSchema = z.object({
-  type: z.string(), // "file_path" | "process_name" | "network_destination" — kept loose, backend-defined
+  type: z.string(),
   value: z.string(),
 });
 export type AlertArtifact = z.infer<typeof AlertArtifactSchema>;
 
 export const AlertStatusChangeSchema = z.object({
-  from_status: AlertStatusSchema.nullable(), // null for the initial creation entry
+  from_status: AlertStatusSchema.nullable(),
   to_status: AlertStatusSchema,
-  changed_at: z.string().datetime(),
-  actor_user_id: z.string().nullable(), // null for system-generated (e.g., initial "new")
+  changed_at: z.string().datetime({ offset: true }),
+  actor_user_id: z.string().nullable(),
   actor_name: z.string().nullable(),
   note: z.string().nullable(),
 });
@@ -106,19 +113,19 @@ export type AlertStatusChange = z.infer<typeof AlertStatusChangeSchema>;
 
 export const AlertDetailSchema = z.object({
   id: z.string(),
-  created_at: z.string().datetime(),
+  detected_at: z.string().datetime({ offset: true }),
+  ingested_at: z.string().datetime({ offset: true }),
   severity: AlertSeveritySchema,
   status: AlertStatusSchema,
-  priority_score: z.number().int().min(0).max(100),
-  confidence_score: z.number().min(0).max(100).nullable(),
   agent_id: z.string(),
-  agent_hostname: z.string(),
-  module: z.string(),
+  alert_type: z.string(),
+  mitre_technique_id: z.string().nullable(),
   summary: z.string(),
-  raw_payload: z.record(z.string(), z.unknown()).nullable(),
-  artifacts: z.array(AlertArtifactSchema),
-  status_history: z.array(AlertStatusChangeSchema),
-  tenant_id: z.string(),
+  // Optional fields — not yet exposed by backend:
+  confidence_score: z.number().min(0).max(100).nullable().optional(),
+  raw_payload: z.record(z.string(), z.unknown()).nullable().optional(),
+  artifacts: z.array(AlertArtifactSchema).optional(),
+  status_history: z.array(AlertStatusChangeSchema).optional(),
 });
 export type AlertDetail = z.infer<typeof AlertDetailSchema>;
 
@@ -130,8 +137,9 @@ export async function fetchAlertDetail(alertId: string): Promise<AlertDetail> {
 // ── Status transition (AC3.3.1, AC3.4.1) ───────────────────
 
 export interface UpdateAlertStatusPayload {
-  status: 'acknowledged' | 'closed';
-  note?: string;
+  new_status: AlertStatus;
+  /** Minimum 5 characters (backend enforces). */
+  justification: string;
 }
 
 export async function updateAlertStatus(
@@ -143,8 +151,8 @@ export async function updateAlertStatus(
 }
 
 /**
- * AC3.4.1: closing note format is "<category>: <notes>".
- * Centralized here so the format is defined exactly once.
+ * AC3.4.1: formats the justification string sent to the backend on close.
+ * Format: "<category>: <notes>"
  */
 export function formatClosingNote(category: ResolutionCategory, notes: string): string {
   const categoryLabels: Record<ResolutionCategory, string> = {

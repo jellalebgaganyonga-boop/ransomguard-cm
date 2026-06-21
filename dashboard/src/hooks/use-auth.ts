@@ -27,11 +27,15 @@ export function useLogin() {
   const setInitializing = useAuthStore((s) => s.setInitializing);
   const queryClient = useQueryClient();
 
+  const setRefreshToken = useAuthStore((s) => s.setRefreshToken);
+
   return useMutation({
     mutationFn: async (payload: LoginRequest) => {
-      // AC1.1.1: POST /auth/login → access_token in memory
-      const { access_token } = await apiLogin(payload);
+      // AC1.1.1: POST /auth/login → tokens in memory
+      const { access_token, refresh_token } = await apiLogin(payload);
       setAccessToken(access_token);
+      // See auth.store.ts SECURITY COMPROMISE note
+      setRefreshToken(refresh_token);
 
       // AC1.1.6: immediately fetch /me after storing token
       const me = await fetchMe();
@@ -53,6 +57,7 @@ export function useLogin() {
     onError: () => {
       // AC1.1.2: clear any partial state on failure
       useAuthStore.getState().clearAccessToken();
+      useAuthStore.getState().clearRefreshToken();
     },
   });
 }
@@ -62,6 +67,7 @@ export function useLogin() {
 export function useLogout() {
   const navigate = useNavigate();
   const clearAccessToken = useAuthStore((s) => s.clearAccessToken);
+  const clearRefreshToken = useAuthStore((s) => s.clearRefreshToken);
   const queryClient = useQueryClient();
 
   return useMutation<void, Error, boolean>({
@@ -78,6 +84,7 @@ export function useLogout() {
     onSettled: () => {
       // AC1.2.1: reset in-memory state regardless of API result
       clearAccessToken();
+      clearRefreshToken();
       // Clear all cached server data (cross-tenant safety)
       queryClient.clear();
       // AC1.2.1: redirect to login

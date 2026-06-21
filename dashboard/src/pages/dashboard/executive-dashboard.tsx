@@ -2,8 +2,8 @@
 // src/pages/dashboard/executive-dashboard.tsx
 // US2.2 — tenant_admin landing
 //
-// AC2.2.1: global status card (green/orange/red per critical_24h)
-// AC2.2.2: 4 KPI cards (agents, alerts_24h, critical_24h, days-since)
+// AC2.2.1: global status card (green/orange/red per critical_alerts_24h)
+// AC2.2.2: 4 KPI cards (agents, alerts_24h, critical_alerts_24h, days-since)
 // AC2.2.3: 5 most recent alerts widget (clickable → /alerts/:id)
 // AC2.2.4: quick actions (Gérer utilisateurs, Journal audit)
 // AC2.2.5: responsive layout
@@ -15,11 +15,15 @@ import { useTranslation } from 'react-i18next';
 import { AlertCircle, Shield, AlertTriangle, Users, ScrollText, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { KPICard } from '@/components/ui/kpi-card';
-import { PriorityScore } from '@/components/ui/priority-score';
 import { SeverityBadge } from '@/components/ui/severity-badge';
-import { useMetricsSummary, useRecentAlerts, daysSinceLastCritical } from '@/hooks/use-dashboard';
+import {
+  useMetricsSummary,
+  useRecentAlerts,
+  useLastCriticalAlert,
+  daysSinceLastCritical,
+} from '@/hooks/use-dashboard';
 import { formatDistanceToNow } from '@/lib/format-date';
-import type { AlertSummary } from '@/api/dashboard';
+import type { AlertListItem } from '@/api/alerts';
 
 // ── Status card (AC2.2.1) ──────────────────────────────────
 
@@ -84,8 +88,11 @@ function StatusCard({ critical24h, alerts24h }: { critical24h: number; alerts24h
 }
 
 // ── Recent alert row (AC2.2.3) ─────────────────────────────
+// BUG-02 fix: alert_type replaces agent_hostname (doesn't exist in backend).
+// mitre_technique_id replaces module_name (doesn't exist in backend).
+// priority_score removed entirely (field doesn't exist in backend AlertItem).
 
-function AlertRow({ alert }: { alert: AlertSummary }) {
+function AlertRow({ alert }: { alert: AlertListItem }) {
   const navigate = useNavigate();
 
   return (
@@ -94,15 +101,16 @@ function AlertRow({ alert }: { alert: AlertSummary }) {
       onClick={() => navigate(`/alerts/${alert.id}`)}
       aria-label={`Voir l'alerte ${alert.id}`}
     >
-      <PriorityScore score={alert.priority_score} />
-      <SeverityBadge severity={alert.severity} />
+      <SeverityBadge severity={alert.severity.toLowerCase() as 'critical' | 'high' | 'medium' | 'low'} />
       <div className="min-w-0 flex-1">
         <span className="font-mono text-sm font-semibold text-text-primary">
-          {alert.agent_hostname}
+          {alert.alert_type}
         </span>
-        <span className="ml-2 text-xs uppercase tracking-wide text-text-tertiary">
-          {alert.module_name}
-        </span>
+        {alert.mitre_technique_id && (
+          <span className="ml-2 text-xs uppercase tracking-wide text-text-tertiary">
+            {alert.mitre_technique_id}
+          </span>
+        )}
         <p className="truncate text-sm text-text-secondary">{alert.summary}</p>
       </div>
       <span className="shrink-0 text-xs text-text-tertiary">
@@ -119,10 +127,12 @@ export function ExecutiveDashboard() {
   const navigate = useNavigate();
   const metrics = useMetricsSummary();
   const recentAlerts = useRecentAlerts();
+  // AC2.2.2: last_critical_at not in MetricsSummary — derive from alert list
+  const lastCritical = useLastCriticalAlert();
 
   const summary = metrics.data;
   const alerts = recentAlerts.data?.items ?? [];
-  const days = daysSinceLastCritical(summary?.last_critical_at ?? null);
+  const days = daysSinceLastCritical(lastCritical.data?.items[0]?.detected_at ?? null);
 
   return (
     <div>
@@ -136,7 +146,7 @@ export function ExecutiveDashboard() {
       {/* AC2.2.1: Status card */}
       {summary && (
         <StatusCard
-          critical24h={summary.critical_24h}
+          critical24h={summary.critical_alerts_24h}
           alerts24h={summary.alerts_24h}
         />
       )}
@@ -150,9 +160,6 @@ export function ExecutiveDashboard() {
               ? `${summary.active_agents} / ${summary.total_agents}`
               : '—'
           }
-          {...(summary
-            ? { description: `${summary.offline_agents} ${t('dashboard.exec.kpi.offline', 'hors ligne')}` }
-            : {})}
         />
         <KPICard
           label={t('dashboard.exec.kpi.alerts24h', 'Alertes 24h')}
@@ -160,7 +167,7 @@ export function ExecutiveDashboard() {
         />
         <KPICard
           label={t('dashboard.exec.kpi.critical24h', 'Critiques 24h')}
-          value={summary?.critical_24h ?? '—'}
+          value={summary?.critical_alerts_24h ?? '—'}
         />
         <KPICard
           label={t('dashboard.exec.kpi.daysSince', 'Jours sans incident critique')}

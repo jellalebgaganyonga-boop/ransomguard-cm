@@ -20,7 +20,7 @@ export type Role = z.infer<typeof RoleSchema>;
 export const TenantContextSchema = z.object({
   id: z.string().uuid(),
   name: z.string().min(1).max(255),
-  status: z.enum(['active', 'suspended', 'archived']),
+  status: z.enum(['active', 'suspended', 'deleted']),
 });
 
 export const UserPreferencesSchema = z.object({
@@ -40,7 +40,7 @@ export const MeResponseSchema = z.object({
   // (graceful degradation -> falls back to read-only dashboard, see
   // use-me.ts `primaryRole` resolution).
   roles: z.array(z.string()).min(1),
-  last_login_at: z.string().datetime().nullable(),
+  last_login_at: z.string().datetime({ offset: true }).nullable(),
   preferences: UserPreferencesSchema,
 });
 

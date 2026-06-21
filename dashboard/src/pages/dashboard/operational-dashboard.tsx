@@ -2,45 +2,54 @@
 // src/pages/dashboard/operational-dashboard.tsx
 // US2.3 — security_analyst landing
 //
-// AC2.3.1: agent health summary (active/offline/stale counts)
+// AC2.3.1: agent health summary (active/stale/disconnected counts)
 // AC2.3.2: live alert feed — 20 alerts, 15s polling, clickable
 // AC2.3.3: agent health table — top 10 by heartbeat
 // AC2.3.4: quick filters on alerts feed (All/Critical/Last hour)
 // AC4.4.3: stale agent warning banner (>= 1 agent offline > 60min)
+//
+// BUG-01 fix: offline_agents/stale_agents don't exist in MetricsSummary.
+//   Stale count derived from agentList via isAgentStale() (last 10 agents).
+// BUG-02 fix: AlertSummary/AgentSummary from dashboard.ts removed.
+//   Using AlertListItem from alerts.ts and AgentItem from agents.ts.
+//   agent_hostname → alert_type, module_name → alert_type, os_info → os_version.
+//   severity filter: 'critical' → 'Critical' (PascalCase, backend is case-sensitive).
+//   last_hour filter: hours param → date_from ISO datetime.
 // ============================================================
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AlertTriangle, ExternalLink } from 'lucide-react';
-import { PriorityScore } from '@/components/ui/priority-score';
 import { SeverityBadge } from '@/components/ui/severity-badge';
 import { Button } from '@/components/ui/button';
 import { useMetricsSummary, useLiveAlerts, useAgents } from '@/hooks/use-dashboard';
+import { isAgentStale } from '@/lib/agent-status';
 import { formatDistanceToNow } from '@/lib/format-date';
-import type { AlertSeverity, AgentSummary } from '@/api/dashboard';
+import type { AlertListParams } from '@/api/alerts';
+import type { AgentItem } from '@/api/agents';
 
 // ── Filter types (AC2.3.4) ─────────────────────────────────
 
 type AlertFilter = 'all' | 'critical' | 'last_hour';
 
 const AGENT_STATUS_COLOR: Record<string, string> = {
-  online: 'var(--sys-color-status-online)',
-  stale: 'var(--sys-color-status-stale)',
-  offline: 'var(--sys-color-status-offline)',
-  isolated: 'var(--sys-color-status-isolated)',
+  active: 'var(--sys-color-status-online)',
+  provisioned: 'var(--sys-color-interactive-secondary)',
+  disconnected: 'var(--sys-color-status-offline)',
+  decommissioned: 'var(--sys-color-text-disabled)',
 };
 
 // ── Agent row ──────────────────────────────────────────────
 
-function AgentRow({ agent }: { agent: AgentSummary }) {
+function AgentRow({ agent }: { agent: AgentItem }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const statusLabel: Record<string, string> = {
-    online: t('status.online', 'Actif'),
-    stale: t('status.stale', 'Obsolète'),
-    offline: t('status.offline', 'Hors ligne'),
-    isolated: t('status.isolated', 'Isolé'),
+    active: t('status.active', 'Actif'),
+    provisioned: t('status.provisioned', 'Provisionné'),
+    disconnected: t('status.disconnected', 'Déconnecté'),
+    decommissioned: t('status.decommissioned', 'Désactivé'),
   };
 
   return (
@@ -51,7 +60,7 @@ function AgentRow({ agent }: { agent: AgentSummary }) {
       <td className="px-3 py-2 font-mono text-sm font-semibold text-text-primary">
         {agent.hostname}
       </td>
-      <td className="px-3 py-2 text-sm text-text-secondary">{agent.os_info}</td>
+      <td className="px-3 py-2 text-sm text-text-secondary">{agent.os_version}</td>
       <td className="px-3 py-2 text-sm text-text-tertiary">
         {agent.last_heartbeat_at
           ? formatDistanceToNow(agent.last_heartbeat_at)
@@ -81,20 +90,28 @@ export function OperationalDashboard() {
   const agents = useAgents(10);
 
   // AC2.3.4: apply filter → pass to query
-  const alertParams = {
-    all: {},
-    critical: { severity: 'critical' as AlertSeverity },
-    last_hour: { hours: 1 },
-  }[filter];
+  // BUG-02 fix: 'critical' → 'Critical' (PascalCase, backend enum is case-sensitive)
+  // BUG-02 fix: hours param replaced by date_from ISO datetime (backend doesn't have hours param)
+  const hourAgo = useMemo(() => new Date(Date.now() - 3600000).toISOString(), []);
+  const alertParams: AlertListParams =
+    filter === 'critical'
+      ? { severity: 'Critical' }
+      : filter === 'last_hour'
+        ? { date_from: hourAgo }
+        : {};
   const liveAlerts = useLiveAlerts(alertParams);
 
   const summary = metrics.data;
   const agentList = agents.data?.items ?? [];
   const alertList = liveAlerts.data?.items ?? [];
 
-  // AC4.4.3: stale warning banner
-  const hasStaleAgents = (summary?.offline_agents ?? 0) + (summary?.stale_agents ?? 0) > 0;
-  const staleCount = (summary?.stale_agents ?? 0) + (summary?.offline_agents ?? 0);
+  // AC4.4.3: stale warning — derived from agentList (top 10), isAgentStale checks >60 min
+  // BUG-01 fix: offline_agents/stale_agents don't exist in MetricsSummary
+  const staleAgents = agentList.filter((a) => isAgentStale(a.last_heartbeat_at));
+  const hasStaleAgents = staleAgents.length > 0;
+  const staleCount = staleAgents.length;
+  // total_agents - active_agents gives the "not active" count (disconnected + decommissioned + provisioned)
+  const inactiveCount = (summary?.total_agents ?? 0) - (summary?.active_agents ?? 0);
 
   return (
     <div>
@@ -127,12 +144,12 @@ export function OperationalDashboard() {
             color: 'var(--sys-color-status-online)',
           },
           {
-            n: summary?.stale_agents ?? 0,
+            n: staleCount,
             label: t('dashboard.ops.agents.stale', 'obsolètes'),
             color: 'var(--sys-color-status-stale)',
           },
           {
-            n: summary?.offline_agents ?? 0,
+            n: inactiveCount,
             label: t('dashboard.ops.agents.offline', 'hors ligne'),
             color: 'var(--sys-color-status-offline)',
           },
@@ -196,6 +213,7 @@ export function OperationalDashboard() {
         </div>
 
         {/* Alert rows */}
+        {/* BUG-02 fix: alert_type replaces agent_hostname/module_name (don't exist in AlertListItem) */}
         <div>
           {alertList.length === 0 ? (
             <p className="py-6 text-center text-sm text-text-tertiary">
@@ -212,15 +230,16 @@ export function OperationalDashboard() {
                 }}
                 onClick={() => navigate(`/alerts/${alert.id}`)}
               >
-                <PriorityScore score={alert.priority_score} />
-                <SeverityBadge severity={alert.severity} />
+                <SeverityBadge severity={alert.severity.toLowerCase() as 'critical' | 'high' | 'medium' | 'low'} />
                 <div className="min-w-0 flex-1">
                   <span className="font-mono text-sm font-semibold text-text-primary">
-                    {alert.agent_hostname}
+                    {alert.alert_type}
                   </span>
-                  <span className="ml-2 text-xs uppercase tracking-wide text-text-tertiary">
-                    {alert.module_name}
-                  </span>
+                  {alert.mitre_technique_id && (
+                    <span className="ml-2 text-xs uppercase tracking-wide text-text-tertiary">
+                      {alert.mitre_technique_id}
+                    </span>
+                  )}
                   <p className="truncate text-sm text-text-secondary">{alert.summary}</p>
                 </div>
                 <span className="shrink-0 text-xs text-text-tertiary">

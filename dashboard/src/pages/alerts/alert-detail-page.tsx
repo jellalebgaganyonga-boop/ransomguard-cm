@@ -17,7 +17,6 @@ import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Copy, ChevronLeft, ChevronDown, ChevronUp, FileQuestion } from 'lucide-react';
-import { PriorityScore } from '@/components/ui/priority-score';
 import { SeverityBadge } from '@/components/ui/severity-badge';
 import { Button } from '@/components/ui/button';
 import { useAlertDetail } from '@/hooks/use-alerts';
@@ -102,13 +101,12 @@ export function AlertDetailPage() {
       </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <PriorityScore score={alert.priority_score} />
-        <SeverityBadge severity={alert.severity} />
+        <SeverityBadge severity={alert.severity.toLowerCase() as 'critical' | 'high' | 'medium' | 'low'} />
         <span className="rounded bg-surface-subtle px-2 py-0.5 text-xs font-semibold uppercase text-text-secondary">
-          {t(`status.${alert.status}`, alert.status)}
+          {t(`status.${alert.status.toLowerCase()}`, alert.status)}
         </span>
         <span className="ml-auto text-xs text-text-tertiary">
-          {t('alerts.detectedAt', 'Détecté')} {formatDistanceToNow(alert.created_at)}
+          {t('alerts.detectedAt', 'Détecté')} {formatDistanceToNow(alert.detected_at)}
         </span>
       </div>
 
@@ -122,15 +120,15 @@ export function AlertDetailPage() {
               to={`/agents/${alert.agent_id}`}
               className="font-mono font-semibold text-primary hover:underline"
             >
-              {alert.agent_hostname}
+              {alert.agent_id}
             </Link>
           </p>
         </div>
         <div>
           <span className="text-[10px] font-semibold uppercase text-text-tertiary">
-            {t('alerts.module', 'Module')}
+            {t('alerts.module', 'Type')}
           </span>
-          <p className="mt-0.5 font-semibold text-text-primary">{alert.module}</p>
+          <p className="mt-0.5 font-semibold text-text-primary">{alert.alert_type}</p>
         </div>
       </div>
 
@@ -178,7 +176,7 @@ export function AlertDetailPage() {
       )}
 
       {/* AC3.3.3 / role read_only_auditor — explicit notice */}
-      {!perms.canAcknowledge && !perms.canClose && alert.status !== 'closed' && (
+      {!perms.canAcknowledge && !perms.canClose && alert.status !== 'Resolved' && alert.status !== 'FalsePositive' && alert.status !== 'Suppressed' && (
         <div className="mb-6 flex items-center gap-2 rounded-lg bg-primary-subtle p-3 text-sm text-text-secondary">
           {t('alerts.readOnlyNotice', 'Mode lecture seule — aucune action disponible')}
         </div>
@@ -191,7 +189,7 @@ export function AlertDetailPage() {
         </h2>
         <p className="mb-4 max-w-2xl leading-relaxed text-text-primary">{alert.summary}</p>
 
-        {alert.confidence_score !== null && (
+        {alert.confidence_score != null && (
           <div className="mb-6 flex items-center gap-3">
             <span className="text-xs text-text-tertiary">
               {t('alerts.confidence', 'Confiance de détection')}: {alert.confidence_score}%
@@ -206,13 +204,13 @@ export function AlertDetailPage() {
         )}
 
         {/* AC3.2.3: Artifacts */}
-        {alert.artifacts.length > 0 && (
+        {(alert.artifacts?.length ?? 0) > 0 && (
           <div className="mb-6 border-t border-border-subtle pt-5">
             <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-secondary">
               {t('alerts.artifacts', 'Artefacts associés')}
             </h3>
             <ul className="space-y-1">
-              {alert.artifacts.map((a, i) => (
+              {(alert.artifacts ?? []).map((a, i) => (
                 <li key={i} className="font-mono text-xs text-text-secondary">
                   <span className="text-text-tertiary">{a.type}:</span> {a.value}
                 </li>
@@ -240,21 +238,22 @@ export function AlertDetailPage() {
         )}
       </div>
 
-      {/* AC3.2.4: Status change timeline */}
+      {/* AC3.2.4: Status change timeline (optional — not yet in backend) */}
+      {(alert.status_history?.length ?? 0) > 0 && (
       <div className="mt-6 rounded-lg border border-border-subtle bg-elevated p-6 shadow-sm">
         <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-text-primary">
           {t('alerts.timeline', 'Chronologie')}
         </h2>
         <ol className="space-y-4">
-          {alert.status_history.map((change, i) => (
+          {(alert.status_history ?? []).map((change, i) => (
             <li key={i} className="flex gap-3 text-sm">
               <span className="mt-0.5 size-2 shrink-0 rounded-full bg-primary" />
               <div>
                 <p className="text-text-primary">
                   {change.from_status
                     ? t('alerts.statusChange', {
-                        from: t(`status.${change.from_status}`),
-                        to: t(`status.${change.to_status}`),
+                        from: t(`status.${change.from_status.toLowerCase()}`, change.from_status),
+                        to: t(`status.${change.to_status.toLowerCase()}`, change.to_status),
                         defaultValue: `${change.from_status} → ${change.to_status}`,
                       })
                     : t('alerts.created', 'Alerte créée')}
@@ -273,6 +272,7 @@ export function AlertDetailPage() {
           ))}
         </ol>
       </div>
+      )}
 
       {/* Modals */}
       <AcknowledgeModal

@@ -6,7 +6,7 @@
 
 import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { useAuthStore } from '@/stores/auth.store';
+import { useAuthStore, getRefreshToken } from '@/stores/auth.store';
 import { refresh } from '@/api/auth';
 import { AuthLayout } from '@/components/layout/auth-layout';
 import { ProtectedRoute } from '@/components/layout/protected-route';
@@ -16,6 +16,10 @@ import { NotFoundPage } from '@/pages/not-found-page';
 import { PlaceholderPage } from '@/pages/placeholder-page';
 import { AlertsListPage } from '@/pages/alerts/alerts-list-page';
 import { AlertDetailPage } from '@/pages/alerts/alert-detail-page';
+import { AgentsListPage } from '@/pages/agents/agents-list-page';
+import { AgentDetailPage } from '@/pages/agents/agent-detail-page';
+import { UsersListPage } from '@/pages/users/users-list-page';
+import { AuditLogPage } from '@/pages/audit/audit-log-page';
 
 /**
  * Boot sequence (AC1.3.4):
@@ -30,17 +34,29 @@ import { AlertDetailPage } from '@/pages/alerts/alert-detail-page';
  */
 export function App() {
   const setAccessToken = useAuthStore((s) => s.setAccessToken);
+  const setRefreshToken = useAuthStore((s) => s.setRefreshToken);
   const setInitializing = useAuthStore((s) => s.setInitializing);
 
   useEffect(() => {
     let cancelled = false;
 
     async function bootRefresh() {
+      // SECURITY COMPROMISE (see auth.store.ts): refresh token is in-memory only,
+      // so it is lost on page reload. If there is no token in the store, skip the
+      // refresh attempt and require re-authentication.
+      const storedRefreshToken = getRefreshToken();
+      if (!storedRefreshToken) {
+        if (!cancelled) setInitializing(false);
+        return;
+      }
       try {
-        const { access_token } = await refresh();
-        if (!cancelled) setAccessToken(access_token);
+        const { access_token, refresh_token } = await refresh(storedRefreshToken);
+        if (!cancelled) {
+          setAccessToken(access_token);
+          setRefreshToken(refresh_token);
+        }
       } catch {
-        // No valid refresh cookie — expected on first visit.
+        // Refresh token expired or invalid — user must re-authenticate.
         // accessToken stays null → ProtectedRoute redirects to login.
       } finally {
         if (!cancelled) setInitializing(false);
@@ -49,7 +65,7 @@ export function App() {
 
     void bootRefresh();
     return () => { cancelled = true; };
-  }, [setAccessToken, setInitializing]);
+  }, [setAccessToken, setRefreshToken, setInitializing]);
 
   return (
     <BrowserRouter>
@@ -69,46 +85,14 @@ export function App() {
           <Route path="/alerts/:id" element={<AlertDetailPage />} />
 
           {/* Day 6-7: EPIC-AGENTS */}
-          <Route
-            path="/agents"
-            element={
-              <PlaceholderPage
-                titleKey="nav.agents"
-                dayLabel="Sprint 7 — Day 6-7 (EPIC-AGENTS)"
-              />
-            }
-          />
-          <Route
-            path="/agents/:id"
-            element={
-              <PlaceholderPage
-                titleKey="nav.agents"
-                dayLabel="Sprint 7 — Day 6-7 (Agent Detail)"
-              />
-            }
-          />
+          <Route path="/agents" element={<AgentsListPage />} />
+          <Route path="/agents/:id" element={<AgentDetailPage />} />
 
-          {/* Day 6-7: EPIC-USERS */}
-          <Route
-            path="/users"
-            element={
-              <PlaceholderPage
-                titleKey="nav.users"
-                dayLabel="Sprint 7 — Day 6-7 (EPIC-USERS)"
-              />
-            }
-          />
+          {/* Day 8: EPIC-USERS */}
+          <Route path="/users" element={<UsersListPage />} />
 
           {/* Day 8: EPIC-AUDIT */}
-          <Route
-            path="/audit"
-            element={
-              <PlaceholderPage
-                titleKey="nav.audit"
-                dayLabel="Sprint 7 — Day 8 (EPIC-AUDIT)"
-              />
-            }
-          />
+          <Route path="/audit" element={<AuditLogPage />} />
 
           {/* Settings: deferred */}
           <Route

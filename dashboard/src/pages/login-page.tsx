@@ -28,6 +28,7 @@ import { useLogin } from '@/hooks/use-auth';
 
 function buildLoginSchema(t: (k: string) => string) {
   return z.object({
+    tenantCode: z.string().min(1, t('auth.login.errors.tenantCodeRequired')).max(50),
     email: z
       .string()
       .min(1, t('auth.login.errors.emailRequired'))
@@ -57,13 +58,14 @@ export function LoginPage() {
     formState: { errors, isSubmitting },
   } = useForm<LoginFormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { email: '', password: '', rememberMe: false },
+    defaultValues: { tenantCode: '', email: '', password: '', rememberMe: false },
   });
 
   const onSubmit = async (values: LoginFormValues) => {
     setServerError(null);
     try {
       await loginMutation.mutateAsync({
+        tenant_code: values.tenantCode,
         email: values.email,
         password: values.password,
       });
@@ -96,6 +98,24 @@ export function LoginPage() {
       <h1 className="text-center text-xl font-semibold text-text-primary">
         {t('auth.login.title')}
       </h1>
+
+      {/* ── Tenant code field ── */}
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="tenantCode">{t('auth.login.tenantCode', 'Code établissement')}</Label>
+        <Input
+          id="tenantCode"
+          type="text"
+          autoComplete="organization"
+          hasError={!!errors.tenantCode}
+          aria-describedby={errors.tenantCode ? 'tenantCode-error' : undefined}
+          {...register('tenantCode')}
+        />
+        {errors.tenantCode && (
+          <p id="tenantCode-error" className="text-xs text-error" role="alert">
+            {errors.tenantCode.message}
+          </p>
+        )}
+      </div>
 
       {/* ── Email field ── */}
       <div className="flex flex-col gap-1.5">

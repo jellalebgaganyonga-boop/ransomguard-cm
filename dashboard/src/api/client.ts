@@ -29,7 +29,7 @@ import axios, {
   type AxiosInstance,
   type InternalAxiosRequestConfig,
 } from 'axios';
-import { getAccessToken, useAuthStore } from '@/stores/auth.store';
+import { getAccessToken, getRefreshToken, useAuthStore } from '@/stores/auth.store';
 
 // ---------------------------------------------------------------------------
 // Base instance
@@ -83,11 +83,21 @@ interface RetriableRequestConfig extends InternalAxiosRequestConfig {
 }
 
 async function performRefresh(): Promise<string> {
-  const response = await refreshClient.post<{ access_token: string }>(
-    '/auth/refresh'
+  // See auth.store.ts SECURITY COMPROMISE note — refresh token is in-memory
+  // because the backend does not issue HttpOnly cookies (GRID-SEC-001).
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) {
+    throw new Error('No refresh token available');
+  }
+  const response = await refreshClient.post<{ access_token: string; refresh_token: string }>(
+    '/auth/refresh',
+    { refresh_token: refreshToken }
   );
   const newToken = response.data.access_token;
   useAuthStore.getState().setAccessToken(newToken);
+  if (response.data.refresh_token) {
+    useAuthStore.getState().setRefreshToken(response.data.refresh_token);
+  }
   return newToken;
 }
 
@@ -131,10 +141,11 @@ apiClient.interceptors.response.use(
       originalRequest.headers.Authorization = `Bearer ${newToken}`;
       return apiClient(originalRequest);
     } catch (refreshError) {
-      // Refresh failed (refresh cookie expired/revoked) — clear auth state.
+      // Refresh failed — clear all auth state.
       // The app's route guard (App.tsx) will redirect to /auth/login on
       // the next render because accessToken is now null.
       useAuthStore.getState().clearAccessToken();
+      useAuthStore.getState().clearRefreshToken();
       return Promise.reject(refreshError);
     }
   }

@@ -31,7 +31,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { useUpdateAlertStatus } from '@/hooks/use-alerts';
-import { formatClosingNote, type ResolutionCategory } from '@/api/alerts';
+import { formatClosingNote, type ResolutionCategory, type AlertStatus } from '@/api/alerts';
 
 const notesSchema = z.string().min(20).max(2000);
 
@@ -83,9 +83,11 @@ export function CloseModal({ alertId, open, onOpenChange, preselectCategory }: C
   const handleConfirm = async () => {
     // Narrowing category out of '' before passing to formatClosingNote
     if (category === '' || !notesValid) return;
+    // FalsePositive is a dedicated backend status; all others map to Resolved.
+    const new_status: AlertStatus = category === 'false_positive' ? 'FalsePositive' : 'Resolved';
     await mutation.mutateAsync({
-      status: 'closed',
-      note: formatClosingNote(category, notes),
+      new_status,
+      justification: formatClosingNote(category, notes),
     });
     setCategory('');
     setNotes('');

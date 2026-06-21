@@ -27,10 +27,12 @@
       "showPassword": "Afficher le mot de passe",
       "hidePassword": "Masquer le mot de passe",
       "capsLockWarning": "Verrouillage majuscules activé",
+      "tenantCode": "Code établissement",
       "errors": {
         "invalidCredentials": "Email ou mot de passe incorrect",
         "serverError": "Erreur serveur, veuillez réessayer",
         "networkError": "Connexion perdue, vérifiez votre réseau",
+        "tenantCodeRequired": "Le code établissement est requis",
         "emailRequired": "L'email est requis",
         "emailInvalid": "Format d'email invalide",
         "passwordRequired": "Le mot de passe est requis"
@@ -53,12 +55,19 @@
     "new": "Nouveau",
     "in_progress": "En cours",
     "acknowledged": "En cours",
+    "investigating": "En cours",
     "resolved": "Résolu",
     "closed": "Résolu",
+    "falsepositive": "Faux positif",
+    "suppressed": "Supprimé",
     "isolated": "Isolé",
     "online": "Actif",
     "offline": "Hors ligne",
-    "stale": "Obsolète"
+    "stale": "Obsolète",
+    "provisioned": "Provisionné",
+    "active": "Actif",
+    "disconnected": "Déconnecté",
+    "decommissioned": "Désactivé"
   },
   "dashboard": {
     "exec": {
@@ -185,11 +194,101 @@
       "submit": "Fermer l'incident"
     }
   },
+  "users": {
+    "createUser": "Créer un utilisateur",
+    "email": "Email",
+    "fullName": "Nom complet",
+    "status": "Statut",
+    "lastLogin": "Dernière connexion",
+    "editRoles": "Rôles",
+    "never": "Jamais",
+    "active": "Actif",
+    "disabled": "Désactivé",
+    "enable": "Réactiver",
+    "disable": "Désactiver",
+    "list": {
+      "totalUsers": "utilisateurs enregistrés",
+      "empty": "Aucun utilisateur trouvé",
+      "you": "vous"
+    },
+    "createModal": {
+      "title": "Créer un utilisateur",
+      "password": "Mot de passe provisoire",
+      "passwordHint": "8 caractères minimum",
+      "roles": "Rôles initiaux (facultatif)",
+      "submit": "Créer"
+    },
+    "disableModal": {
+      "title": "Désactiver cet utilisateur ?",
+      "body": "sera immédiatement désactivé.",
+      "warning": "L'utilisateur ne pourra plus se connecter immédiatement.",
+      "submit": "Désactiver",
+      "selfErrorTitle": "Action impossible",
+      "selfErrorBody": "Vous ne pouvez pas désactiver votre propre compte. Cette action est bloquée pour éviter tout verrouillage accidentel."
+    },
+    "enableModal": {
+      "title": "Réactiver cet utilisateur ?",
+      "body": "pourra de nouveau se connecter.",
+      "submit": "Réactiver"
+    },
+    "roles": {
+      "title": "Attribuer des rôles",
+      "chooseRoles": "Sélectionnez les rôles :",
+      "gapWarning": "Les rôles actuels ne sont pas affichés (limitation backend connue). Cochez les rôles que cet utilisateur doit avoir — la liste ci-dessous remplacera l'intégralité des rôles existants.",
+      "submit": "Enregistrer les rôles",
+      "tenantAdmin": "Administrateur (tenant_admin)",
+      "securityAnalyst": "Analyste sécurité (security_analyst)",
+      "readOnlyAuditor": "Auditeur lecture seule (read_only_auditor)",
+      "selfDemotionError": "Vous ne pouvez pas retirer le rôle tenant_admin de votre propre compte."
+    }
+  },
   "agents": {
     "hostname": "Hôte",
     "os": "OS",
     "heartbeat": "Heartbeat",
-    "status": "État"
+    "status": "État",
+    "list": {
+      "totalEndpoints": "endpoints enregistrés",
+      "active": "Actif",
+      "disconnected": "Déconnecté",
+      "provisioned": "Provisionné",
+      "decommissioned": "Désactivé",
+      "version": "Version",
+      "empty": "Aucun agent enregistré",
+      "autoRefresh": "Actualisation auto toutes les 30 s"
+    },
+    "detail": {
+      "notFound": "Agent non trouvé",
+      "backToList": "Retour aux agents",
+      "fqdn": "FQDN",
+      "neverReported": "Jamais",
+      "recentAlerts": "Alertes récentes",
+      "noAlerts": "Aucune alerte pour cet agent",
+      "allAlerts": "Toutes les alertes",
+      "tabOverview": "Vue d'ensemble",
+      "tabAlerts": "Alertes",
+      "tabHeartbeats": "Heartbeats",
+      "tabConfig": "Configuration"
+    },
+    "command": {
+      "isolate": "Isoler le terminal",
+      "title": "Isoler le terminal",
+      "warningTitle": "Action destructrice",
+      "warningBody": "L'isolation de \"{{hostname}}\" coupera immédiatement l'accès réseau de cet agent. Il sera inaccessible jusqu'à ce qu'un opérateur effectue une restauration physique ou logicielle.",
+      "reasonLabel": "Motif (obligatoire)",
+      "reasonPlaceholder": "Ex: Suspicion de compromission — ransomware détecté en cours d'exécution...",
+      "minChars": "{{count}} caractères minimum",
+      "ackLabel": "Je comprends que cette action déconnectera immédiatement le terminal du réseau.",
+      "submit": "Isoler le terminal",
+      "lastCommand": "Dernière commande",
+      "status": {
+        "pending": "En attente",
+        "dispatched": "Envoyée",
+        "acknowledged": "Reçue",
+        "completed": "Exécutée",
+        "failed": "Échouée"
+      }
+    }
   },
   "common": {
     "loading": "Chargement...",
@@ -212,6 +311,25 @@
     "view": "Voir →",
     "access": "Accéder →",
     "copied": "Copié !"
+  },
+  "audit": {
+    "title": "Journal d'audit",
+    "subtitle": "Intégrité du journal d'audit — chaîne Ed25519 par agent",
+    "totalEntries": "entrées",
+    "empty": "Aucune entrée trouvée",
+    "exportCsv": "Exporter CSV",
+    "exportCsvTitle": "Exporter la page courante en CSV (frontend uniquement, pas d'endpoint backend)",
+    "filterAgentId": "ID Agent",
+    "filterAgentIdPlaceholder": "UUID agent...",
+    "filterAfter": "Reçu après",
+    "filterBefore": "Reçu avant",
+    "gapWarning": "Discontinuité détectée dans la séquence — entrées manquantes ou désordonnées.",
+    "col": {
+      "agentId": "Agent",
+      "sequenceNumber": "Séquence",
+      "signingKeyId": "Clé de signature",
+      "receivedAt": "Reçu le"
+    }
   },
   "errors": {
     "notFound": {

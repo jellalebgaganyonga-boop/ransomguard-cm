@@ -53,7 +53,7 @@ export function ReadOnlyDashboard() {
           label={t('dashboard.readonly.kpi.alerts24h', 'Alertes dernières 24h')}
           value={summary?.alerts_24h ?? '—'}
           {...(summary
-            ? { description: `${t('dashboard.readonly.kpi.critical', 'dont')} ${summary.critical_24h} ${t('severity.critical', 'critiques')}` }
+            ? { description: `${t('dashboard.readonly.kpi.critical', 'dont')} ${summary.critical_alerts_24h} ${t('severity.critical', 'critiques')}` }
             : {})}
         />
         <KPICard

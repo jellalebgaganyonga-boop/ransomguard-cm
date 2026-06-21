@@ -12,15 +12,15 @@ import { useSearchParams } from 'react-router-dom';
 import { useCallback, useMemo } from 'react';
 import type { AlertListParams, AlertSeverity, AlertStatus } from '@/api/alerts';
 
-const DEFAULT_PAGE_SIZE = 50; // AC3.1.1
+const DEFAULT_LIMIT = 50; // AC3.1.1
 
 export function useAlertFilters() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const filters: AlertListParams = useMemo(() => {
     const params: AlertListParams = {
-      page: Number(searchParams.get('page')) || 1,
-      page_size: Number(searchParams.get('page_size')) || DEFAULT_PAGE_SIZE,
+      offset: Number(searchParams.get('offset')) || 0,
+      limit: Number(searchParams.get('limit')) || DEFAULT_LIMIT,
     };
 
     const dateFrom = searchParams.get('date_from');
@@ -38,11 +38,8 @@ export function useAlertFilters() {
     const agent = searchParams.get('agent');
     if (agent) params.agent = agent;
 
-    const module = searchParams.get('module');
-    if (module) params.module = module;
-
     const sortBy = searchParams.get('sort_by');
-    if (sortBy === 'created_at' || sortBy === 'severity' || sortBy === 'status') {
+    if (sortBy === 'detected_at' || sortBy === 'severity' || sortBy === 'status') {
       params.sort_by = sortBy;
     }
 
@@ -63,10 +60,10 @@ export function useAlertFilters() {
         } else {
           next.set(key, String(value));
         }
-        // AC: any filter change resets to page 1 (avoid landing on an
+        // Any filter change resets to offset 0 (avoid landing on an
         // out-of-range page after narrowing results)
-        if (key !== 'page') {
-          next.delete('page');
+        if (key !== 'offset') {
+          next.delete('offset');
         }
         return next;
       });
@@ -80,7 +77,7 @@ export function useAlertFilters() {
 
   const hasActiveFilters = useMemo(
     () =>
-      !!(filters.severity || filters.status || filters.agent || filters.module || filters.date_from || filters.date_to),
+      !!(filters.severity || filters.status || filters.agent || filters.date_from || filters.date_to),
     [filters]
   );
 

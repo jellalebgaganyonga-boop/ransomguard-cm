@@ -23,6 +23,8 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { useUpdateAlertStatus } from '@/hooks/use-alerts';
 
+// Backend requires justification min=5; note is optional in the UI (0 chars allowed),
+// so we send a default placeholder when the user leaves it blank.
 const noteSchema = z.string().max(500);
 
 interface AcknowledgeModalProps {
@@ -41,9 +43,9 @@ export function AcknowledgeModal({ alertId, open, onOpenChange }: AcknowledgeMod
   const handleConfirm = async () => {
     if (!noteValid) return;
     const trimmed = note.trim();
-    await mutation.mutateAsync(
-      trimmed ? { status: 'acknowledged', note: trimmed } : { status: 'acknowledged' }
-    );
+    // Backend justification min=5; use a default when user leaves note blank.
+    const justification = trimmed.length >= 5 ? trimmed : 'Acknowledged by analyst';
+    await mutation.mutateAsync({ new_status: 'Investigating', justification });
     setNote('');
     onOpenChange(false);
   };

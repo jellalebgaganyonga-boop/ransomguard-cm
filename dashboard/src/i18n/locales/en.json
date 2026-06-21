@@ -27,10 +27,12 @@
       "showPassword": "Show password",
       "hidePassword": "Hide password",
       "capsLockWarning": "Caps Lock is on",
+      "tenantCode": "Organization code",
       "errors": {
         "invalidCredentials": "Incorrect email or password",
         "serverError": "Server error, please try again",
         "networkError": "Connection lost, check your network",
+        "tenantCodeRequired": "Organization code is required",
         "emailRequired": "Email is required",
         "emailInvalid": "Invalid email format",
         "passwordRequired": "Password is required"
@@ -53,12 +55,19 @@
     "new": "New",
     "in_progress": "In progress",
     "acknowledged": "In progress",
+    "investigating": "Investigating",
     "resolved": "Resolved",
     "closed": "Resolved",
+    "falsepositive": "False positive",
+    "suppressed": "Suppressed",
     "isolated": "Isolated",
     "online": "Active",
     "offline": "Offline",
-    "stale": "Stale"
+    "stale": "Stale",
+    "provisioned": "Provisioned",
+    "active": "Active",
+    "disconnected": "Disconnected",
+    "decommissioned": "Decommissioned"
   },
   "dashboard": {
     "exec": {
@@ -185,11 +194,101 @@
       "submit": "Close incident"
     }
   },
+  "users": {
+    "createUser": "Create user",
+    "email": "Email",
+    "fullName": "Full name",
+    "status": "Status",
+    "lastLogin": "Last login",
+    "editRoles": "Roles",
+    "never": "Never",
+    "active": "Active",
+    "disabled": "Disabled",
+    "enable": "Enable",
+    "disable": "Disable",
+    "list": {
+      "totalUsers": "registered users",
+      "empty": "No users found",
+      "you": "you"
+    },
+    "createModal": {
+      "title": "Create user",
+      "password": "Temporary password",
+      "passwordHint": "Minimum 8 characters",
+      "roles": "Initial roles (optional)",
+      "submit": "Create"
+    },
+    "disableModal": {
+      "title": "Disable this user?",
+      "body": "will be immediately disabled.",
+      "warning": "The user will no longer be able to log in.",
+      "submit": "Disable",
+      "selfErrorTitle": "Action not allowed",
+      "selfErrorBody": "You cannot disable your own account. This action is blocked to prevent accidental lockout."
+    },
+    "enableModal": {
+      "title": "Enable this user?",
+      "body": "will be able to log in again.",
+      "submit": "Enable"
+    },
+    "roles": {
+      "title": "Assign roles",
+      "chooseRoles": "Select roles:",
+      "gapWarning": "Current roles are not shown (known backend limitation). Check the roles this user should have — the list below will replace all existing roles.",
+      "submit": "Save roles",
+      "tenantAdmin": "Administrator (tenant_admin)",
+      "securityAnalyst": "Security analyst (security_analyst)",
+      "readOnlyAuditor": "Read-only auditor (read_only_auditor)",
+      "selfDemotionError": "You cannot remove the tenant_admin role from your own account."
+    }
+  },
   "agents": {
     "hostname": "Host",
     "os": "OS",
     "heartbeat": "Heartbeat",
-    "status": "Status"
+    "status": "Status",
+    "list": {
+      "totalEndpoints": "registered endpoints",
+      "active": "Active",
+      "disconnected": "Disconnected",
+      "provisioned": "Provisioned",
+      "decommissioned": "Decommissioned",
+      "version": "Version",
+      "empty": "No agents registered",
+      "autoRefresh": "Auto-refresh every 30 s"
+    },
+    "detail": {
+      "notFound": "Agent not found",
+      "backToList": "Back to agents",
+      "fqdn": "FQDN",
+      "neverReported": "Never",
+      "recentAlerts": "Recent alerts",
+      "noAlerts": "No alerts for this agent",
+      "allAlerts": "All alerts",
+      "tabOverview": "Overview",
+      "tabAlerts": "Alerts",
+      "tabHeartbeats": "Heartbeats",
+      "tabConfig": "Configuration"
+    },
+    "command": {
+      "isolate": "Isolate endpoint",
+      "title": "Isolate endpoint",
+      "warningTitle": "Destructive action",
+      "warningBody": "Isolating \"{{hostname}}\" will immediately cut this agent's network access. It will be unreachable until an operator performs a physical or software restore.",
+      "reasonLabel": "Reason (required)",
+      "reasonPlaceholder": "E.g.: Suspected compromise — ransomware detected running...",
+      "minChars": "{{count}} characters minimum",
+      "ackLabel": "I understand this will immediately disconnect the endpoint from the network.",
+      "submit": "Isolate endpoint",
+      "lastCommand": "Last command",
+      "status": {
+        "pending": "Pending",
+        "dispatched": "Dispatched",
+        "acknowledged": "Acknowledged",
+        "completed": "Completed",
+        "failed": "Failed"
+      }
+    }
   },
   "common": {
     "loading": "Loading...",
@@ -212,6 +311,25 @@
     "view": "View →",
     "access": "Access →",
     "copied": "Copied!"
+  },
+  "audit": {
+    "title": "Audit log",
+    "subtitle": "Agent audit chain integrity — Ed25519 signed batches",
+    "totalEntries": "entries",
+    "empty": "No entries found",
+    "exportCsv": "Export CSV",
+    "exportCsvTitle": "Export current page as CSV (frontend-only, no backend endpoint)",
+    "filterAgentId": "Agent ID",
+    "filterAgentIdPlaceholder": "Agent UUID...",
+    "filterAfter": "Received after",
+    "filterBefore": "Received before",
+    "gapWarning": "Sequence gap detected — entries are missing or out of order.",
+    "col": {
+      "agentId": "Agent",
+      "sequenceNumber": "Sequence",
+      "signingKeyId": "Signing key",
+      "receivedAt": "Received"
+    }
   },
   "errors": {
     "notFound": {

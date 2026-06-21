@@ -13,7 +13,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Search, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, Shield } from 'lucide-react';
-import { PriorityScore } from '@/components/ui/priority-score';
 import { SeverityBadge } from '@/components/ui/severity-badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,10 +23,10 @@ import { getAlertRowActionPermissions } from '@/lib/alert-permissions';
 import { formatDistanceToNow } from '@/lib/format-date';
 import type { AlertSeverity, AlertStatus } from '@/api/alerts';
 
-const SEVERITIES: AlertSeverity[] = ['critical', 'high', 'medium', 'low', 'info'];
-const STATUSES: AlertStatus[] = ['new', 'acknowledged', 'closed'];
+const SEVERITIES: AlertSeverity[] = ['Low', 'Medium', 'High', 'Critical'];
+const STATUSES: AlertStatus[] = ['New', 'Investigating', 'Resolved', 'FalsePositive', 'Suppressed'];
 const SORT_COLUMNS = [
-  { key: 'created_at' as const, labelKey: 'alerts.list.col.detected' },
+  { key: 'detected_at' as const, labelKey: 'alerts.list.col.detected' },
   { key: 'severity' as const, labelKey: 'alerts.list.col.severity' },
   { key: 'status' as const, labelKey: 'alerts.list.col.status' },
 ];
@@ -42,11 +41,12 @@ export function AlertsListPage() {
   const role = me ? resolvePrimaryRole(me.roles) : 'read_only_auditor';
   const items = data?.items ?? [];
   const total = data?.total ?? 0;
-  const page = filters.page ?? 1;
-  const pageSize = filters.page_size ?? 50;
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const offset = filters.offset ?? 0;
+  const limit = filters.limit ?? 50;
+  const currentPage = Math.floor(offset / limit) + 1;
+  const totalPages = Math.max(1, Math.ceil(total / limit));
 
-  const handleSort = (col: 'created_at' | 'severity' | 'status') => {
+  const handleSort = (col: 'detected_at' | 'severity' | 'status') => {
     const isSameCol = filters.sort_by === col;
     const nextDir = isSameCol && filters.sort_dir === 'desc' ? 'asc' : 'desc';
     setFilter('sort_by', col);
@@ -84,7 +84,7 @@ export function AlertsListPage() {
           <option value="">{t('alerts.list.allSeverities', 'Toutes sévérités')}</option>
           {SEVERITIES.map((s) => (
             <option key={s} value={s}>
-              {t(`severity.${s}`, s)}
+              {t(`severity.${s.toLowerCase()}`, s)}
             </option>
           ))}
         </select>
@@ -98,7 +98,7 @@ export function AlertsListPage() {
           <option value="">{t('alerts.list.allStatuses', 'Tous statuts')}</option>
           {STATUSES.map((s) => (
             <option key={s} value={s}>
-              {t(`status.${s}`, s)}
+              {t(`status.${s.toLowerCase()}`, s)}
             </option>
           ))}
         </select>
@@ -121,9 +121,6 @@ export function AlertsListPage() {
               <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-text-secondary">
                 {t('alerts.list.col.id', 'ID')}
               </th>
-              <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-text-secondary">
-                {t('alerts.list.col.score', 'Score')}
-              </th>
               {SORT_COLUMNS.map((col) => (
                 <th
                   key={col.key}
@@ -142,10 +139,10 @@ export function AlertsListPage() {
                 </th>
               ))}
               <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-text-secondary">
-                {t('alerts.list.col.agent', 'Hôte')}
+                {t('alerts.list.col.agent', 'Agent')}
               </th>
               <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-text-secondary">
-                {t('alerts.list.col.module', 'Module')}
+                {t('alerts.list.col.module', 'Type')}
               </th>
               <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-text-secondary">
                 {t('alerts.list.col.actions', 'Actions')}
@@ -155,7 +152,7 @@ export function AlertsListPage() {
           <tbody>
             {isLoading && (
               <tr>
-                <td colSpan={7} className="px-3 py-8 text-center text-sm text-text-tertiary">
+                <td colSpan={6} className="px-3 py-8 text-center text-sm text-text-tertiary">
                   {t('common.loading', 'Chargement...')}
                 </td>
               </tr>
@@ -164,7 +161,7 @@ export function AlertsListPage() {
             {/* AC3.1.3: empty state */}
             {!isLoading && items.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-3 py-12">
+                <td colSpan={6} className="px-3 py-12">
                   <div className="flex flex-col items-center gap-3 text-center">
                     <Shield className="size-9 text-text-tertiary" aria-hidden="true" />
                     <p className="font-semibold text-text-primary">
@@ -199,23 +196,20 @@ export function AlertsListPage() {
                     <td className="px-3 py-2.5 font-mono text-xs text-text-tertiary">
                       {alert.id.slice(0, 8)}
                     </td>
-                    <td className="px-3 py-2.5">
-                      <PriorityScore score={alert.priority_score} />
-                    </td>
                     <td className="px-3 py-2.5 text-text-secondary">
-                      {formatDistanceToNow(alert.created_at)}
+                      {formatDistanceToNow(alert.detected_at)}
                     </td>
                     <td className="px-3 py-2.5">
-                      <SeverityBadge severity={alert.severity} />
+                      <SeverityBadge severity={alert.severity.toLowerCase() as 'critical' | 'high' | 'medium' | 'low'} />
                     </td>
                     <td className="px-3 py-2.5 text-text-secondary">
-                      {t(`status.${alert.status}`, alert.status)}
+                      {t(`status.${alert.status.toLowerCase()}`, alert.status)}
                     </td>
-                    <td className="px-3 py-2.5 font-mono font-semibold text-text-primary">
-                      {alert.agent_hostname}
+                    <td className="px-3 py-2.5 font-mono text-xs text-text-primary">
+                      {alert.agent_id.slice(0, 12)}
                     </td>
                     <td className="px-3 py-2.5 text-xs uppercase text-text-tertiary">
-                      {alert.module}
+                      {alert.alert_type}
                     </td>
                     <td
                       className="px-3 py-2.5 text-right"
@@ -252,18 +246,18 @@ export function AlertsListPage() {
       {total > 0 && (
         <div className="mt-4 flex items-center justify-end gap-3 text-sm text-text-secondary">
           <button
-            disabled={page <= 1}
-            onClick={() => setFilter('page', page - 1)}
+            disabled={offset === 0}
+            onClick={() => setFilter('offset', Math.max(0, offset - limit))}
             className="flex items-center gap-1 disabled:opacity-40"
           >
             <ChevronLeft className="size-4" /> {t('common.previous', 'Précédent')}
           </button>
           <span className="font-medium">
-            {t('common.page', { page, totalPages, defaultValue: `Page ${page} / ${totalPages}` })}
+            {t('common.page', { page: currentPage, totalPages, defaultValue: `Page ${currentPage} / ${totalPages}` })}
           </span>
           <button
-            disabled={page >= totalPages}
-            onClick={() => setFilter('page', page + 1)}
+            disabled={currentPage >= totalPages}
+            onClick={() => setFilter('offset', offset + limit)}
             className="flex items-center gap-1 disabled:opacity-40"
           >
             {t('common.next', 'Suivant')} <ChevronRight className="size-4" />
