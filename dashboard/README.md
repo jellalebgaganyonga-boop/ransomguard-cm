@@ -63,7 +63,7 @@ All decisions below are documented in full in
 | FE-006 | react-i18next + ICU MessageFormat, French-default |
 | FE-007 | Style Dictionary token pipeline (3-tier: reference/system/component) |
 | FE-008 | Vitest (Small) + Playwright (Medium/Large + a11y + visual) |
-| FE-009 | In-memory access token + HttpOnly refresh cookie |
+| FE-009 | In-memory access token + in-memory refresh token (HttpOnly cookie deferred — GRID-SEC-001) |
 | FE-010 | Optimistic UI via TanStack Query mutations |
 
 ---
@@ -100,17 +100,54 @@ dashboard/
 - **Never** persist the access token to `localStorage` / `sessionStorage`.
   It lives ONLY in `useAuthStore` (in-memory, lost on reload by design).
   See `src/stores/auth.store.ts` and ADR-FE-009.
-- The refresh token is an HttpOnly cookie the frontend cannot read. All
-  refresh logic goes through `POST /auth/refresh` with
-  `withCredentials: true`.
+- **GRID-SEC-001 (tracked debt):** The refresh token is currently returned in
+  the JSON response body and stored in-memory — it is NOT an HttpOnly cookie.
+  Both tokens are lost on page reload; the user must re-authenticate. A proper
+  HttpOnly cookie implementation requires a backend change deferred to Sprint 8.
 - `src/api/client.ts` deduplicates concurrent refresh attempts via a
   module-level singleton promise — do not add a second refresh call site
-  without reading that file's docstring first (refresh-token rotation +
-  reuse detection on the backend will invalidate the session if you do).
+  without reading that file's docstring first.
 - `resolvePrimaryRole()` (`src/hooks/use-me.ts`) fails closed to
   `read_only_auditor` for any unrecognized/empty role data. This is a
   client-side UX convenience ONLY — every API endpoint enforces RBAC
   server-side independently (STRIDE WT4.2, WT4.5).
+
+---
+
+## Testing
+
+### Unit tests (Vitest)
+
+```bash
+npm test -- --run    # 83/83 passing
+```
+
+Tests cover: alert permissions, audit integrity (gap detection), user permissions,
+agent status helpers, alert filter hooks.
+
+### E2E tests (Playwright)
+
+```bash
+npm run test:e2e                         # all 42 tests
+npx playwright test --project=chromium  # Chromium only (42/42)
+npm run test:a11y                        # axe-core WCAG 2.2 AA (10/10)
+```
+
+E2E tests use Playwright's `page.route()` to intercept all API calls — no
+backend required. Each spec file ships its own mock fixtures.
+
+Full results: `docs/sprint-reports/SPRINT_7_REPORT.md`
+Accessibility report: `docs/a11y-report.md`
+Lighthouse report: `docs/lighthouse-report.md`
+
+### Security audit
+
+```bash
+npm audit --audit-level=high --omit=dev  # 0 production vulnerabilities
+```
+
+6 dev-only advisories (GHSA-67mh-4wv8-2f99) in vite/esbuild/vitest chain —
+not in the production bundle. Vite v5→v8 breaking upgrade deferred to Sprint 8.
 
 ---
 
@@ -119,10 +156,21 @@ dashboard/
 | Day | Scope | Status |
 |---|---|---|
 | **Day 1** | React bootstrap: tokens, config, stores, API client, i18n, UI primitives, layouts, routing, RBAC guard | ✅ Done |
-| Day 2-3 | EPIC-AUTH (full login flow) + EPIC-DASHBOARD (3 role-based dashboards) | ⏳ Pending |
-| Day 4-5 | EPIC-ALERTS (list + detail, inverted-pyramid narrative) | ⏳ Pending |
-| Day 6-7 | EPIC-AGENTS (inventory + isolation modal) + EPIC-USERS | ⏳ Pending |
-| Day 8 | EPIC-AUDIT + polish | ⏳ Pending |
-| Day 9-10 | E2E Playwright + a11y (axe-core) + visual regression | ⏳ Pending |
+| **Day 2-3** | EPIC-AUTH (full login flow) + EPIC-DASHBOARD (3 role-based dashboards) | ✅ Done |
+| **Day 4-5** | EPIC-ALERTS (list + detail, acknowledge, close) | ✅ Done |
+| **Day 6-7** | EPIC-AGENTS (inventory + isolation modal) + EPIC-USERS | ✅ Done |
+| **Day 8** | EPIC-AUDIT (Ed25519 chain view, re-scoped from user-action log) | ✅ Done |
+| **Day 9-10** | E2E Playwright (42/42) + axe-core a11y (10/10) + bug fixes | ✅ Done |
 
-**Tag target on completion:** `v0.9.0-console`
+**Tag:** `v0.9.0-console` (pending explicit confirmation)
+
+### Known Technical Debt (Sprint 8)
+
+| ID | Description |
+|----|-------------|
+| GRID-SEC-001 | Refresh token in JSON body (not HttpOnly cookie) — tokens lost on reload |
+| GRID-SEC-002 | Backend has no self-disable guard — frontend-only protection |
+| GAP-01 | `AgentItem.enrolled_at` missing in backend schema |
+| GAP-03 | Heartbeat timeline endpoint not implemented |
+| GAP-08 | `GET /users` has no `roles` field |
+| DEP-001 | Vite v5→v8 breaking upgrade required for dev vuln fix |

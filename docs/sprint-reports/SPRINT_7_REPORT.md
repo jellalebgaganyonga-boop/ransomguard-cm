@@ -17,6 +17,7 @@ Sprint 7 delivered the complete **tenant operator console dashboard** for Ransom
 | `npm test -- --run` | ✅ 83/83 unit tests |
 | `npx playwright test --project=chromium` | ✅ 42/42 E2E tests |
 | `npm audit --audit-level=high --omit=dev` | ✅ 0 production vulnerabilities |
+| `npx playwright test --grep "@a11y"` | ✅ 10/10 axe-core WCAG 2.2 AA scans |
 
 ---
 
@@ -76,6 +77,20 @@ Sprint 7 delivered the complete **tenant operator console dashboard** for Ransom
 
 ---
 
+## Bug Fixes (Day 9–10 E2E Campaign)
+
+5 bugs surfaced and fixed during the Playwright E2E campaign:
+
+| # | Bug | Root Cause | Fix |
+|---|-----|-----------|-----|
+| BUG-01 | Acknowledge status not reflected after optimistic update | After mutation, `onSettled` invalidated query → refetch hit stateless mock returning original `New` state | Stateful route mock (`let statusMutated = false`) returns `Investigating` after mutation fires |
+| BUG-02 | Select dropdown blocked inside Dialog (Close modal) | `SelectContent` at `z-dropdown`(100) rendered below Dialog scrim at `z-modal`(300) | Changed `SelectContent` to `z-popover`(400) in `src/components/ui/select.tsx` |
+| BUG-03 | `getByText(/résolu/i)` strict-mode violation | "résolution" (in CloseModal labels) matched `/résolu/i` → 3 elements | `getByText('Résolu', { exact: true })` for unique badge match |
+| BUG-04 | a11y violation: audit log datetime-local inputs unlabelled | Three filter inputs lacked `id`/`htmlFor` association with their `<label>` elements | Added `id="audit-filter-{name}"` + matching `htmlFor` in `audit-log-page.tsx` |
+| BUG-05 | Severity badge fails WCAG 1.4.3 contrast | `severity-high` orange-20 = 2.8:1, `severity-critical` red-30 = 3.1:1 (both fail AA) | Changed to orange-30 (#834D11, 7.1:1) and red-40 (#B12626, 5.9:1) |
+
+---
+
 ## Technical Debt (Tracked)
 
 | ID | Description | Sprint |
@@ -98,21 +113,32 @@ Sprint 7 delivered the complete **tenant operator console dashboard** for Ransom
 | `e2e/audit.spec.ts` | 6 | ✅ 6/6 |
 | `e2e/dashboard.spec.ts` | 5 | ✅ 5/5 |
 | `e2e/idle-timeout.spec.ts` | 2 | ✅ 2/2 |
-| `e2e/login.spec.ts` | (included) | ✅ |
+| `e2e/auth.spec.ts` | 8 | ✅ 8/8 |
 | `e2e/users.spec.ts` | 6 | ✅ 6/6 |
 
-### Key E2E Fixes Applied (Day 9–10)
-- **Zod schema**: `artifacts`/`status_history` → `.nullable().optional()` (null from backend)
-- **SelectContent z-index**: `z-dropdown`(100) → `z-popover`(400) — Select dropdown now renders above Dialog scrim (`z-modal`=300)
-- **Badge contrast**: severity-high orange-30 (#834D11), severity-critical red-40 (#B12626) — WCAG 4.5:1
-- **Audit log labels**: added `htmlFor`/`id` to all filter inputs (WCAG label association)
-- **SessionExpiredModal**: uses `role="alertdialog"` — tests updated to `getByRole('alertdialog')`
-- **RBAC redirect assertions**: changed `getByRole('table').not.toBeAttached()` to page-specific element checks (dashboard also has tables)
-- **Create user route**: pattern `**/api/v1/dashboard/users*` to match query-param URLs
-- **Acknowledge optimistic update**: stateful route mock returns Investigating after mutation
-- **Close modal status assertion**: `getByText('Résolu', { exact: true })` to avoid matching "résolution" in labels
-- **ProtectedRoute RBAC**: `<Navigate to="/dashboard" replace />` instead of ForbiddenPage
-- **idle handleWarning**: stable no-op `useCallback(() => {}, [])` — prevents idle timer reset at 29min
+### Unit Test Coverage (83 tests, Vitest)
+
+| File | Tests |
+|------|-------|
+| `src/lib/alert-permissions.test.ts` | 28 |
+| `src/lib/audit-integrity.test.ts` | 12 |
+| `src/lib/user-permissions.test.ts` | 18 |
+| `src/lib/agent-status.test.ts` | 14 |
+| `src/hooks/use-alert-filters.test.ts` | 11 |
+
+Total: **83 unit** + **42 E2E** = **125 tests**
+
+---
+
+## Key E2E Lessons Learned (Day 9–10)
+
+- **Playwright LIFO routes:** last registered route = highest priority — register specific overrides after `setupMocks`.
+- **Stateful mocks:** use a flag variable to simulate server state changes after mutation; otherwise `onSettled` refetch reverts optimistic UI.
+- **Route pattern trailing `*`:** `**/api/v1/dashboard/users*` matches URLs with query params; `**/users` does not.
+- **ARIA role subtypes:** `role="alertdialog"` is distinct from `role="dialog"` in Playwright — use `getByRole('alertdialog')` for alert dialogs.
+- **Exact text matching:** `getByText(/résolu/i)` matches all text containing "résolu" including "résolution" — use `{ exact: true }` for unique badge text.
+- **z-index layering:** Radix Select inside Radix Dialog requires `SelectContent` at `z-popover`(400) > Dialog scrim `z-modal`(300).
+- **`useCallback` stability:** `handleWarning` as no-op with `[]` deps prevents idle timer reset at 29min → 30s early trigger.
 
 ---
 
@@ -135,6 +161,7 @@ Sprint 7 delivered the complete **tenant operator console dashboard** for Ransom
 ✅ npm run lint          — 0 ESLint warnings
 ✅ npm test -- --run     — 83/83 unit tests
 ✅ npx playwright test --project=chromium — 42/42 E2E tests
+✅ npx playwright test --grep "@a11y"    — 10/10 axe-core scans (WCAG 2.2 AA)
 ✅ npm audit --audit-level=high --omit=dev — 0 production vulnerabilities
 ⚠️  npm audit --audit-level=high         — 6 dev-only (vite/esbuild/vitest) — breaking fix deferred
 ```
