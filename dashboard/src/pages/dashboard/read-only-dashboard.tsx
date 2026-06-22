@@ -36,7 +36,7 @@ export function ReadOnlyDashboard() {
           borderLeft: '4px solid var(--sys-color-feedback-success)',
         }}
       >
-        <p className="text-lg font-semibold text-success">
+        <p className="text-lg font-semibold text-text-primary">
           &#x2705; {t('dashboard.readonly.compliance', 'CONFORMITÉ ACTUELLE : 98%')}
         </p>
         <p className="mt-1 text-sm text-text-primary">
@@ -115,7 +115,7 @@ export function ReadOnlyDashboard() {
               {t('common.comingInSprint8', 'Disponible à partir de Sprint 8')}
             </p>
           </div>
-          <span className="text-xs text-text-tertiary">
+          <span className="text-xs text-text-secondary">
             {t('dashboard.readonly.soon', 'Bientôt')}
           </span>
         </div>

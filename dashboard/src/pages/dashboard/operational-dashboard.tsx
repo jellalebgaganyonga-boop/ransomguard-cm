@@ -61,7 +61,7 @@ function AgentRow({ agent }: { agent: AgentItem }) {
         {agent.hostname}
       </td>
       <td className="px-3 py-2 text-sm text-text-secondary">{agent.os_version}</td>
-      <td className="px-3 py-2 text-sm text-text-tertiary">
+      <td className="px-3 py-2 text-sm text-text-secondary">
         {agent.last_heartbeat_at
           ? formatDistanceToNow(agent.last_heartbeat_at)
           : '—'}
@@ -118,7 +118,7 @@ export function OperationalDashboard() {
       <h1 className="text-2xl font-semibold text-text-primary">
         {t('dashboard.ops.title', 'Console opérationnelle')}
       </h1>
-      <p className="mb-6 mt-1 text-xs text-text-tertiary">
+      <p className="mb-6 mt-1 text-xs text-text-secondary">
         &#x2318;K {t('dashboard.ops.commandHint', 'pour la palette de commandes')}
       </p>
 
@@ -162,7 +162,7 @@ export function OperationalDashboard() {
             <span className="text-2xl font-bold tabular-nums text-text-primary">
               {s.n}
             </span>
-            <span className="text-sm text-text-tertiary">{s.label}</span>
+            <span className="text-sm text-text-secondary">{s.label}</span>
           </div>
         ))}
       </div>
@@ -173,7 +173,7 @@ export function OperationalDashboard() {
           <h2 className="text-sm font-semibold uppercase tracking-wide text-text-secondary">
             {t('dashboard.ops.feed.title', "FLUX D\u2019ALERTES")}
           </h2>
-          <span className="flex items-center gap-1.5 text-xs text-text-tertiary">
+          <span className="flex items-center gap-1.5 text-xs text-text-secondary">
             <span
               className="size-2 animate-pulse rounded-full bg-success"
               aria-hidden="true"
@@ -216,19 +216,18 @@ export function OperationalDashboard() {
         {/* BUG-02 fix: alert_type replaces agent_hostname/module_name (don't exist in AlertListItem) */}
         <div>
           {alertList.length === 0 ? (
-            <p className="py-6 text-center text-sm text-text-tertiary">
+            <p className="py-6 text-center text-sm text-text-secondary">
               {t('common.noResults', 'Aucun résultat')}
             </p>
           ) : (
             alertList.map((alert, i) => (
-              <button
+              <div
                 key={alert.id}
-                className="flex w-full items-center gap-3 py-3 text-left transition-colors hover:bg-hover-bg"
+                className="flex w-full items-center gap-3 py-3 transition-colors hover:bg-hover-bg"
                 style={{
                   borderTop:
                     i > 0 ? '1px solid var(--sys-color-border-subtle)' : 'none',
                 }}
-                onClick={() => navigate(`/alerts/${alert.id}`)}
               >
                 <SeverityBadge severity={alert.severity.toLowerCase() as 'critical' | 'high' | 'medium' | 'low'} />
                 <div className="min-w-0 flex-1">
@@ -236,24 +235,23 @@ export function OperationalDashboard() {
                     {alert.alert_type}
                   </span>
                   {alert.mitre_technique_id && (
-                    <span className="ml-2 text-xs uppercase tracking-wide text-text-tertiary">
+                    <span className="ml-2 text-xs uppercase tracking-wide text-text-secondary">
                       {alert.mitre_technique_id}
                     </span>
                   )}
                   <p className="truncate text-sm text-text-secondary">{alert.summary}</p>
                 </div>
-                <span className="shrink-0 text-xs text-text-tertiary">
+                <span className="shrink-0 text-xs text-text-secondary">
                   {formatDistanceToNow(alert.detected_at)}
                 </span>
-                <div className="flex gap-2">
-                  <Button variant="secondary" size="sm">
-                    {t('alerts.acknowledge', 'Prendre en charge')}
-                  </Button>
-                  <Button variant="ghost" size="sm">
-                    {t('common.view', 'Voir →')}
-                  </Button>
-                </div>
-              </button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => navigate(`/alerts/${alert.id}`)}
+                >
+                  {t('common.view', 'Voir →')}
+                </Button>
+              </div>
             ))
           )}
         </div>

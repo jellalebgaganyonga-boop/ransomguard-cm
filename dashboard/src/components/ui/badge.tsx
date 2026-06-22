@@ -17,8 +17,8 @@ const badgeVariants = cva(
   {
     variants: {
       variant: {
-        critical: 'border-severity-critical-border bg-severity-critical-subtle text-severity-critical',
-        high: 'border-severity-high-border bg-severity-high-subtle text-severity-high',
+        critical: 'border-severity-critical-border bg-severity-critical-subtle text-[color:var(--ref-palette-red-40)]',
+        high: 'border-severity-high-border bg-severity-high-subtle text-[color:var(--ref-palette-orange-30)]',
         medium: 'border-severity-medium-border bg-severity-medium-subtle text-[color:var(--ref-palette-yellow-20)]',
         low: 'border-severity-low-border bg-severity-low-subtle text-severity-low',
         info: 'border-severity-info-border bg-severity-info-subtle text-severity-info',

@@ -39,7 +39,7 @@ function AgentNotFound() {
   const navigate = useNavigate();
   return (
     <div className="flex flex-col items-center justify-center gap-3 py-20 text-center">
-      <FileQuestion className="size-10 text-text-tertiary" aria-hidden="true" />
+      <FileQuestion className="size-10 text-text-secondary" aria-hidden="true" />
       <p className="font-semibold text-text-primary">
         {t('agents.detail.notFound', 'Agent non trouvé')}
       </p>
@@ -79,7 +79,7 @@ export function AgentDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="py-20 text-center text-sm text-text-tertiary">
+      <div className="py-20 text-center text-sm text-text-secondary">
         {t('common.loading', 'Chargement...')}
       </div>
     );
@@ -133,25 +133,25 @@ export function AgentDetailPage() {
         {/* Metadata grid */}
         <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
           <div>
-            <span className="text-[10px] font-semibold uppercase text-text-tertiary">
+            <span className="text-[10px] font-semibold uppercase text-text-secondary">
               {t('agents.os', 'OS')}
             </span>
             <p className="mt-0.5 text-sm text-text-primary">{agent.os_version}</p>
           </div>
           <div>
-            <span className="text-[10px] font-semibold uppercase text-text-tertiary">
+            <span className="text-[10px] font-semibold uppercase text-text-secondary">
               {t('agents.list.version', 'Version')}
             </span>
             <p className="mt-0.5 font-mono text-sm text-text-primary">{agent.agent_version}</p>
           </div>
           <div>
-            <span className="text-[10px] font-semibold uppercase text-text-tertiary">
+            <span className="text-[10px] font-semibold uppercase text-text-secondary">
               {t('agents.detail.fqdn', 'FQDN')}
             </span>
             <p className="mt-0.5 font-mono text-sm text-text-primary">{agent.fqdn}</p>
           </div>
           <div>
-            <span className="text-[10px] font-semibold uppercase text-text-tertiary">
+            <span className="text-[10px] font-semibold uppercase text-text-secondary">
               {t('agents.heartbeat', 'Heartbeat')}
             </span>
             <p className={`mt-0.5 text-sm font-semibold ${HEARTBEAT_COLOR_CLASS[hbColor]}`}>
@@ -160,7 +160,7 @@ export function AgentDetailPage() {
                 : t('agents.detail.neverReported', 'Jamais')}
             </p>
             {agent.last_heartbeat_at && (
-              <p className="text-xs text-text-tertiary">
+              <p className="text-xs text-text-secondary">
                 {formatDateTime(agent.last_heartbeat_at)}
               </p>
             )}
@@ -174,7 +174,7 @@ export function AgentDetailPage() {
               {t('agents.command.lastCommand', 'Dernière commande')}:
             </span>{' '}
             <span className="font-mono">{lastCommand.command_type}</span>{' '}
-            <span className="text-text-tertiary">
+            <span className="text-text-secondary">
               — {t(`agents.command.status.${lastCommand.status.toLowerCase()}`, lastCommand.status)}
             </span>
           </div>
@@ -198,10 +198,10 @@ export function AgentDetailPage() {
           </button>
         ))}
         {/* Sprint 8 deferred tabs */}
-        <span className="px-4 py-2 text-sm text-text-tertiary cursor-not-allowed" title={t('common.comingInSprint8', 'Available from Sprint 8')}>
+        <span className="px-4 py-2 text-sm text-text-secondary cursor-not-allowed" title={t('common.comingInSprint8', 'Available from Sprint 8')}>
           {t('agents.detail.tabHeartbeats', 'Heartbeats')}
         </span>
-        <span className="px-4 py-2 text-sm text-text-tertiary cursor-not-allowed" title={t('common.comingInSprint8', 'Available from Sprint 8')}>
+        <span className="px-4 py-2 text-sm text-text-secondary cursor-not-allowed" title={t('common.comingInSprint8', 'Available from Sprint 8')}>
           {t('agents.detail.tabConfig', 'Configuration')}
         </span>
       </div>
@@ -223,7 +223,7 @@ export function AgentDetailPage() {
               </Link>
             </div>
             {!alertsData || alertsData.items.length === 0 ? (
-              <p className="text-sm text-text-tertiary">
+              <p className="text-sm text-text-secondary">
                 {t('agents.detail.noAlerts', 'Aucune alerte pour cet agent')}
               </p>
             ) : (
@@ -240,7 +240,7 @@ export function AgentDetailPage() {
                       <span className="flex-1 truncate text-sm text-text-primary">
                         {alert.summary}
                       </span>
-                      <span className="shrink-0 text-xs text-text-tertiary">
+                      <span className="shrink-0 text-xs text-text-secondary">
                         {formatDistanceToNow(alert.detected_at)}
                       </span>
                     </Link>
@@ -257,20 +257,20 @@ export function AgentDetailPage() {
           <div className="border-b border-border-subtle px-4 py-3 text-sm font-semibold uppercase tracking-wide text-text-primary">
             {t('agents.detail.allAlerts', 'Toutes les alertes')}
             {alertsData && (
-              <span className="ml-2 font-normal text-text-tertiary">
+              <span className="ml-2 font-normal text-text-secondary">
                 ({alertsData.total})
               </span>
             )}
           </div>
           {!alertsData || alertsData.items.length === 0 ? (
-            <div className="py-12 text-center text-sm text-text-tertiary">
+            <div className="py-12 text-center text-sm text-text-secondary">
               {t('agents.detail.noAlerts', 'Aucune alerte pour cet agent')}
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-border-subtle text-left text-xs font-semibold uppercase tracking-wide text-text-tertiary">
+                  <tr className="border-b border-border-subtle text-left text-xs font-semibold uppercase tracking-wide text-text-secondary">
                     <th className="px-4 py-3">{t('alerts.list.col.detected', 'Détecté')}</th>
                     <th className="px-4 py-3">{t('alerts.list.col.severity', 'Sévérité')}</th>
                     <th className="px-4 py-3">{t('alerts.list.col.status', 'Statut')}</th>

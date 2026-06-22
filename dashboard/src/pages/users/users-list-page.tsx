@@ -86,7 +86,7 @@ export function UsersListPage() {
       {/* Table */}
       <div className="rounded-lg border border-border-subtle bg-elevated shadow-sm">
         {isLoading && (
-          <p className="py-10 text-center text-sm text-text-tertiary">
+          <p className="py-10 text-center text-sm text-text-secondary">
             {t('common.loading', 'Chargement...')}
           </p>
         )}
@@ -101,7 +101,7 @@ export function UsersListPage() {
         )}
 
         {!isLoading && !isError && users.length === 0 && (
-          <p className="py-10 text-center text-sm text-text-tertiary">
+          <p className="py-10 text-center text-sm text-text-secondary">
             {t('users.list.empty', 'Aucun utilisateur trouvé')}
           </p>
         )}
@@ -148,8 +148,8 @@ export function UsersListPage() {
                       <span
                         className={`rounded-full px-2 py-0.5 text-xs font-medium ${
                           user.is_active
-                            ? 'bg-success-subtle text-success'
-                            : 'bg-severity-high-subtle text-severity-high'
+                            ? 'bg-success-subtle text-[color:var(--ref-palette-green-30)]'
+                            : 'bg-severity-high-subtle text-[color:var(--ref-palette-orange-30)]'
                         }`}
                       >
                         {user.is_active
@@ -157,7 +157,7 @@ export function UsersListPage() {
                           : t('users.disabled', 'Désactivé')}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-text-tertiary">
+                    <td className="px-4 py-3 text-text-secondary">
                       {user.last_login_at
                         ? formatDistanceToNow(user.last_login_at)
                         : t('users.never', 'Jamais')}
@@ -215,7 +215,7 @@ export function UsersListPage() {
           >
             {t('common.previous', 'Précédent')}
           </Button>
-          <span className="text-xs text-text-tertiary">
+          <span className="text-xs text-text-secondary">
             {t('common.page', 'Page {page} / {totalPages}')
               .replace('{page}', String(currentPage))
               .replace('{totalPages}', String(totalPages))}

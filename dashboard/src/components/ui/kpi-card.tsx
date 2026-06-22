@@ -29,7 +29,7 @@ export function KPICard({ label, value, description, className }: KPICardProps) 
         {label}
       </p>
       <p className="mt-2 text-3xl font-bold tabular-nums text-text-primary">{value}</p>
-      {description && <p className="mt-1 text-xs text-text-tertiary">{description}</p>}
+      {description && <p className="mt-1 text-xs text-text-secondary">{description}</p>}
     </div>
   );
 }

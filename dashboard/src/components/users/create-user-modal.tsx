@@ -81,11 +81,12 @@ export function CreateUserModal({ onClose, onSuccess }: CreateUserModalProps) {
         <form onSubmit={handleSubmit(onSubmit)} noValidate>
           {/* Email */}
           <div className="mb-4">
-            <label className="mb-1 block text-xs font-medium text-text-secondary">
+            <label htmlFor="create-email" className="mb-1 block text-xs font-medium text-text-secondary">
               {t('users.email', 'Email')}
             </label>
             <input
               {...register('email')}
+              id="create-email"
               type="email"
               autoComplete="off"
               className="w-full rounded-md border border-border-default bg-surface px-3 py-2 text-sm text-text-primary placeholder-text-placeholder focus:border-primary focus:outline-none"
@@ -98,11 +99,12 @@ export function CreateUserModal({ onClose, onSuccess }: CreateUserModalProps) {
 
           {/* Full name */}
           <div className="mb-4">
-            <label className="mb-1 block text-xs font-medium text-text-secondary">
+            <label htmlFor="create-full-name" className="mb-1 block text-xs font-medium text-text-secondary">
               {t('users.fullName', 'Nom complet')}
             </label>
             <input
               {...register('full_name')}
+              id="create-full-name"
               type="text"
               autoComplete="off"
               className="w-full rounded-md border border-border-default bg-surface px-3 py-2 text-sm text-text-primary placeholder-text-placeholder focus:border-primary focus:outline-none"
@@ -115,16 +117,17 @@ export function CreateUserModal({ onClose, onSuccess }: CreateUserModalProps) {
 
           {/* Password */}
           <div className="mb-4">
-            <label className="mb-1 block text-xs font-medium text-text-secondary">
+            <label htmlFor="create-password" className="mb-1 block text-xs font-medium text-text-secondary">
               {t('users.createModal.password', 'Mot de passe provisoire')}
             </label>
             <input
               {...register('password')}
+              id="create-password"
               type="password"
               autoComplete="new-password"
               className="w-full rounded-md border border-border-default bg-surface px-3 py-2 text-sm text-text-primary placeholder-text-placeholder focus:border-primary focus:outline-none"
             />
-            <p className="mt-1 text-xs text-text-tertiary">
+            <p className="mt-1 text-xs text-text-secondary">
               {t('users.createModal.passwordHint', '8 caractères minimum')}
             </p>
             {errors.password && (

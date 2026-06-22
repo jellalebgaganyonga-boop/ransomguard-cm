@@ -124,8 +124,8 @@ export const AlertDetailSchema = z.object({
   // Optional fields — not yet exposed by backend:
   confidence_score: z.number().min(0).max(100).nullable().optional(),
   raw_payload: z.record(z.string(), z.unknown()).nullable().optional(),
-  artifacts: z.array(AlertArtifactSchema).optional(),
-  status_history: z.array(AlertStatusChangeSchema).optional(),
+  artifacts: z.array(AlertArtifactSchema).nullable().optional(),
+  status_history: z.array(AlertStatusChangeSchema).nullable().optional(),
 });
 export type AlertDetail = z.infer<typeof AlertDetailSchema>;
 

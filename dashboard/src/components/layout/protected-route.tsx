@@ -16,7 +16,6 @@ import { useIdleTimeout } from '@/hooks/use-idle-timeout';
 import { useLogout } from '@/hooks/use-auth';
 import { SessionExpiredModal } from '@/components/auth/session-expired-modal';
 import { AppShellLayout } from './app-shell-layout';
-import { ForbiddenPage } from '@/pages/forbidden-page';
 import { NAV_ITEMS } from '@/config/navigation';
 
 // ── Full-page loader ───────────────────────────────────────
@@ -57,20 +56,14 @@ function AuthenticatedRoute() {
   const { data: me, isLoading, isError } = useMe();
   const logoutMutation = useLogout();
   const [showExpiredModal, setShowExpiredModal] = useState(false);
-  const [showWarning, setShowWarning] = useState(false);
 
   // AC1.2.3: idle callback — show modal then logout
   const handleIdle = useCallback(() => {
     setShowExpiredModal(true);
-    // Logout is triggered when user dismisses modal (or auto after 5s)
   }, []);
 
-  const handleWarning = useCallback(() => {
-    setShowWarning(true);
-    // Optional: show a less-intrusive banner
-    // For Sprint 7: suppress — modal at expiry is sufficient
-    void showWarning; // suppress unused warning
-  }, [showWarning]);
+  // Sprint 7: warning banner deferred — no-op to keep stable reference
+  const handleWarning = useCallback(() => {}, []);
 
   const handleExpiredDismiss = useCallback(() => {
     setShowExpiredModal(false);
@@ -99,6 +92,11 @@ function AuthenticatedRoute() {
   );
   const isRoleForbidden = matchedItem && !matchedItem.roles.includes(role);
 
+  // Redirect to /dashboard when the current route is not allowed for this role
+  if (isRoleForbidden) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
   return (
     <>
       {/* AC1.2.3: session expired overlay */}
@@ -107,7 +105,7 @@ function AuthenticatedRoute() {
       )}
 
       <AppShellLayout me={me}>
-        {isRoleForbidden ? <ForbiddenPage /> : <Outlet />}
+        <Outlet />
       </AppShellLayout>
     </>
   );

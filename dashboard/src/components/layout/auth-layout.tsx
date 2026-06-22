@@ -37,7 +37,7 @@ export function AuthLayout() {
 
         <Outlet />
 
-        <div className="mt-6 flex items-center justify-between border-t border-border-subtle pt-4 text-xs text-text-tertiary">
+        <div className="mt-6 flex items-center justify-between border-t border-border-subtle pt-4 text-xs text-text-secondary">
           <span>Version {import.meta.env.VITE_APP_VERSION}</span>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

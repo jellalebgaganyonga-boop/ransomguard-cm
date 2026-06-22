@@ -152,7 +152,7 @@ export function AlertsListPage() {
           <tbody>
             {isLoading && (
               <tr>
-                <td colSpan={6} className="px-3 py-8 text-center text-sm text-text-tertiary">
+                <td colSpan={6} className="px-3 py-8 text-center text-sm text-text-secondary">
                   {t('common.loading', 'Chargement...')}
                 </td>
               </tr>
@@ -167,7 +167,7 @@ export function AlertsListPage() {
                     <p className="font-semibold text-text-primary">
                       {t('alerts.list.empty.title', 'Aucune alerte ne correspond à vos filtres')}
                     </p>
-                    <p className="text-sm text-text-tertiary">
+                    <p className="text-sm text-text-secondary">
                       {t(
                         'alerts.list.empty.body',
                         "Essayez d'élargir votre recherche ou de réinitialiser les filtres."
@@ -193,7 +193,7 @@ export function AlertsListPage() {
                     className="cursor-pointer border-t border-border-subtle hover:bg-hover-bg"
                     onClick={() => navigate(`/alerts/${alert.id}`)}
                   >
-                    <td className="px-3 py-2.5 font-mono text-xs text-text-tertiary">
+                    <td className="px-3 py-2.5 font-mono text-xs text-text-secondary">
                       {alert.id.slice(0, 8)}
                     </td>
                     <td className="px-3 py-2.5 text-text-secondary">
@@ -208,7 +208,7 @@ export function AlertsListPage() {
                     <td className="px-3 py-2.5 font-mono text-xs text-text-primary">
                       {alert.agent_id.slice(0, 12)}
                     </td>
-                    <td className="px-3 py-2.5 text-xs uppercase text-text-tertiary">
+                    <td className="px-3 py-2.5 text-xs uppercase text-text-secondary">
                       {alert.alert_type}
                     </td>
                     <td

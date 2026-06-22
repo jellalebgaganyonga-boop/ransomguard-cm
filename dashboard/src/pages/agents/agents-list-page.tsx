@@ -70,7 +70,7 @@ export function AgentsListPage() {
           <h1 className="text-lg font-semibold text-text-primary">
             {t('nav.agents', 'Agents')}
           </h1>
-          <p className="text-sm text-text-tertiary">
+          <p className="text-sm text-text-secondary">
             {total} {t('agents.list.totalEndpoints', 'endpoints enregistrés')}
           </p>
         </div>
@@ -110,7 +110,7 @@ export function AgentsListPage() {
       {/* Table */}
       <div className="rounded-lg border border-border-subtle bg-elevated shadow-sm">
         {isLoading ? (
-          <div className="py-20 text-center text-sm text-text-tertiary">
+          <div className="py-20 text-center text-sm text-text-secondary">
             {t('common.loading', 'Chargement...')}
           </div>
         ) : isError ? (
@@ -128,7 +128,7 @@ export function AgentsListPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-border-subtle text-left text-xs font-semibold uppercase tracking-wide text-text-tertiary">
+                <tr className="border-b border-border-subtle text-left text-xs font-semibold uppercase tracking-wide text-text-secondary">
                   <th className="px-4 py-3">{t('agents.hostname', 'Hôte')}</th>
                   <th className="px-4 py-3">{t('agents.os', 'OS')}</th>
                   <th className="px-4 py-3">{t('agents.list.version', 'Version')}</th>
@@ -146,7 +146,7 @@ export function AgentsListPage() {
                         <div className="font-mono font-semibold text-text-primary">
                           {agent.hostname}
                         </div>
-                        <div className="text-xs text-text-tertiary">{agent.fqdn}</div>
+                        <div className="text-xs text-text-secondary">{agent.fqdn}</div>
                       </td>
                       <td className="px-4 py-3 text-text-secondary">{agent.os_version}</td>
                       <td className="px-4 py-3 font-mono text-xs text-text-secondary">
@@ -158,7 +158,7 @@ export function AgentsListPage() {
                             {formatDistanceToNow(agent.last_heartbeat_at)}
                           </span>
                         ) : (
-                          <span className="text-text-tertiary">—</span>
+                          <span className="text-text-secondary">—</span>
                         )}
                       </td>
                       <td className="px-4 py-3">
@@ -219,7 +219,7 @@ export function AgentsListPage() {
 
       {/* Last refresh hint */}
       {dataUpdatedAt > 0 && (
-        <p className="mt-2 text-right text-xs text-text-tertiary">
+        <p className="mt-2 text-right text-xs text-text-secondary">
           {t('agents.list.autoRefresh', 'Actualisation auto toutes les 30 s')}
         </p>
       )}

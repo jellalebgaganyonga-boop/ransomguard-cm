@@ -33,7 +33,7 @@ function AlertNotFound() {
   const navigate = useNavigate();
   return (
     <div className="flex flex-col items-center justify-center gap-3 py-20 text-center">
-      <FileQuestion className="size-10 text-text-tertiary" aria-hidden="true" />
+      <FileQuestion className="size-10 text-text-secondary" aria-hidden="true" />
       <p className="font-semibold text-text-primary">
         {t('alerts.notFound', 'Alerte non trouvée')}
       </p>
@@ -66,7 +66,7 @@ export function AlertDetailPage() {
     isError && (error as { response?: { status?: number } })?.response?.status === 404;
 
   if (isLoading) {
-    return <div className="py-20 text-center text-sm text-text-tertiary">{t('common.loading')}</div>;
+    return <div className="py-20 text-center text-sm text-text-secondary">{t('common.loading')}</div>;
   }
 
   if (is404 || !alert) {
@@ -92,7 +92,7 @@ export function AlertDetailPage() {
       </button>
 
       {/* AC3.2.1: Header */}
-      <div className="mb-1 flex items-center gap-1.5 font-mono text-xs text-text-tertiary">
+      <div className="mb-1 flex items-center gap-1.5 font-mono text-xs text-text-secondary">
         <span>{t('alerts.id', 'Alerte')} #{alert.id}</span>
         <button onClick={handleCopyId} aria-label={t('alerts.copyId', "Copier l'ID")}>
           <Copy className="size-3" />
@@ -105,14 +105,14 @@ export function AlertDetailPage() {
         <span className="rounded bg-surface-subtle px-2 py-0.5 text-xs font-semibold uppercase text-text-secondary">
           {t(`status.${alert.status.toLowerCase()}`, alert.status)}
         </span>
-        <span className="ml-auto text-xs text-text-tertiary">
+        <span className="ml-auto text-xs text-text-secondary">
           {t('alerts.detectedAt', 'Détecté')} {formatDistanceToNow(alert.detected_at)}
         </span>
       </div>
 
       <div className="mb-6 grid grid-cols-2 gap-4">
         <div>
-          <span className="text-[10px] font-semibold uppercase text-text-tertiary">
+          <span className="text-[10px] font-semibold uppercase text-text-secondary">
             {t('alerts.agent', 'Agent')}
           </span>
           <p className="mt-0.5">
@@ -125,7 +125,7 @@ export function AlertDetailPage() {
           </p>
         </div>
         <div>
-          <span className="text-[10px] font-semibold uppercase text-text-tertiary">
+          <span className="text-[10px] font-semibold uppercase text-text-secondary">
             {t('alerts.module', 'Type')}
           </span>
           <p className="mt-0.5 font-semibold text-text-primary">{alert.alert_type}</p>
@@ -191,7 +191,7 @@ export function AlertDetailPage() {
 
         {alert.confidence_score != null && (
           <div className="mb-6 flex items-center gap-3">
-            <span className="text-xs text-text-tertiary">
+            <span className="text-xs text-text-secondary">
               {t('alerts.confidence', 'Confiance de détection')}: {alert.confidence_score}%
             </span>
             <div className="h-1.5 w-40 overflow-hidden rounded-full bg-surface-muted">
@@ -212,7 +212,7 @@ export function AlertDetailPage() {
             <ul className="space-y-1">
               {(alert.artifacts ?? []).map((a, i) => (
                 <li key={i} className="font-mono text-xs text-text-secondary">
-                  <span className="text-text-tertiary">{a.type}:</span> {a.value}
+                  <span className="text-text-secondary">{a.type}:</span> {a.value}
                 </li>
               ))}
             </ul>
@@ -258,13 +258,13 @@ export function AlertDetailPage() {
                       })
                     : t('alerts.created', 'Alerte créée')}
                   {change.actor_name && (
-                    <span className="text-text-tertiary"> — {change.actor_name}</span>
+                    <span className="text-text-secondary"> — {change.actor_name}</span>
                   )}
                 </p>
                 {change.note && (
                   <p className="mt-1 text-xs italic text-text-secondary">"{change.note}"</p>
                 )}
-                <p className="mt-0.5 text-xs text-text-tertiary">
+                <p className="mt-0.5 text-xs text-text-secondary">
                   {formatDateTime(change.changed_at)}
                 </p>
               </div>

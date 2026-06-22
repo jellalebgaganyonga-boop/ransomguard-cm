@@ -80,7 +80,7 @@ function StatusCard({ critical24h, alerts24h }: { critical24h: number; alerts24h
       role="status"
     >
       <Shield className="size-6 shrink-0 text-success" aria-hidden="true" />
-      <p className="font-semibold text-success">
+      <p className="font-semibold text-text-primary">
         {t('dashboard.exec.allNormal', 'Tous les systèmes normaux')}
       </p>
     </div>
@@ -107,13 +107,13 @@ function AlertRow({ alert }: { alert: AlertListItem }) {
           {alert.alert_type}
         </span>
         {alert.mitre_technique_id && (
-          <span className="ml-2 text-xs uppercase tracking-wide text-text-tertiary">
+          <span className="ml-2 text-xs uppercase tracking-wide text-text-secondary">
             {alert.mitre_technique_id}
           </span>
         )}
         <p className="truncate text-sm text-text-secondary">{alert.summary}</p>
       </div>
-      <span className="shrink-0 text-xs text-text-tertiary">
+      <span className="shrink-0 text-xs text-text-secondary">
         {formatDistanceToNow(alert.detected_at)}
       </span>
     </button>
@@ -192,7 +192,7 @@ export function ExecutiveDashboard() {
           </button>
         </div>
         {alerts.length === 0 ? (
-          <p className="py-4 text-center text-sm text-text-tertiary">
+          <p className="py-4 text-center text-sm text-text-secondary">
             {t('dashboard.exec.noAlerts', 'Aucune alerte récente')}
           </p>
         ) : (
@@ -233,9 +233,9 @@ export function ExecutiveDashboard() {
           <p className="mb-2 text-sm text-text-primary">
             {t('dashboard.exec.anticLaw', 'Loi 2024/017 :')}
             {' '}
-            <span className="font-semibold text-success">&#x2705; Conforme</span>
+            <span className="font-semibold text-text-primary">&#x2705; Conforme</span>
           </p>
-          <p className="mb-1 text-xs text-text-tertiary">
+          <p className="mb-1 text-xs text-text-secondary">
             {t('dashboard.exec.nextAudit', 'Prochain audit ANTIC : 15 septembre 2026')}
           </p>
           <Button variant="secondary" className="mt-3 w-full justify-start" disabled>

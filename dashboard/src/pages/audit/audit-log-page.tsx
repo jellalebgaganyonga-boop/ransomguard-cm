@@ -28,7 +28,7 @@ import { useMe } from '@/hooks/use-me';
 import { useAuditLogs } from '@/hooks/use-audit';
 import { formatDateTime } from '@/lib/format-date';
 import { detectSequenceGaps } from '@/lib/audit-integrity';
-import type { AuditLogItem } from '@/api/audit';
+import type { AuditLogItem, AuditLogParams } from '@/api/audit';
 
 // ── Pagination ──────────────────────────────────────────────
 const PAGE_SIZE = 50;
@@ -79,16 +79,10 @@ export function AuditLogPage() {
   const [pendingFilters, setPendingFilters] = useState<Filters>(EMPTY_FILTERS);
   const [appliedFilters, setAppliedFilters] = useState<Filters>(EMPTY_FILTERS);
 
-  // AC6.2.1: RBAC — security_analyst is NOT allowed (backend 403)
-  // tenant_admin and read_only_auditor can access.
-  const role = me?.roles[0];
-  if (me && role === 'security_analyst') {
-    navigate('/dashboard', { replace: true });
-    return null;
-  }
-
-  const queryParams = useMemo((): import('@/api/audit').AuditLogParams => {
-    const p: import('@/api/audit').AuditLogParams = { offset, limit: PAGE_SIZE };
+  // All hooks must be called unconditionally (React rules of hooks).
+  // RBAC redirect is after all hooks below.
+  const queryParams = useMemo((): AuditLogParams => {
+    const p: AuditLogParams = { offset, limit: PAGE_SIZE };
     if (appliedFilters.agent_id) p.agent_id = appliedFilters.agent_id;
     if (appliedFilters.received_after) p.received_after = appliedFilters.received_after;
     if (appliedFilters.received_before) p.received_before = appliedFilters.received_before;
@@ -97,13 +91,27 @@ export function AuditLogPage() {
 
   const { data, isLoading, isError, refetch } = useAuditLogs(queryParams);
 
-  const items = data?.items ?? [];
+  const items = useMemo(() => data?.items ?? [], [data]);
   const gapFlags = detectSequenceGaps(items);
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const currentPage = Math.floor(offset / PAGE_SIZE) + 1;
 
   const hasActiveFilters = Object.values(appliedFilters).some(Boolean);
+
+  const handleExportCsv = useCallback(() => {
+    if (items.length === 0) return;
+    const ts = new Date().toISOString().slice(0, 10);
+    downloadCsv(items, `audit-logs-${ts}.csv`);
+  }, [items]);
+
+  // AC6.2.1: RBAC — security_analyst is NOT allowed (backend 403).
+  // tenant_admin and read_only_auditor can access.
+  const role = me?.roles[0];
+  if (me && role === 'security_analyst') {
+    navigate('/dashboard', { replace: true });
+    return null;
+  }
 
   function applyFilters() {
     setOffset(0);
@@ -115,12 +123,6 @@ export function AuditLogPage() {
     setAppliedFilters(EMPTY_FILTERS);
     setOffset(0);
   }
-
-  const handleExportCsv = useCallback(() => {
-    if (items.length === 0) return;
-    const ts = new Date().toISOString().slice(0, 10);
-    downloadCsv(items, `audit-logs-${ts}.csv`);
-  }, [items]);
 
   return (
     <div>
@@ -134,7 +136,7 @@ export function AuditLogPage() {
             {t('audit.subtitle', 'Intégrité du journal d\'audit — chaîne Ed25519 par agent')}
           </p>
           {total > 0 && (
-            <p className="mt-0.5 text-xs text-text-tertiary">
+            <p className="mt-0.5 text-xs text-text-secondary">
               {total} {t('audit.totalEntries', 'entrées')}
             </p>
           )}
@@ -154,23 +156,25 @@ export function AuditLogPage() {
       {/* ── Filters ── */}
       <div className="mb-4 flex flex-wrap items-end gap-3 rounded-lg border border-border-subtle bg-elevated p-3">
         <div className="flex-1 min-w-[200px]">
-          <label className="mb-1 block text-xs font-medium text-text-secondary">
+          <label htmlFor="audit-filter-agent-id" className="mb-1 block text-xs font-medium text-text-secondary">
             {t('audit.filterAgentId', 'ID Agent')}
           </label>
           <input
+            id="audit-filter-agent-id"
             type="text"
             value={pendingFilters.agent_id}
             onChange={(e) => setPendingFilters((f) => ({ ...f, agent_id: e.target.value }))}
             placeholder={t('audit.filterAgentIdPlaceholder', 'UUID agent...')}
-            className="w-full rounded-md border border-border-default bg-surface px-3 py-1.5 text-sm text-text-primary placeholder:text-text-tertiary focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            className="w-full rounded-md border border-border-default bg-surface px-3 py-1.5 text-sm text-text-primary placeholder:text-text-secondary focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
           />
         </div>
 
         <div className="flex-1 min-w-[160px]">
-          <label className="mb-1 block text-xs font-medium text-text-secondary">
+          <label htmlFor="audit-filter-after" className="mb-1 block text-xs font-medium text-text-secondary">
             {t('audit.filterAfter', 'Reçu après')}
           </label>
           <input
+            id="audit-filter-after"
             type="datetime-local"
             value={pendingFilters.received_after}
             onChange={(e) => setPendingFilters((f) => ({ ...f, received_after: e.target.value }))}
@@ -179,10 +183,11 @@ export function AuditLogPage() {
         </div>
 
         <div className="flex-1 min-w-[160px]">
-          <label className="mb-1 block text-xs font-medium text-text-secondary">
+          <label htmlFor="audit-filter-before" className="mb-1 block text-xs font-medium text-text-secondary">
             {t('audit.filterBefore', 'Reçu avant')}
           </label>
           <input
+            id="audit-filter-before"
             type="datetime-local"
             value={pendingFilters.received_before}
             onChange={(e) => setPendingFilters((f) => ({ ...f, received_before: e.target.value }))}
@@ -205,7 +210,7 @@ export function AuditLogPage() {
       {/* ── Table ── */}
       <div className="rounded-lg border border-border-subtle bg-elevated shadow-sm">
         {isLoading && (
-          <p className="py-10 text-center text-sm text-text-tertiary">
+          <p className="py-10 text-center text-sm text-text-secondary">
             {t('common.loading', 'Chargement...')}
           </p>
         )}
@@ -220,7 +225,7 @@ export function AuditLogPage() {
         )}
 
         {!isLoading && !isError && items.length === 0 && (
-          <p className="py-10 text-center text-sm text-text-tertiary">
+          <p className="py-10 text-center text-sm text-text-secondary">
             {t('audit.empty', 'Aucune entrée trouvée')}
           </p>
         )}
@@ -291,7 +296,7 @@ export function AuditLogPage() {
                         </span>
                       </td>
 
-                      <td className="px-4 py-3 text-text-tertiary">
+                      <td className="px-4 py-3 text-text-secondary">
                         {formatDateTime(entry.received_at)}
                       </td>
                     </tr>,
@@ -314,7 +319,7 @@ export function AuditLogPage() {
           >
             {t('common.previous', 'Précédent')}
           </Button>
-          <span className="text-xs text-text-tertiary">
+          <span className="text-xs text-text-secondary">
             {t('common.page', 'Page {page} / {totalPages}')
               .replace('{page}', String(currentPage))
               .replace('{totalPages}', String(totalPages))}
