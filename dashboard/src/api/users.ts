@@ -25,7 +25,7 @@ export const UserItemSchema = z.object({
   email: z.string(),
   full_name: z.string(),
   is_active: z.boolean(),
-  last_login_at: z.string().datetime({ offset: true }).nullable(),
+  last_login_at: z.string().nullable(),
 });
 export type UserItem = z.infer<typeof UserItemSchema>;
 

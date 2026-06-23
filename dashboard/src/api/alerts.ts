@@ -43,8 +43,8 @@ export type ResolutionCategory = z.infer<typeof ResolutionCategorySchema>;
 
 export const AlertListItemSchema = z.object({
   id: z.string(),
-  detected_at: z.string().datetime({ offset: true }),
-  ingested_at: z.string().datetime({ offset: true }),
+  detected_at: z.string(),
+  ingested_at: z.string(),
   severity: AlertSeveritySchema,
   status: AlertStatusSchema,
   agent_id: z.string(),
@@ -104,7 +104,7 @@ export type AlertArtifact = z.infer<typeof AlertArtifactSchema>;
 export const AlertStatusChangeSchema = z.object({
   from_status: AlertStatusSchema.nullable(),
   to_status: AlertStatusSchema,
-  changed_at: z.string().datetime({ offset: true }),
+  changed_at: z.string(),
   actor_user_id: z.string().nullable(),
   actor_name: z.string().nullable(),
   note: z.string().nullable(),
@@ -113,8 +113,8 @@ export type AlertStatusChange = z.infer<typeof AlertStatusChangeSchema>;
 
 export const AlertDetailSchema = z.object({
   id: z.string(),
-  detected_at: z.string().datetime({ offset: true }),
-  ingested_at: z.string().datetime({ offset: true }),
+  detected_at: z.string(),
+  ingested_at: z.string(),
   severity: AlertSeveritySchema,
   status: AlertStatusSchema,
   agent_id: z.string(),

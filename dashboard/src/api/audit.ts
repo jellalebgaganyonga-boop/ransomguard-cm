@@ -34,7 +34,7 @@ export const AuditLogItemSchema = z.object({
   agent_id: z.string(),
   sequence_number: z.number().int().nonnegative(),
   signing_key_id: z.string(),
-  received_at: z.string().datetime({ offset: true }),
+  received_at: z.string(),
 });
 export type AuditLogItem = z.infer<typeof AuditLogItemSchema>;
 

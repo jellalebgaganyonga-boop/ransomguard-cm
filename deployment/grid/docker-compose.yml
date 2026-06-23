@@ -88,6 +88,7 @@ services:
       - ./pki/server.key:/etc/nginx/ssl/server.key:ro
       - ./pki/ca.crt:/etc/nginx/ssl/ca.crt:ro
       - ./pki/dhparam.pem:/etc/nginx/ssl/dhparam.pem:ro
+      - ../../dashboard/dist:/usr/share/nginx/html:ro
     networks:
       - grid_public
     depends_on:

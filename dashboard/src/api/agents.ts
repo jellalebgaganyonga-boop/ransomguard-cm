@@ -36,7 +36,7 @@ export const AgentItemSchema = z.object({
   os_version: z.string(),
   agent_version: z.string(),
   status: AgentStatusSchema,
-  last_heartbeat_at: z.string().datetime({ offset: true }).nullable(),
+  last_heartbeat_at: z.string().nullable(),
 });
 export type AgentItem = z.infer<typeof AgentItemSchema>;
 
@@ -88,7 +88,7 @@ export const CommandItemSchema = z.object({
   agent_id: z.string(),
   command_type: z.string(),
   status: CommandStatusSchema,
-  issued_at: z.string().datetime({ offset: true }),
+  issued_at: z.string(),
 });
 export type CommandItem = z.infer<typeof CommandItemSchema>;
 

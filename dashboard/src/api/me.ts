@@ -40,7 +40,7 @@ export const MeResponseSchema = z.object({
   // (graceful degradation -> falls back to read-only dashboard, see
   // use-me.ts `primaryRole` resolution).
   roles: z.array(z.string()).min(1),
-  last_login_at: z.string().datetime({ offset: true }).nullable(),
+  last_login_at: z.string().nullable(),
   preferences: UserPreferencesSchema,
 });
 
