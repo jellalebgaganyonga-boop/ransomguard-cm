@@ -135,92 +135,8 @@ try
         }
     });
 
-    // Bind configuration section to strongly-typed options
-    builder.Services.Configure<AgentConfiguration>(
-        builder.Configuration.GetSection(AgentConfiguration.SectionName));
-
-    // Register FluentValidation validator
-    builder.Services.AddSingleton<IValidator<AgentConfiguration>, AgentConfigurationValidator>();
-
-    // Register SQLite DbContext with SQLCipher encryption (CWE-311)
-    var dbConnectionString = builder.Configuration
-        .GetSection("Agent:Database:ConnectionString")
-        .Value ?? "Data Source=agent.db";
-    dbConnectionString = EnvironmentVariableResolver.ResolvePath(dbConnectionString);
-
-    // Initialize SQLCipher provider
-    SQLitePCL.Batteries_V2.Init();
-
-    // Database encryption key via DPAPI
-    string keyDir = EnvironmentVariableResolver.ResolvePath(
-        builder.Configuration.GetSection("Agent:Database:KeyDirectory").Value
-        ?? "%ProgramData%\\RansomGuard-CM\\keys");
-    var dbKeyManager = new DatabaseKeyManager(keyDir,
-        Microsoft.Extensions.Logging.Abstractions.NullLogger<DatabaseKeyManager>.Instance);
-    string dbKey = dbKeyManager.GetOrCreateKey();
-
-    // Append Password to connection string for SQLCipher
-    string encryptedConnectionString = dbConnectionString.Contains("Password=")
-        ? dbConnectionString
-        : $"{dbConnectionString};Password={dbKey}";
-
-    builder.Services.AddDbContext<AgentDbContext>(options =>
-        options.UseSqlite(encryptedConnectionString));
-
-    // Register file event deduplicator
-    var deduplicationWindowMs = builder.Configuration
-        .GetSection("Agent:Detection:DeduplicationWindowMs")
-        .Get<int>();
-    if (deduplicationWindowMs <= 0) deduplicationWindowMs = 500;
-    builder.Services.AddSingleton<IFileEventDeduplicator>(new FileEventDeduplicator(deduplicationWindowMs));
-
-    // Register Ed25519 audit log signer
-    var auditLogSigner = new AuditLogSigner(keyDir,
-        Microsoft.Extensions.Logging.Abstractions.NullLogger<AuditLogSigner>.Instance);
-    builder.Services.AddSingleton(auditLogSigner);
-
-    // Register repositories
-    builder.Services.AddScoped<IDetectionEventRepository, DetectionEventRepository>();
-    builder.Services.AddScoped<IAlertRepository, AlertRepository>();
-    builder.Services.AddScoped<IAuditLogRepository>(sp =>
-        new AuditLogRepository(sp.GetRequiredService<AgentDbContext>(), auditLogSigner));
-
-    // Register SENTINEL services
-    builder.Services.AddScoped<ISentinelCanaryRepository, SentinelCanaryRepository>();
-    builder.Services.AddScoped<ICanaryFileService, CanaryFileService>();
-    builder.Services.AddSingleton<RestartManagerHelper>();
-
-    // Register ENTROPY services
-    builder.Services.AddSingleton<IEntropyCalculator, EntropyCalculator>();
-
-    // Register GENEALOGY services
-    builder.Services.AddSingleton<IProcessSnapshotService, ProcessSnapshotService>();
-    builder.Services.AddScoped<IGenealogyEnricher, GenealogyEnricher>();
-
-    // Register rate limiting
-    builder.Services.AddSingleton<RateLimiterFactory>();
-
-    // Register USB GUARD services
-    builder.Services.AddScoped<IUsbWhitelistService>(sp =>
-        new UsbWhitelistService(
-            sp.GetRequiredService<AgentDbContext>(),
-            sp.GetRequiredService<ILogger<UsbWhitelistService>>(),
-            System.Text.Encoding.UTF8.GetBytes(dbKey[..32])));
-    builder.Services.AddSingleton<IMagicByteValidator, MagicByteValidator>();
-    builder.Services.AddSingleton<AutorunInfDetector>();
-    builder.Services.AddSingleton<SuspiciousLnkDetector>();
-    builder.Services.AddSingleton<ArchiveScanner>();
-    builder.Services.AddSingleton<UsbEntropyScanner>();
-    builder.Services.AddScoped<IUsbContentScanner, UsbContentScanner>();
-    builder.Services.AddSingleton<BootableUsbDetector>();
-    builder.Services.AddScoped<IUsbActionEngine, UsbActionEngine>();
-    builder.Services.AddSingleton<IWmiEventSubscriber, WmiEventSubscriber>();
-
-    // Register anti-tampering services
-    builder.Services.AddSingleton<IAgentProtector, AgentProtector>();
-    builder.Services.AddSingleton<RegistryWatcher>();
-    builder.Services.AddSingleton<DebuggerDetector>();
-    builder.Services.AddSingleton<CodeSectionIntegrity>();
+    // All agent services via shared registration (enables IHost-based testing)
+    ServiceRegistration.ConfigureServices(builder.Services, builder.Configuration);
 
     // SENTINEL deployment runs before Worker to ensure canaries exist
     builder.Services.AddHostedService<SentinelDeploymentService>();
@@ -587,3 +503,4 @@ static void ValidateConfiguration(IServiceProvider services)
             $"Agent configuration is invalid. The service cannot start.{Environment.NewLine}{errors}");
     }
 }
+

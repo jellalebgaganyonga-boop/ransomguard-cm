@@ -6,6 +6,7 @@ using RansomGuard.Agent.Core.Configuration;
 using RansomGuard.Agent.Core.Detection;
 using RansomGuard.Agent.Core.Detection.Genealogy;
 using RansomGuard.Agent.Core.Detection.Sentinel;
+using RansomGuard.Agent.Core.Communication;
 using RansomGuard.Agent.Core.Persistence.Entities;
 using RansomGuard.Agent.Core.Persistence.Repositories;
 
@@ -24,6 +25,7 @@ public sealed class SentinelMonitor : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IFileEventDeduplicator _deduplicator;
     private readonly RestartManagerHelper _restartManager;
+    private readonly IAlertForwardingQueue _alertQueue;
     private readonly AgentConfiguration _config;
     private readonly List<FileSystemWatcher> _watchers = [];
     private readonly Channel<CanaryFileEvent> _eventChannel;
@@ -37,13 +39,15 @@ public sealed class SentinelMonitor : BackgroundService
         IOptionsMonitor<AgentConfiguration> config,
         IServiceScopeFactory scopeFactory,
         IFileEventDeduplicator deduplicator,
-        RestartManagerHelper restartManager)
+        RestartManagerHelper restartManager,
+        IAlertForwardingQueue alertQueue)
     {
         _logger = logger;
         _config = config.CurrentValue;
         _scopeFactory = scopeFactory;
         _deduplicator = deduplicator;
         _restartManager = restartManager;
+        _alertQueue = alertQueue;
         _eventChannel = Channel.CreateBounded<CanaryFileEvent>(
             new BoundedChannelOptions(EventChannelCapacity)
             {
@@ -272,6 +276,9 @@ public sealed class SentinelMonitor : BackgroundService
             "SENTINEL ALERT: {AlertType} on canary {CanaryPath} | Process: {ProcessName} (PID: {ProcessId}) | Severity: {Severity}",
             alertType, canary.FilePath, attribution?.ProcessName ?? "unknown",
             attribution?.ProcessId.ToString() ?? "N/A", alert.Severity);
+
+        // Forward to GRID
+        _alertQueue.TryEnqueue(AlertMapper.FromCanaryAlert(alert));
 
         // Fire-and-forget genealogy enrichment for process attribution
         _ = Task.Run(async () =>

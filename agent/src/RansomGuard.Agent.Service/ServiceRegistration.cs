@@ -16,6 +16,7 @@ using RansomGuard.Agent.Core.Detection.ExfilWatch.Rules;
 using RansomGuard.Agent.Core.Detection.IndicatorRemoval;
 using RansomGuard.Agent.Core.Detection.ThreatIntel;
 using RansomGuard.Agent.Core.Detection.UsbGuard;
+using RansomGuard.Agent.Core.Communication;
 using RansomGuard.Agent.Core.Detection.IronClad;
 using RansomGuard.Agent.Core.Detection.IronClad.Actions;
 using RansomGuard.Agent.Core.Detection.IronClad.Communication;
@@ -103,6 +104,7 @@ public static class ServiceRegistration
 
         // EXFIL WATCH — Network baseline
         services.AddScoped<INetworkBaselineService, NetworkBaselineService>();
+        services.AddSingleton<INetworkActivityMonitor, EtwNetworkCapture>();
 
         // EXFIL WATCH — Threat intelligence (loaded from embedded JSON data)
         services.AddSingleton<ThreatIntelDataLoader>();
@@ -155,6 +157,9 @@ public static class ServiceRegistration
         // IRONCLAD
         AddIronCladServices(services, configuration);
 
+        // GRID server communication
+        AddGridServices(services);
+
         // Anti-tampering
         services.AddSingleton<IAgentProtector, AgentProtector>();
         services.AddSingleton<RegistryWatcher>();
@@ -196,6 +201,44 @@ public static class ServiceRegistration
     }
 
     /// <summary>
+    /// Registers GRID server communication services (HttpClient, enrollment, heartbeat, command polling).
+    /// </summary>
+    public static void AddGridServices(IServiceCollection services)
+    {
+        services.AddHttpClient(GridApiClient.HttpClientName, client =>
+        {
+            client.DefaultRequestHeaders.Add("Accept", "application/json");
+        }).ConfigurePrimaryHttpMessageHandler(sp =>
+        {
+            var config = sp.GetRequiredService<IOptions<AgentConfiguration>>().Value;
+            var handler = new HttpClientHandler();
+
+            // Dev mode: trust self-signed server certificates
+            if (config.Server.TrustAnyCertificate)
+            {
+                handler.ServerCertificateCustomValidationCallback =
+                    HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
+            }
+
+            return handler;
+        });
+
+        services.AddSingleton<GridApiClient>();
+        services.AddSingleton<IGridApiClient>(sp => sp.GetRequiredService<GridApiClient>());
+        services.AddSingleton<EnrollmentStateManager>();
+        services.AddSingleton<EnrollmentService>();
+        services.AddHostedService(sp => sp.GetRequiredService<EnrollmentService>());
+        services.AddSingleton<GridHeartbeatService>();
+        services.AddHostedService(sp => sp.GetRequiredService<GridHeartbeatService>());
+        services.AddHostedService<GridCommandService>();
+
+        // Alert forwarding (the bridge: agent detections → GRID dashboard)
+        services.AddSingleton<AlertForwardingService>();
+        services.AddSingleton<IAlertForwardingQueue>(sp => sp.GetRequiredService<AlertForwardingService>());
+        services.AddHostedService(sp => sp.GetRequiredService<AlertForwardingService>());
+    }
+
+    /// <summary>
     /// Registers IronClad hardware response module services.
     /// Conditionally registers MockArduinoServer only in TcpMock mode.
     /// </summary>
@@ -225,3 +268,4 @@ public static class ServiceRegistration
         services.AddHostedService<IronCladStateReconciliationService>();
     }
 }
+

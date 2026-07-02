@@ -114,6 +114,11 @@ public sealed class AgentDbContext : DbContext
     public DbSet<IronCladDeviceState> IronCladDeviceStates => Set<IronCladDeviceState>();
 
     /// <summary>
+    /// Pending alert uploads for resilient retry when GRID is unreachable.
+    /// </summary>
+    public DbSet<PendingAlertUpload> PendingAlertUploads => Set<PendingAlertUpload>();
+
+    /// <summary>
     /// Initializes a new instance of <see cref="AgentDbContext"/>.
     /// </summary>
     /// <param name="options">Database context options.</param>
@@ -361,6 +366,18 @@ public sealed class AgentDbContext : DbContext
             entity.HasIndex(e => e.LastChangedAt);
             entity.Property(e => e.State).IsRequired().HasMaxLength(20);
             entity.Property(e => e.Reason).IsRequired().HasMaxLength(500);
+        });
+
+        modelBuilder.Entity<PendingAlertUpload>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.ClientMessageId).IsUnique();
+            entity.HasIndex(e => e.NextRetryAt);
+            entity.HasIndex(e => e.Status);
+            entity.Property(e => e.ClientMessageId).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.SerializedPayload).IsRequired();
+            entity.Property(e => e.Status).HasConversion<string>().HasMaxLength(20);
+            entity.Property(e => e.LastErrorMessage).HasMaxLength(2000);
         });
     }
 }

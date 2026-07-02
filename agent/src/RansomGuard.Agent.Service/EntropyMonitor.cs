@@ -8,6 +8,7 @@ using RansomGuard.Agent.Core.Persistence;
 using RansomGuard.Agent.Core.Persistence.Entities;
 using RansomGuard.Agent.Core.Persistence.Repositories;
 using Microsoft.EntityFrameworkCore;
+using RansomGuard.Agent.Core.Communication;
 using RansomGuard.Agent.Core.Detection.CrossModule;
 using RansomGuard.Agent.Core.Detection.Genealogy;
 using RansomGuard.Agent.Core.Security.RateLimiting;
@@ -32,6 +33,7 @@ public sealed class EntropyMonitor : BackgroundService
     private readonly List<FileSystemWatcher> _watchers = [];
     private readonly IOperationRateLimiter? _rateLimiter;
     private readonly IDetectionEventBus? _eventBus;
+    private readonly IAlertForwardingQueue? _alertQueue;
 
     /// <summary>
     /// Initializes the entropy monitor.
@@ -43,7 +45,8 @@ public sealed class EntropyMonitor : BackgroundService
         IFileEventDeduplicator deduplicator,
         IEntropyCalculator calculator,
         RateLimiterFactory? rateLimiterFactory = null,
-        IDetectionEventBus? eventBus = null)
+        IDetectionEventBus? eventBus = null,
+        IAlertForwardingQueue? alertQueue = null)
     {
         _logger = logger;
         _config = config.CurrentValue;
@@ -52,6 +55,7 @@ public sealed class EntropyMonitor : BackgroundService
         _calculator = calculator;
         _rateLimiter = rateLimiterFactory?.GetLimiter(RateLimiterFactory.EntropyComputation);
         _eventBus = eventBus;
+        _alertQueue = alertQueue;
         _fileChannel = Channel.CreateBounded<string>(
             new BoundedChannelOptions(EventChannelCapacity)
             {
@@ -212,6 +216,10 @@ public sealed class EntropyMonitor : BackgroundService
                         "ENTROPY ALERT: Rule {RuleId} ({RuleName}) on {FilePath} | Baseline: {Baseline:F2} Current: {Current:F2} Delta: {Delta:F2} | Severity: {Severity}",
                         alert.RuleId, alert.RuleName, filePath,
                         alert.BaselineEntropy, alert.CurrentEntropy, alert.Delta, alert.Severity);
+
+                    // Forward to GRID (skip Suppressed alerts)
+                    var mapped = AlertMapper.FromEntropyAlert(alert);
+                    if (mapped is not null) _alertQueue?.TryEnqueue(mapped);
 
                     // Fire-and-forget genealogy enrichment for process attribution
                     _ = Task.Run(async () =>

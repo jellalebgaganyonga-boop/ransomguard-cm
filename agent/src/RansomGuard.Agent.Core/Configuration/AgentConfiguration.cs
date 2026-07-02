@@ -240,6 +240,17 @@ public sealed record ServerOptions
     /// </summary>
     [Range(1, 120)]
     public int ConnectionTimeoutSeconds { get; init; } = 10;
+
+    /// <summary>
+    /// One-time enrollment token for initial GRID registration.
+    /// Format: RG-CAM-YYYY-XXXXXX. Consumed on first successful enrollment.
+    /// </summary>
+    public string? EnrollmentOtp { get; init; }
+
+    /// <summary>
+    /// Whether to trust any server SSL certificate (dev mode only).
+    /// </summary>
+    public bool TrustAnyCertificate { get; init; }
 }
 
 /// <summary>

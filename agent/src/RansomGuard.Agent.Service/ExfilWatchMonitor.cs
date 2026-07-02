@@ -7,6 +7,7 @@ using RansomGuard.Agent.Core.Detection.ExfilWatch;
 using RansomGuard.Agent.Core.Detection.ExfilWatch.Actions;
 using RansomGuard.Agent.Core.Detection.ExfilWatch.Models;
 using RansomGuard.Agent.Core.Detection.ExfilWatch.Rules;
+using RansomGuard.Agent.Core.Communication;
 using RansomGuard.Agent.Core.Security.RateLimiting;
 
 namespace RansomGuard.Agent.Service;
@@ -23,6 +24,7 @@ public sealed class ExfilWatchMonitor : BackgroundService
     private readonly ILogger<ExfilWatchMonitor> _logger;
     private readonly INetworkActivityMonitor _networkMonitor;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IAlertForwardingQueue? _alertQueue;
     private readonly AgentConfiguration _config;
     private readonly Channel<NetworkEvent> _eventChannel;
     private long _totalEventsProcessed;
@@ -35,11 +37,13 @@ public sealed class ExfilWatchMonitor : BackgroundService
         ILogger<ExfilWatchMonitor> logger,
         INetworkActivityMonitor networkMonitor,
         IServiceScopeFactory scopeFactory,
-        IOptionsMonitor<AgentConfiguration> config)
+        IOptionsMonitor<AgentConfiguration> config,
+        IAlertForwardingQueue? alertQueue = null)
     {
         _logger = logger;
         _networkMonitor = networkMonitor;
         _scopeFactory = scopeFactory;
+        _alertQueue = alertQueue;
         _config = config.CurrentValue;
         _eventChannel = Channel.CreateBounded<NetworkEvent>(
             new BoundedChannelOptions(EventChannelCapacity)
@@ -116,6 +120,9 @@ public sealed class ExfilWatchMonitor : BackgroundService
                             {
                                 // Fire-and-forget for non-blocking pipeline
                                 _ = Task.Run(() => actionEngine.ExecuteAsync(finding, ct), ct);
+
+                                // Forward to GRID in parallel
+                                _alertQueue?.TryEnqueue(AlertMapper.FromExfilFinding(finding));
                             }
                         }
                     }

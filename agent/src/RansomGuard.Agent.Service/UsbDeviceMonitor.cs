@@ -12,6 +12,7 @@ using RansomGuard.Agent.Core.Detection.UsbGuard.Actions;
 using RansomGuard.Agent.Core.Detection.UsbGuard.Models;
 using RansomGuard.Agent.Core.Detection.UsbGuard.Scanning;
 using RansomGuard.Agent.Core.Detection.UsbGuard.Wmi;
+using RansomGuard.Agent.Core.Communication;
 using RansomGuard.Agent.Core.Persistence;
 using RansomGuard.Agent.Core.Persistence.Entities;
 using RansomGuard.Agent.Core.Security.RateLimiting;
@@ -39,6 +40,7 @@ public sealed class UsbDeviceMonitor : BackgroundService, IUsbDeviceMonitor
     private readonly ConcurrentDictionary<string, CancellationTokenSource> _activeScanCts = new();
     private readonly ConcurrentDictionary<string, UsbDevice> _connectedDevices = new();
     private readonly IOperationRateLimiter? _scanRateLimiter;
+    private readonly IAlertForwardingQueue? _alertQueue;
     private long _totalEventsProcessed;
 
     /// <summary>Number of currently connected USB devices.</summary>
@@ -55,7 +57,8 @@ public sealed class UsbDeviceMonitor : BackgroundService, IUsbDeviceMonitor
         BootableUsbDetector bootableDetector,
         IServiceScopeFactory scopeFactory,
         IOptionsMonitor<AgentConfiguration> config,
-        RateLimiterFactory? rateLimiterFactory = null)
+        RateLimiterFactory? rateLimiterFactory = null,
+        IAlertForwardingQueue? alertQueue = null)
     {
         _logger = logger;
         _wmiSubscriber = wmiSubscriber;
@@ -64,6 +67,7 @@ public sealed class UsbDeviceMonitor : BackgroundService, IUsbDeviceMonitor
         _scopeFactory = scopeFactory;
         _config = config.CurrentValue;
         _scanRateLimiter = rateLimiterFactory?.GetLimiter("usb-scan");
+        _alertQueue = alertQueue;
         _eventChannel = Channel.CreateBounded<UsbConnectionEvent>(
             new BoundedChannelOptions(EventChannelCapacity)
             {
@@ -334,6 +338,9 @@ public sealed class UsbDeviceMonitor : BackgroundService, IUsbDeviceMonitor
 
         _logger.LogWarning("USB GUARD ALERT: {Title} — Action: {Action}",
             alert.Title, alert.ActionTaken);
+
+        // Forward to GRID
+        _alertQueue?.TryEnqueue(AlertMapper.FromUsbAlert(alert));
 
         return alert;
     }
