@@ -79,10 +79,13 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import httpx; r=httpx.get('http://localhost:8000/api/v1/health'); exit(0 if r.status_code==200 else 1)"]
-      interval: 30s
+      interval: 15s
       timeout: 10s
-      retries: 3
-      start_period: 40s
+      retries: 5
+      # First boot runs the Alembic migrations before uvicorn binds. On the
+      # 2-vCPU production VM that took longer than the previous 40s window, so
+      # Compose declared the API unhealthy and refused to start nginx.
+      start_period: 180s
 
   nginx:
     image: nginx:1.27-alpine
@@ -111,8 +114,11 @@ services:
       # finds the same two filenames.
       - ${TLS_PUBLIC_DIR:-./pki-public}:/etc/nginx/ssl/public:ro
       - ${DASHBOARD_DIST_DIR:-../../dashboard/dist}:/usr/share/nginx/html:ro
-      # Agent installer + release packages downloaded by endpoints over Tailscale
-      - ${AGENT_PACKAGES_DIR:-../../agent/packages}:/usr/share/nginx/html/agent:ro
+      # Agent installer + release packages downloaded by endpoints over Tailscale.
+      # Mounted BESIDE the SPA, not inside it: Docker cannot create a mountpoint
+      # within an existing read-only bind mount. dashboard.conf maps the /agent/
+      # URL onto this path with its own root.
+      - ${AGENT_PACKAGES_DIR:-../../agent/packages}:/usr/share/nginx/agent:ro
     networks:
       - grid_public
     depends_on:

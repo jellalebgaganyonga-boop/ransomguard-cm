@@ -105,8 +105,17 @@ rollback() {
 
 # ── 5. Seed ───────────────────────────────────────────────────────
 log "5/6 Seeding initial tenant/admin (idempotent)"
-docker exec -e PYTHONPATH=/app/src grid-api python /app/scripts/seed_initial_data.py || {
-    echo "[warn] seeding failed -- continuing, the stack itself is healthy"
+# The GRID_SEED_* values are deployment inputs, not runtime configuration, so
+# they are deliberately absent from the compose service environment. Pass them
+# to this one command instead of widening the container's environment.
+seed_env=(-e PYTHONPATH=/app/src -e "GRID_ENVIRONMENT=${GRID_ENVIRONMENT:-production}")
+for var in GRID_SEED_TENANT_NAME GRID_SEED_TENANT_CODE GRID_SEED_TENANT_EMAIL            GRID_SEED_ADMIN_EMAIL GRID_SEED_ADMIN_NAME GRID_SEED_ADMIN_PASSWORD            GRID_SEED_ANALYST_EMAIL GRID_SEED_ANALYST_PASSWORD            GRID_SEED_AUDITOR_EMAIL GRID_SEED_AUDITOR_PASSWORD; do
+    [ -n "${!var:-}" ] && seed_env+=(-e "$var=${!var}")
+done
+
+docker exec "${seed_env[@]}" grid-api python /app/scripts/seed_initial_data.py || {
+    echo "[FAIL] seeding failed -- no administrator account was created" >&2
+    exit 1
 }
 
 # ── 6. Smoke test ─────────────────────────────────────────────────
