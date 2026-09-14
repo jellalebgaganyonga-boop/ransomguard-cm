@@ -29,6 +29,7 @@ async def _create_two_tenants() -> dict[str, str]:
 
             # Ensure role exists (idempotent)
             from sqlalchemy import select
+
             from ransomguard_grid.db.models.tenant_user import Role as RoleModel
             existing_role = (await session.execute(select(RoleModel).where(RoleModel.name == "tenant_admin"))).scalar_one_or_none()
             if not existing_role:

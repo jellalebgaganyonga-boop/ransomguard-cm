@@ -15,21 +15,19 @@
  *    SameSite=Strict on the refresh cookie, this means a cross-site
  *    form submission cannot trigger an authenticated refresh.
  *
- * Refresh deduplication pattern:
- * If 5 queries 401 simultaneously (e.g., on token expiry while multiple
- * TanStack Query observers are active), we must NOT fire 5 concurrent
- * /auth/refresh calls (each would attempt to rotate the refresh token,
- * and the backend's reuse-detection would invalidate the session — see
- * grid AuthService). Instead, the FIRST 401 triggers a single in-flight
- * refresh promise; subsequent 401s await that same promise.
+ * GRID-SEC-001 RESOLVED (Sprint 8):
+ * Refresh token is now in HttpOnly Secure SameSite=Strict cookie.
+ * The browser sends it automatically with withCredentials: true.
+ * No refresh_token in request body or JavaScript memory.
  */
 
-import axios, {
+import axios,
+{
   AxiosError,
   type AxiosInstance,
   type InternalAxiosRequestConfig,
 } from 'axios';
-import { getAccessToken, getRefreshToken, useAuthStore } from '@/stores/auth.store';
+import { getAccessToken, useAuthStore } from '@/stores/auth.store';
 
 // ---------------------------------------------------------------------------
 // Base instance
@@ -83,21 +81,15 @@ interface RetriableRequestConfig extends InternalAxiosRequestConfig {
 }
 
 async function performRefresh(): Promise<string> {
-  // See auth.store.ts SECURITY COMPROMISE note — refresh token is in-memory
-  // because the backend does not issue HttpOnly cookies (GRID-SEC-001).
-  const refreshToken = getRefreshToken();
-  if (!refreshToken) {
-    throw new Error('No refresh token available');
-  }
-  const response = await refreshClient.post<{ access_token: string; refresh_token: string }>(
+  // GRID-SEC-001 resolved: refresh token is in HttpOnly cookie,
+  // sent automatically by the browser with withCredentials: true.
+  // No token in body or JavaScript memory.
+  const response = await refreshClient.post<{ access_token: string }>(
     '/auth/refresh',
-    { refresh_token: refreshToken }
+    {}
   );
   const newToken = response.data.access_token;
   useAuthStore.getState().setAccessToken(newToken);
-  if (response.data.refresh_token) {
-    useAuthStore.getState().setRefreshToken(response.data.refresh_token);
-  }
   return newToken;
 }
 
@@ -135,17 +127,11 @@ apiClient.interceptors.response.use(
       }
       const newToken = await refreshPromise;
 
-      // Retry the original request with the new token. `headers` is
-      // always defined on InternalAxiosRequestConfig (axios guarantees
-      // this), and AxiosHeaders supports index assignment.
       originalRequest.headers.Authorization = `Bearer ${newToken}`;
       return apiClient(originalRequest);
     } catch (refreshError) {
       // Refresh failed — clear all auth state.
-      // The app's route guard (App.tsx) will redirect to /auth/login on
-      // the next render because accessToken is now null.
       useAuthStore.getState().clearAccessToken();
-      useAuthStore.getState().clearRefreshToken();
       return Promise.reject(refreshError);
     }
   }

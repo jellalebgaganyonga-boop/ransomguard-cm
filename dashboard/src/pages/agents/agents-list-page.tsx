@@ -11,11 +11,11 @@
  * AC4.4.3: stale agent warning banner (≥ 1 agent > 60 min)
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Server, RefreshCw, AlertTriangle } from 'lucide-react';
-import { useAgentList } from '@/hooks/use-agents';
+import { Server, RefreshCw, AlertTriangle, Download, PlusCircle, Copy, CheckCircle2, X } from 'lucide-react';
+import { useAgentList, useProvisionAgent } from '@/hooks/use-agents';
 import { useMe, resolvePrimaryRole } from '@/hooks/use-me';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -47,6 +47,35 @@ export function AgentsListPage() {
   const [statusFilter, setStatusFilter] = useState<AgentStatus | ''>('');
   const [offset, setOffset] = useState(0);
   const [commandTarget, setCommandTarget] = useState<AgentItem | null>(null);
+  const [showProvision, setShowProvision] = useState(false);
+
+  // Escape closes the provisioning modal. The backdrop is deliberately not
+  // clickable: a click handler on a non-interactive element is unreachable by
+  // keyboard, and the rest of the console's modals close the same way.
+  useEffect(() => {
+    if (!showProvision) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowProvision(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [showProvision]);
+  const [copiedField, setCopiedField] = useState<'otp' | 'cmd' | null>(null);
+
+  const provision = useProvisionAgent();
+
+  const handleProvision = () => {
+    provision.reset();
+    setShowProvision(true);
+    provision.mutate();
+  };
+
+  const copyToClipboard = (text: string, field: 'otp' | 'cmd') => {
+    void navigator.clipboard.writeText(text).then(() => {
+      setCopiedField(field);
+      setTimeout(() => setCopiedField(null), 2000);
+    });
+  };
 
   const params = {
     ...(statusFilter ? { status: statusFilter } : {}),
@@ -62,6 +91,22 @@ export function AgentsListPage() {
 
   const staleCount = agents.filter((a) => isAgentStale(a.last_heartbeat_at)).length;
 
+  const exportCsv = () => {
+    if (!agents.length) return;
+    const headers = ['Hostname', 'FQDN', 'OS', 'Version', 'Status', 'Last Heartbeat'];
+    const rows = agents.map((a) => [
+      a.hostname, a.fqdn, a.os_version, a.agent_version, a.status, a.last_heartbeat_at ?? '',
+    ]);
+    const csv = [headers, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `agents-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div>
       {/* Header */}
@@ -74,9 +119,21 @@ export function AgentsListPage() {
             {total} {t('agents.list.totalEndpoints', 'endpoints enregistrés')}
           </p>
         </div>
-        {isFetching && (
-          <RefreshCw className="size-4 animate-spin text-text-tertiary" aria-hidden="true" />
-        )}
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" size="sm" onClick={exportCsv} disabled={agents.length === 0}>
+            <Download className="mr-1 size-4" />
+            CSV
+          </Button>
+          {role === 'tenant_admin' && (
+            <Button size="sm" onClick={handleProvision} disabled={provision.isPending}>
+              <PlusCircle className="mr-1 size-4" />
+              {t('agents.list.addAgent', 'Add Agent')}
+            </Button>
+          )}
+          {isFetching && (
+            <RefreshCw className="size-4 animate-spin text-text-tertiary" aria-hidden="true" />
+          )}
+        </div>
       </div>
 
       {/* AC4.4.3: stale agent warning banner */}
@@ -222,6 +279,113 @@ export function AgentsListPage() {
         <p className="mt-2 text-right text-xs text-text-secondary">
           {t('agents.list.autoRefresh', 'Actualisation auto toutes les 30 s')}
         </p>
+      )}
+
+      {/* Provision new agent modal */}
+      {showProvision && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={t('agents.provision.title', 'Add new agent')}
+          className="fixed inset-0 z-modal flex items-center justify-center bg-black/50"
+        >
+          <div className="relative w-full max-w-lg rounded-xl bg-elevated p-6 shadow-xl">
+            <button
+              aria-label={t('common.close', 'Fermer')}
+              onClick={() => setShowProvision(false)}
+              className="absolute right-4 top-4 text-text-secondary hover:text-text-primary"
+            >
+              <X className="size-4" />
+            </button>
+
+            <h2 className="mb-1 text-base font-semibold text-text-primary">
+              {t('agents.provision.title', 'Add new agent')}
+            </h2>
+            <p className="mb-4 text-sm text-text-secondary">
+              {t('agents.provision.subtitle', 'An enrollment OTP is generated. Copy it into the agent\'s appsettings.json before the 30-minute expiry.')}
+            </p>
+
+            {provision.isPending && (
+              <div className="flex items-center gap-2 py-8 text-sm text-text-secondary">
+                <RefreshCw className="size-4 animate-spin" />
+                {t('common.loading', 'Generating...')}
+              </div>
+            )}
+
+            {provision.isError && (
+              <p className="text-sm text-error">
+                {t('common.error', 'Failed to generate OTP. Please retry.')}
+              </p>
+            )}
+
+            {provision.isSuccess && provision.data && (() => {
+              const otp = provision.data.otp;
+              const gridServer = window.location.hostname;
+              const cmd1 = `curl.exe -k -o C:\\inst.ps1 https://${gridServer}:8443/agent/install.ps1`;
+              // -GridServer must be passed explicitly: without it the installer
+              // falls back to its built-in default, which is not this server.
+              const cmd2 = `powershell -EP Bypass -File C:\\inst.ps1 -OTP ${otp} -GridServer ${gridServer}`;
+              return (
+                <div className="space-y-4">
+                  {/* Step 1: Download */}
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-text-secondary">
+                      {t('agents.provision.installLabel')} — Step 1
+                    </label>
+                    <div className="flex items-center gap-2 rounded-lg border border-border-subtle bg-surface-subtle px-3 py-2">
+                      <code className="flex-1 font-mono text-xs text-text-primary">
+                        {cmd1}
+                      </code>
+                      <button
+                        onClick={() => copyToClipboard(cmd1, 'otp')}
+                        className="shrink-0 text-text-secondary hover:text-text-primary"
+                        aria-label="Copy download command"
+                      >
+                        {copiedField === 'otp' ? <CheckCircle2 className="size-4 text-success" /> : <Copy className="size-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Step 2: Install with OTP */}
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-text-secondary">
+                      Step 2 — {t('agents.provision.otpLabel')}
+                      <span className="ml-2 font-normal text-warning">
+                        {t('agents.provision.expires', { n: provision.data.expires_in_minutes })}
+                      </span>
+                    </label>
+                    <div className="flex items-center gap-2 rounded-lg border border-border-subtle bg-surface-subtle px-3 py-2">
+                      <code className="flex-1 font-mono text-xs text-text-primary">
+                        {cmd2}
+                      </code>
+                      <button
+                        onClick={() => copyToClipboard(cmd2, 'cmd')}
+                        className="shrink-0 text-text-secondary hover:text-text-primary"
+                        aria-label="Copy install command"
+                      >
+                        {copiedField === 'cmd' ? <CheckCircle2 className="size-4 text-success" /> : <Copy className="size-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-text-secondary">
+                    {t('agents.provision.hint', 'After the agent enrolls, it will appear here within 60 seconds (next auto-refresh).')}
+                  </p>
+
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleProvision}
+                    className="w-full"
+                  >
+                    <RefreshCw className="mr-1 size-3" />
+                    {t('agents.provision.regenerate', 'Generate new OTP')}
+                  </Button>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
       )}
 
       {/* Isolate command modal */}

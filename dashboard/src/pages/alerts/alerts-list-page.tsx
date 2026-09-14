@@ -12,7 +12,7 @@
 
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Search, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, Shield } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, Shield, Download } from 'lucide-react';
 import { SeverityBadge } from '@/components/ui/severity-badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -53,11 +53,33 @@ export function AlertsListPage() {
     setFilter('sort_dir', nextDir);
   };
 
+  const exportCsv = () => {
+    if (!items.length) return;
+    const headers = ['ID', 'Detected', 'Severity', 'Status', 'Agent', 'Type', 'Summary'];
+    const rows = items.map((a) => [
+      a.id, a.detected_at, a.severity, a.status, a.agent_id, a.alert_type, a.summary,
+    ]);
+    const csv = [headers, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `alerts-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div>
-      <h1 className="mb-5 text-2xl font-semibold text-text-primary">
-        {t('nav.alerts', 'Alertes')}
-      </h1>
+      <div className="mb-5 flex items-center justify-between">
+        <h1 className="text-2xl font-semibold text-text-primary">
+          {t('nav.alerts', 'Alertes')}
+        </h1>
+        <Button variant="secondary" size="sm" onClick={exportCsv} disabled={items.length === 0}>
+          <Download className="mr-1 size-4" />
+          {t('common.exportCsv', 'CSV')}
+        </Button>
+      </div>
 
       {/* AC3.1.2: search (agent hostname) */}
       <div className="relative mb-3">

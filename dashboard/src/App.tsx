@@ -1,63 +1,54 @@
 // ============================================================
-// src/App.tsx  — REMPLACEMENT COMPLET
+// src/App.tsx
 // Boot sequence: refresh → /me → role routing (AC1.3.4)
-// Routes: auth + protected (avec placeholders Day 4-8)
+// Routes: auth + protected
+//
+// GRID-SEC-001 RESOLVED (Sprint 8):
+// Refresh token is in HttpOnly cookie. On page reload, the boot
+// sequence calls POST /auth/refresh — the browser sends the cookie
+// automatically. If valid, the user stays logged in silently.
 // ============================================================
 
 import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { useAuthStore, getRefreshToken } from '@/stores/auth.store';
+import { useAuthStore } from '@/stores/auth.store';
 import { refresh } from '@/api/auth';
 import { AuthLayout } from '@/components/layout/auth-layout';
 import { ProtectedRoute } from '@/components/layout/protected-route';
 import { LoginPage } from '@/pages/login-page';
 import { DashboardPage } from '@/pages/dashboard-page';
 import { NotFoundPage } from '@/pages/not-found-page';
-import { PlaceholderPage } from '@/pages/placeholder-page';
 import { AlertsListPage } from '@/pages/alerts/alerts-list-page';
 import { AlertDetailPage } from '@/pages/alerts/alert-detail-page';
 import { AgentsListPage } from '@/pages/agents/agents-list-page';
 import { AgentDetailPage } from '@/pages/agents/agent-detail-page';
 import { UsersListPage } from '@/pages/users/users-list-page';
 import { AuditLogPage } from '@/pages/audit/audit-log-page';
+import { UserActionsPage } from '@/pages/audit/user-actions-page';
+import { NotificationPreferencesPage } from '@/pages/settings/notification-preferences-page';
 
 /**
  * Boot sequence (AC1.3.4):
- * 1. App mounts → attempt POST /auth/refresh (HttpOnly cookie)
- * 2a. Success → setAccessToken → isInitializing=false
- *     → ProtectedRoute renders → calls useMe() → role-based routing
- * 2b. Failure → isInitializing=false (no token)
- *     → ProtectedRoute → Navigate to /auth/login
- *
- * This runs ONCE on mount. Mid-session 401 refresh is handled by
- * the Axios interceptor in src/api/client.ts (AC1.3.1-2 + AC1.3.5).
+ * 1. App mounts → attempt POST /auth/refresh (HttpOnly cookie sent by browser)
+ * 2a. Success → setAccessToken → isInitializing=false → user stays logged in
+ * 2b. Failure → isInitializing=false → redirect to /auth/login
  */
 export function App() {
   const setAccessToken = useAuthStore((s) => s.setAccessToken);
-  const setRefreshToken = useAuthStore((s) => s.setRefreshToken);
   const setInitializing = useAuthStore((s) => s.setInitializing);
 
   useEffect(() => {
     let cancelled = false;
 
     async function bootRefresh() {
-      // SECURITY COMPROMISE (see auth.store.ts): refresh token is in-memory only,
-      // so it is lost on page reload. If there is no token in the store, skip the
-      // refresh attempt and require re-authentication.
-      const storedRefreshToken = getRefreshToken();
-      if (!storedRefreshToken) {
-        if (!cancelled) setInitializing(false);
-        return;
-      }
       try {
-        const { access_token, refresh_token } = await refresh(storedRefreshToken);
+        // HttpOnly cookie is sent automatically by the browser
+        const { access_token } = await refresh();
         if (!cancelled) {
           setAccessToken(access_token);
-          setRefreshToken(refresh_token);
         }
       } catch {
-        // Refresh token expired or invalid — user must re-authenticate.
-        // accessToken stays null → ProtectedRoute redirects to login.
+        // No valid refresh cookie — user must re-authenticate.
       } finally {
         if (!cancelled) setInitializing(false);
       }
@@ -65,7 +56,7 @@ export function App() {
 
     void bootRefresh();
     return () => { cancelled = true; };
-  }, [setAccessToken, setRefreshToken, setInitializing]);
+  }, [setAccessToken, setInitializing]);
 
   return (
     <BrowserRouter>
@@ -77,33 +68,26 @@ export function App() {
 
         {/* ── Protected (AppShell + RBAC + idle timeout) ── */}
         <Route element={<ProtectedRoute />}>
-          {/* Day 2-3: done */}
           <Route path="/dashboard" element={<DashboardPage />} />
 
-          {/* Day 4-5: EPIC-ALERTS */}
+          {/* EPIC-ALERTS */}
           <Route path="/alerts" element={<AlertsListPage />} />
           <Route path="/alerts/:id" element={<AlertDetailPage />} />
 
-          {/* Day 6-7: EPIC-AGENTS */}
+          {/* EPIC-AGENTS */}
           <Route path="/agents" element={<AgentsListPage />} />
           <Route path="/agents/:id" element={<AgentDetailPage />} />
 
-          {/* Day 8: EPIC-USERS */}
+          {/* EPIC-USERS */}
           <Route path="/users" element={<UsersListPage />} />
 
-          {/* Day 8: EPIC-AUDIT */}
+          {/* EPIC-AUDIT */}
           <Route path="/audit" element={<AuditLogPage />} />
+          <Route path="/audit/user-actions" element={<UserActionsPage />} />
 
-          {/* Settings: deferred */}
-          <Route
-            path="/settings"
-            element={
-              <PlaceholderPage
-                titleKey="nav.settings"
-                dayLabel="Hors périmètre Sprint 7"
-              />
-            }
-          />
+          {/* Settings */}
+          <Route path="/settings/notifications" element={<NotificationPreferencesPage />} />
+          <Route path="/settings" element={<Navigate to="/settings/notifications" replace />} />
         </Route>
 
         {/* ── Root redirect ── */}

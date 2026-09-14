@@ -1,0 +1,235 @@
+# RansomGuard-CM — Continuous Deployment to the GRID server.
+#
+# The GRID server has no public IP: it lives inside the hospital's Tailscale
+# network (design intent -- the console must stay unreachable from the open
+# internet). The deploy job therefore joins the tailnet as an ephemeral node for
+# the duration of the run, talks to the server over SSH, then leaves.
+#
+# Required repository secrets
+#   TS_OAUTH_CLIENT_ID / TS_OAUTH_SECRET   Tailscale OAuth client (scope
+#                                          auth_keys, tag:ci)
+#   DEPLOY_SSH_KEY                         private key whose public half sits in
+#                                          ubuntu@grid:~/.ssh/authorized_keys
+#   DEPLOY_HOST                            Tailscale IP or MagicDNS name
+#   DEPLOY_USER                            ubuntu
+#   DEPLOY_KNOWN_HOSTS                     output of `ssh-keyscan <DEPLOY_HOST>`
+#
+# Server-side prerequisite (once): deployment/grid/bootstrap.sh has been run, so
+# /opt/ransomguard/shared holds the secrets, the PKI and the TLS material. The
+# release tree is replaced on every deployment; shared state never is.
+name: CD
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      skip_agent_package:
+        description: 'Skip rebuilding the Windows agent package (faster)'
+        type: boolean
+        default: false
+
+# Never let two deployments touch the server at the same time, and never cancel
+# one half-way through a migration.
+concurrency:
+  group: cd-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  AGENT_VERSION: '0.3.0'
+  NODE_VERSION: '20'
+  DOTNET_VERSION: '8.0.x'
+
+jobs:
+  # ── Gate ────────────────────────────────────────────────────────
+  # workflow_run fires even when CI failed; deploy only on a green CI.
+  guard:
+    name: Gate
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    steps:
+      - run: echo "CI conclusion:${{ github.event.workflow_run.conclusion || 'manual dispatch' }}"
+
+  # ── Dashboard bundle ────────────────────────────────────────────
+  build-dashboard:
+    name: Build dashboard
+    needs: guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+
+      - run: npm ci
+        working-directory: dashboard
+
+      # Same command as the CI gate, from the same commit.
+      - run: npm run build
+        working-directory: dashboard
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cd-dashboard-dist
+          path: dashboard/dist
+          retention-days: 7
+
+  # ── Windows agent package ───────────────────────────────────────
+  package-agent:
+    name: Package agent
+    needs: guard
+    if: ${{ !inputs.skip_agent_package }}
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      # install.ps1 downloads a file whose name embeds the version. A silent
+      # mismatch would publish a package no endpoint is able to fetch.
+      - name: Version guard
+        shell: bash
+        run: |
+          declared=$(grep -oP '\$AgentVersion\s*=\s*"\K[^"]+' agent/install.ps1)
+          echo "install.ps1=$declared workflow=$AGENT_VERSION"
+          test "$declared" = "$AGENT_VERSION"
+
+      # Self-contained: endpoints are clinical workstations and must not be
+      # required to have a .NET runtime installed.
+      - name: Publish self-contained (win-x64)
+        run: >
+          dotnet publish agent/src/RansomGuard.Agent.Service/RansomGuard.Agent.Service.csproj
+          -c Release -r win-x64 --self-contained true -o publish/agent
+
+      - name: Zip package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force packages | Out-Null
+          $zip = "packages/RansomGuard-Agent-v$env:AGENT_VERSION-win-x64.zip"
+          Compress-Archive -Path publish/agent/* -DestinationPath $zip -Force
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          "$hash  $(Split-Path $zip -Leaf)" | Out-File -Encoding ascii "$zip.sha256"
+          Copy-Item agent/install.ps1 packages/install.ps1
+          Get-ChildItem packages
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cd-agent-package
+          path: packages
+          retention-days: 7
+
+  # ── Deploy ──────────────────────────────────────────────────────
+  deploy:
+    name: Deploy to GRID
+    needs: [build-dashboard, package-agent]
+    # package-agent is skippable; deploy must still run when it was skipped.
+    if: always() && needs.build-dashboard.result == 'success' && needs.package-agent.result != 'failure'
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: cd-dashboard-dist
+          path: dashboard/dist
+
+      - uses: actions/download-artifact@v4
+        if: needs.package-agent.result == 'success'
+        with:
+          name: cd-agent-package
+          path: agent-packages
+
+      # ── Join the tailnet ────────────────────────────────────────
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+          version: latest
+
+      # The alias is "gridsrv", not "grid": "grid" is also a source directory
+      # name and rsync would read it as a remote path.
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          {
+            echo "Host gridsrv"
+            echo "    HostName ${{ secrets.DEPLOY_HOST }}"
+            echo "    User ${{ secrets.DEPLOY_USER }}"
+            echo "    IdentityFile ~/.ssh/deploy_key"
+            echo "    IdentitiesOnly yes"
+            echo "    ServerAliveInterval 30"
+          } >> ~/.ssh/config
+          chmod 600 ~/.ssh/config
+
+      - name: Reachability check
+        run: ssh -o BatchMode=yes gridsrv 'echo connected to $(hostname) as $(whoami)'
+
+      # ── Ship ────────────────────────────────────────────────────
+      # --delete keeps the release tree identical to the commit. Shared state
+      # (.env, PKI, TLS, assets) lives outside the tree and is excluded, because
+      # deploy.sh links it back in.
+      - name: Upload source tree
+        run: |
+          rsync -az --delete \
+            --exclude '__pycache__' --exclude '*.pyc' --exclude 'test-results' \
+            -e ssh grid/ gridsrv:/opt/ransomguard/app/grid/
+          rsync -az --delete \
+            --exclude 'grid/.env' --exclude 'grid/pki' \
+            -e ssh deployment/ gridsrv:/opt/ransomguard/app/deployment/
+
+      - name: Upload dashboard bundle
+        run: rsync -az --delete -e ssh dashboard/dist/ gridsrv:/opt/ransomguard/shared/dashboard-dist/
+
+      - name: Upload agent package
+        if: needs.package-agent.result == 'success'
+        run: rsync -az -e ssh agent-packages/ gridsrv:/opt/ransomguard/shared/agent-packages/
+
+      # ── Apply ───────────────────────────────────────────────────
+      # deploy.sh owns migrations, TLS refresh, health gating and rollback.
+      - name: Run deployment
+        run: ssh gridsrv 'cd /opt/ransomguard/app/deployment/grid && chmod +x *.sh && ./deploy.sh'
+
+      # Independent of deploy.sh's own smoke test: verified from outside the box.
+      - name: Post-deploy verification
+        run: |
+          host='${{ secrets.DEPLOY_HOST }}'
+          code=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 20 "https://${host}:8443/api/v1/health")
+          echo "dashboard health: $code"
+          test "$code" = "200"
+
+      - name: Deployment summary
+        if: always()
+        run: |
+          {
+            echo "### GRID deployment"
+            echo ""
+            echo "| item | value |"
+            echo "|---|---|"
+            echo "| commit | \`${{ github.event.workflow_run.head_sha || github.sha }}\` |"
+            echo "| agent package | ${{ needs.package-agent.result == 'success' && env.AGENT_VERSION || 'unchanged' }} |"
+            echo "| result | ${{ job.status }} |"
+          } >> "$GITHUB_STEP_SUMMARY"

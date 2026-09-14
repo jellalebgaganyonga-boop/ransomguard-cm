@@ -24,7 +24,6 @@
     "**/node_modules": true,
     "**/__pycache__": true
   },
-  "dotnet.defaultSolution": "agent/src/RansomGuard.Agent.sln",
   "omnisharp.enableRoslynAnalyzers": true,
   "omnisharp.enableEditorConfigSupport": true,
   "csharp.format.enable": true,

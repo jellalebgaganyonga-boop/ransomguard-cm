@@ -1,21 +1,36 @@
 """Tests for SQLAlchemy models — imports, constraints, enums."""
 
-import pytest
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from sqlalchemy import text
+import pytest
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ransomguard_grid.db.models import (
-    Agent, AgentCertificate, AgentConfiguration, AgentHeartbeat,
-    Alert, AlertArtifact, AlertCorrelation, AlertDetail, AlertStatusChange, AuditLog,
-    CommandQueue, CommandResponse, SystemLog,
-    Role, Session, Tenant, User, UserRole,
-    ThreatIntelVersion, ThreatIntelPackage, AgentThreatIntelVersion,
+    Agent,
+    AgentCertificate,
+    AgentConfiguration,
+    AgentHeartbeat,
+    AgentThreatIntelVersion,
+    Alert,
+    AlertArtifact,
+    AlertCorrelation,
+    AlertDetail,
+    AlertStatusChange,
+    AuditLog,
+    CommandQueue,
+    CommandResponse,
+    Role,
+    Session,
+    SystemLog,
+    Tenant,
+    ThreatIntelPackage,
+    ThreatIntelVersion,
+    User,
+    UserRole,
 )
-from ransomguard_grid.db.models.enums import TenantStatus, Severity, AlertStatus
+from ransomguard_grid.db.models.enums import Severity, TenantStatus
 
 
 def test_all_21_models_import_successfully() -> None:

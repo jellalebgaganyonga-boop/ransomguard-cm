@@ -14,6 +14,13 @@
 
 import type { AgentStatus } from '@/api/agents';
 
+/** Append Z if no tz indicator — FastAPI returns naive UTC datetimes. */
+function parseUtc(s: string): Date {
+  return new Date(
+    s.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(s) ? s : s + 'Z'
+  );
+}
+
 // ── Status badge variant ────────────────────────────────────
 
 /** Maps AgentStatus to Badge component variant. */
@@ -35,7 +42,7 @@ export type HeartbeatColor = 'success' | 'warning' | 'error' | 'neutral';
 /** Returns a Tailwind text color class based on heartbeat age (AC4.4.1). */
 export function heartbeatColor(lastHeartbeatAt: string | null): HeartbeatColor {
   if (!lastHeartbeatAt) return 'neutral';
-  const ageMs = Date.now() - new Date(lastHeartbeatAt).getTime();
+  const ageMs = Date.now() - parseUtc(lastHeartbeatAt).getTime();
   const ageMins = ageMs / 60_000;
   if (ageMins < 5)  return 'success';
   if (ageMins < 60) return 'warning';
@@ -52,5 +59,5 @@ export const HEARTBEAT_COLOR_CLASS: Record<HeartbeatColor, string> = {
 /** True if agent has not sent a heartbeat in over 60 minutes (AC4.4.3). */
 export function isAgentStale(lastHeartbeatAt: string | null): boolean {
   if (!lastHeartbeatAt) return true;
-  return Date.now() - new Date(lastHeartbeatAt).getTime() > 60 * 60 * 1000;
+  return Date.now() - parseUtc(lastHeartbeatAt).getTime() > 60 * 60 * 1000;
 }

@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ransomguard_grid.api.v1.dependencies.auth import get_authenticated_agent
 from ransomguard_grid.api.v1.schemas.agent import HeartbeatRequest, HeartbeatResponse
 from ransomguard_grid.db.models.agent import Agent, AgentHeartbeat
-from ransomguard_grid.db.models.enums import CommandStatus
+from ransomguard_grid.db.models.enums import AgentStatus, CommandStatus
 from ransomguard_grid.db.models.operations import CommandQueue
 from ransomguard_grid.db.repositories.agent_heartbeat_repository import AgentHeartbeatRepository
 from ransomguard_grid.db.session import get_db
@@ -31,7 +31,9 @@ async def heartbeat(
 
     now = datetime.now(UTC)
 
-    # Update agent last_heartbeat_at
+    # Re-activate disconnected agents on heartbeat
+    if agent.status == AgentStatus.disconnected:
+        agent.status = AgentStatus.active
     agent.last_heartbeat_at = now
     await db.flush()
 

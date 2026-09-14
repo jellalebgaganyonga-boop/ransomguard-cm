@@ -23,7 +23,7 @@ export default defineConfig({
       // Forward /api/* to GRID backend during development
       // Production: nginx handles this (deployment/grid/nginx/conf.d/dashboard.conf)
       '/api': {
-        target: 'https://localhost:8443',
+        target: 'https://100.85.208.124:8443',
         changeOrigin: true,
         secure: false, // self-signed cert in dev (mTLS PKI from grid/)
       },

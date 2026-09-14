@@ -9,6 +9,8 @@
     "agents": "Agents",
     "users": "Users",
     "audit": "Audit log",
+    "userActions": "User actions",
+    "notifications": "Notifications",
     "settings": "Settings"
   },
   "header": {
@@ -73,8 +75,8 @@
     "exec": {
       "title": "Executive dashboard",
       "subtitle": "Hospital security overview",
-      "criticalStatus": "{{count}} critical incidents require your attention",
-      "highStatus": "{{count}} alerts to review",
+      "criticalStatus": "{count} critical incidents require your attention",
+      "highStatus": "{count} alerts to review",
       "allNormal": "All systems normal",
       "viewDetails": "View details →",
       "recentAlerts": "RECENT ALERTS",
@@ -99,7 +101,7 @@
     "ops": {
       "title": "Operational console",
       "commandHint": "for command palette",
-      "staleWarning": "{{count}} agents have not sent a heartbeat in over 1 hour",
+      "staleWarning": "{count} agents have not sent a heartbeat in over 1 hour",
       "agents": {
         "title": "AGENTS",
         "active": "active",
@@ -150,7 +152,7 @@
     "artifacts": "Associated artifacts",
     "technicalDetails": "Technical details",
     "timeline": "Timeline",
-    "statusChange": "{{from}} → {{to}}",
+    "statusChange": "{from} → {to}",
     "created": "Alert created",
     "list": {
       "searchPlaceholder": "Search (hostname...)",
@@ -190,7 +192,7 @@
       "notesLabel": "Resolution notes",
       "notesHint": "20-2000 characters",
       "notesPlaceholder": "Detail of the investigation and actions taken...",
-      "minChars": "{{count}} characters minimum",
+      "minChars": "{count} characters minimum",
       "submit": "Close incident"
     }
   },
@@ -255,7 +257,17 @@
       "decommissioned": "Decommissioned",
       "version": "Version",
       "empty": "No agents registered",
-      "autoRefresh": "Auto-refresh every 30 s"
+      "autoRefresh": "Auto-refresh every 30 s",
+      "addAgent": "Add Agent"
+    },
+    "provision": {
+      "title": "Add new agent",
+      "subtitle": "An enrollment OTP is generated. Copy it into the agent's appsettings.json before the 30-minute expiry.",
+      "otpLabel": "Enrollment OTP",
+      "expires": "— expires in {n} min",
+      "installLabel": "PowerShell one-liner (run as Administrator on target machine)",
+      "hint": "After the agent enrolls, it will appear here within 60 seconds (next auto-refresh).",
+      "regenerate": "Generate new OTP"
     },
     "detail": {
       "notFound": "Agent not found",
@@ -274,10 +286,10 @@
       "isolate": "Isolate endpoint",
       "title": "Isolate endpoint",
       "warningTitle": "Destructive action",
-      "warningBody": "Isolating \"{{hostname}}\" will immediately cut this agent's network access. It will be unreachable until an operator performs a physical or software restore.",
+      "warningBody": "Isolating \"{hostname}\" will immediately cut this agent's network access. It will be unreachable until an operator performs a physical or software restore.",
       "reasonLabel": "Reason (required)",
       "reasonPlaceholder": "E.g.: Suspected compromise — ransomware detected running...",
-      "minChars": "{{count}} characters minimum",
+      "minChars": "{count} characters minimum",
       "ackLabel": "I understand this will immediately disconnect the endpoint from the network.",
       "submit": "Isolate endpoint",
       "lastCommand": "Last command",
@@ -302,6 +314,7 @@
     "filters": "Filters",
     "resetFilters": "Reset filters",
     "noResults": "No results",
+    "results": "results",
     "previous": "Previous",
     "next": "Next",
     "page": "Page {page} / {totalPages}",
@@ -329,6 +342,40 @@
       "sequenceNumber": "Sequence",
       "signingKeyId": "Signing key",
       "receivedAt": "Received"
+    }
+  },
+  "settings": {
+    "notifications": {
+      "title": "Notification preferences",
+      "description": "Receive email notifications when new alerts are detected.",
+      "severity": "Severity",
+      "email": "Email",
+      "saved": "Preferences saved."
+    }
+  },
+  "userActions": {
+    "title": "User actions log",
+    "subtitle": "Who did what on the dashboard",
+    "filterByAction": "Filter by action",
+    "empty": "No actions recorded",
+    "actionType": {
+      "login": "Login",
+      "logout": "Logout",
+      "alert_status_change": "Alert status change",
+      "command_issued": "Command issued",
+      "user_create": "User created",
+      "user_disable": "User disabled",
+      "user_enable": "User enabled",
+      "agent_decommission": "Agent decommissioned",
+      "agent_provision": "Agent provisioned"
+    },
+    "col": {
+      "date": "Date",
+      "action": "Action",
+      "user": "User",
+      "target": "Target",
+      "details": "Details",
+      "ip": "IP"
     }
   },
   "errors": {

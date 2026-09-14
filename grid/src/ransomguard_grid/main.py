@@ -31,6 +31,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from ransomguard_grid.services.threat_intel_sources.gcp import GcpIpRangesSource
     from ransomguard_grid.services.threat_intel_sources.threatfox import ThreatFoxSource
     from ransomguard_grid.services.threat_intel_sources.tor_project import TorProjectSource
+    from ransomguard_grid.workers.agent_disconnect_worker import AgentDisconnectWorker
     from ransomguard_grid.workers.threat_intel_updater_worker import ThreatIntelUpdaterWorker
 
     settings = get_settings()
@@ -67,13 +68,24 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     app.state.threat_intel_worker = worker
     app.state.threat_intel_http_client = http_client
 
-    # Skip auto-start in test/debug (worker runs real HTTP calls)
+    # Agent disconnect worker
+    disconnect_worker = AgentDisconnectWorker(
+        session_factory=AsyncSessionLocal,
+        check_interval_seconds=60,
+    )
+    app.state.disconnect_worker = disconnect_worker
+
+    # Threat intel worker: skip in development (makes external HTTP calls)
     if settings.environment != "development":
         await worker.start()
+    # Disconnect worker: always start (marks stale agents as disconnected)
+    await disconnect_worker.start()
 
     yield
 
     # Shutdown
+    if disconnect_worker._task is not None:
+        await disconnect_worker.stop()
     if worker._task is not None:
         await worker.stop()
     await http_client.aclose()

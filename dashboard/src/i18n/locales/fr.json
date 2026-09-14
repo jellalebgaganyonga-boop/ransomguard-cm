@@ -9,6 +9,8 @@
     "agents": "Agents",
     "users": "Utilisateurs",
     "audit": "Journal d'audit",
+    "userActions": "Actions utilisateur",
+    "notifications": "Notifications",
     "settings": "Paramètres"
   },
   "header": {
@@ -73,8 +75,8 @@
     "exec": {
       "title": "Tableau de bord exécutif",
       "subtitle": "Vue d'ensemble de la sécurité de l'hôpital",
-      "criticalStatus": "{{count}} incidents critiques requièrent votre attention",
-      "highStatus": "{{count}} alertes à examiner",
+      "criticalStatus": "{count} incidents critiques requièrent votre attention",
+      "highStatus": "{count} alertes à examiner",
       "allNormal": "Tous les systèmes normaux",
       "viewDetails": "Voir les détails →",
       "recentAlerts": "ALERTES RÉCENTES",
@@ -99,7 +101,7 @@
     "ops": {
       "title": "Console opérationnelle",
       "commandHint": "pour la palette de commandes",
-      "staleWarning": "{{count}} agents n'ont pas envoyé de heartbeat depuis plus d'1 heure",
+      "staleWarning": "{count} agents n'ont pas envoyé de heartbeat depuis plus d'1 heure",
       "agents": {
         "title": "AGENTS",
         "active": "actifs",
@@ -150,7 +152,7 @@
     "artifacts": "Artefacts associés",
     "technicalDetails": "Détails techniques",
     "timeline": "Chronologie",
-    "statusChange": "{{from}} → {{to}}",
+    "statusChange": "{from} → {to}",
     "created": "Alerte créée",
     "list": {
       "searchPlaceholder": "Rechercher (hôte...)",
@@ -190,7 +192,7 @@
       "notesLabel": "Notes de résolution",
       "notesHint": "20-2000 caractères",
       "notesPlaceholder": "Détail de l'investigation et des actions prises...",
-      "minChars": "{{count}} caractères minimum",
+      "minChars": "{count} caractères minimum",
       "submit": "Fermer l'incident"
     }
   },
@@ -255,7 +257,17 @@
       "decommissioned": "Désactivé",
       "version": "Version",
       "empty": "Aucun agent enregistré",
-      "autoRefresh": "Actualisation auto toutes les 30 s"
+      "autoRefresh": "Actualisation auto toutes les 30 s",
+      "addAgent": "Ajouter un agent"
+    },
+    "provision": {
+      "title": "Ajouter un nouvel agent",
+      "subtitle": "Un OTP d'enrôlement est généré. Copiez-le dans l'appsettings.json de l'agent avant l'expiration de 30 minutes.",
+      "otpLabel": "OTP d'enrôlement",
+      "expires": "— expire dans {n} min",
+      "installLabel": "Commande PowerShell (exécuter en tant qu'Administrateur sur la machine cible)",
+      "hint": "Après l'enrôlement, l'agent apparaîtra ici dans les 60 secondes (prochain rafraîchissement auto).",
+      "regenerate": "Générer un nouvel OTP"
     },
     "detail": {
       "notFound": "Agent non trouvé",
@@ -274,10 +286,10 @@
       "isolate": "Isoler le terminal",
       "title": "Isoler le terminal",
       "warningTitle": "Action destructrice",
-      "warningBody": "L'isolation de \"{{hostname}}\" coupera immédiatement l'accès réseau de cet agent. Il sera inaccessible jusqu'à ce qu'un opérateur effectue une restauration physique ou logicielle.",
+      "warningBody": "L'isolation de \"{hostname}\" coupera immédiatement l'accès réseau de cet agent. Il sera inaccessible jusqu'à ce qu'un opérateur effectue une restauration physique ou logicielle.",
       "reasonLabel": "Motif (obligatoire)",
       "reasonPlaceholder": "Ex: Suspicion de compromission — ransomware détecté en cours d'exécution...",
-      "minChars": "{{count}} caractères minimum",
+      "minChars": "{count} caractères minimum",
       "ackLabel": "Je comprends que cette action déconnectera immédiatement le terminal du réseau.",
       "submit": "Isoler le terminal",
       "lastCommand": "Dernière commande",
@@ -302,6 +314,7 @@
     "filters": "Filtres",
     "resetFilters": "Réinitialiser les filtres",
     "noResults": "Aucun résultat",
+    "results": "résultats",
     "previous": "Précédent",
     "next": "Suivant",
     "page": "Page {page} / {totalPages}",
@@ -329,6 +342,40 @@
       "sequenceNumber": "Séquence",
       "signingKeyId": "Clé de signature",
       "receivedAt": "Reçu le"
+    }
+  },
+  "settings": {
+    "notifications": {
+      "title": "Préférences de notification",
+      "description": "Recevez des notifications par email lorsque de nouvelles alertes sont détectées.",
+      "severity": "Sévérité",
+      "email": "Email",
+      "saved": "Préférences sauvegardées."
+    }
+  },
+  "userActions": {
+    "title": "Journal des actions utilisateur",
+    "subtitle": "Qui a fait quoi sur le tableau de bord",
+    "filterByAction": "Filtrer par action",
+    "empty": "Aucune action enregistrée",
+    "actionType": {
+      "login": "Connexion",
+      "logout": "Déconnexion",
+      "alert_status_change": "Changement statut alerte",
+      "command_issued": "Commande envoyée",
+      "user_create": "Création utilisateur",
+      "user_disable": "Désactivation utilisateur",
+      "user_enable": "Activation utilisateur",
+      "agent_decommission": "Décommissionnement agent",
+      "agent_provision": "Provisionnement agent"
+    },
+    "col": {
+      "date": "Date",
+      "action": "Action",
+      "user": "Utilisateur",
+      "target": "Cible",
+      "details": "Détails",
+      "ip": "IP"
     }
   },
   "errors": {

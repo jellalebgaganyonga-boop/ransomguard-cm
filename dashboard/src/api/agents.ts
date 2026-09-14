@@ -106,3 +106,19 @@ export async function issueCommand(payload: IssueCommandPayload): Promise<Comman
   const res = await apiClient.post('/dashboard/commands', payload);
   return CommandItemSchema.parse(res.data);
 }
+
+// ── Provisioning ─────────────────────────────────────────────
+
+export interface ProvisionAgentResponse {
+  otp: string;
+  expires_in_minutes: number;
+}
+
+export async function provisionAgent(): Promise<ProvisionAgentResponse> {
+  const res = await apiClient.post('/dashboard/agents/provision');
+  return res.data as ProvisionAgentResponse;
+}
+
+export async function decommissionAgent(agentId: string): Promise<void> {
+  await apiClient.post(`/dashboard/agents/${agentId}/decommission`);
+}

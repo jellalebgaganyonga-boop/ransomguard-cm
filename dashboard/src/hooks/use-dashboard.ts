@@ -91,6 +91,9 @@ export function useAgents(pageSize = 10) {
 
 export function daysSinceLastCritical(lastCriticalAt: string | null): number | null {
   if (!lastCriticalAt) return null;
-  const ms = Date.now() - new Date(lastCriticalAt).getTime();
+  // Append Z — FastAPI returns naive UTC datetimes (no timezone suffix)
+  const ts = lastCriticalAt.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(lastCriticalAt)
+    ? lastCriticalAt : lastCriticalAt + 'Z';
+  const ms = Date.now() - new Date(ts).getTime();
   return Math.floor(ms / (1000 * 60 * 60 * 24));
 }

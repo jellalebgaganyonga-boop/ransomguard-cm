@@ -18,6 +18,8 @@ COPY --from=builder --chown=ransomguard:ransomguard /root/.local /home/ransomgua
 COPY grid/src /app/src
 COPY grid/alembic /app/alembic
 COPY grid/alembic.ini /app/
+# Operational scripts (idempotent tenant/admin seeding run by deploy.sh)
+COPY grid/scripts /app/scripts
 
 ENV PATH=/home/ransomguard/.local/bin:$PATH
 ENV PYTHONPATH=/app/src

@@ -1,19 +1,18 @@
 """Tests for repositories — tenant isolation, idempotency, pagination."""
 
-import pytest
 from datetime import UTC, datetime
 from uuid import uuid4
 
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ransomguard_grid.db.models.agent import Agent
 from ransomguard_grid.db.models.alerts import Alert, AuditLog
-from ransomguard_grid.db.models.enums import AlertStatus, Severity, TenantStatus
+from ransomguard_grid.db.models.enums import Severity, TenantStatus
 from ransomguard_grid.db.models.tenant_user import Tenant
 from ransomguard_grid.db.repositories.agent_repository import AgentRepository
 from ransomguard_grid.db.repositories.alert_repository import AlertRepository
 from ransomguard_grid.db.repositories.audit_log_repository import AuditLogRepository
-from ransomguard_grid.db.repositories.base_repository import BaseRepository
 
 
 async def _create_tenant_and_agent(session: AsyncSession, code: str = "t1") -> tuple[Tenant, Agent]:
@@ -106,7 +105,7 @@ async def test_agent_repository_find_by_fingerprint(db_session: AsyncSession) ->
     t, a = await _create_tenant_and_agent(db_session, "fp-1")
     repo = AgentRepository(db_session, t.id)
 
-    found = await repo.find_by_fingerprint(f"fp-fp-1")
+    found = await repo.find_by_fingerprint("fp-fp-1")
     assert found is not None
     assert found.id == a.id
 
@@ -163,7 +162,6 @@ async def test_cross_tenant_query_returns_empty(db_session: AsyncSession) -> Non
 async def test_pagination_orders_correctly(db_session: AsyncSession) -> None:
     """Pagination should respect order_by and order_dir."""
     t, a = await _create_tenant_and_agent(db_session, "page-1")
-    import time
     for i in range(5):
         db_session.add(Alert(id=str(uuid4()), tenant_id=t.id, agent_id=a.id, client_message_id=f"p-{i}", alert_type="USB", severity=Severity.Low, detected_at=datetime.now(UTC), summary=f"alert-{i}"))
     await db_session.flush()

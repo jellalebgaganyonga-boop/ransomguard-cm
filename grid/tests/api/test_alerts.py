@@ -8,7 +8,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ransomguard_grid.db.models.agent import Agent, AgentCertificate
-from ransomguard_grid.db.models.enums import AgentStatus, Severity, TenantStatus
+from ransomguard_grid.db.models.enums import AgentStatus, TenantStatus
 from ransomguard_grid.db.models.tenant_user import Tenant
 
 

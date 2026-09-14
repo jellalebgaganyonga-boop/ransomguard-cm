@@ -189,7 +189,7 @@ export async function setupMocks(page: Page, role: Role): Promise<void> {
   await page.route('**/api/v1/auth/refresh', (r) =>
     r.fulfill({ status: 200, json: MOCK_TOKENS }));
   await page.route('**/api/v1/auth/logout', (r) =>
-    r.fulfill({ status: 204, body: '' }));
+    r.fulfill({ status: 200, json: { detail: 'Logged out successfully' } }));
 
   // Me
   await page.route('**/api/v1/dashboard/me', (r) =>

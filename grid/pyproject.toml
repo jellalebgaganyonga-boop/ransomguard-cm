@@ -54,6 +54,13 @@ line-length = 130
 select = ["E", "F", "W", "I", "N", "UP", "B", "A", "SIM"]
 ignore = ["B008", "UP042", "UP046", "SIM105"]
 
+[tool.ruff.lint.per-file-ignores]
+# Fixtures and expected payloads read better on one line than wrapped.
+"tests/**" = ["E501"]
+# Inline-CSS HTML email template: the markup cannot be wrapped without hurting
+# readability, and a string literal cannot carry a per-line noqa.
+"src/ransomguard_grid/services/notification_service.py" = ["E501"]
+
 [tool.mypy]
 python_version = "3.12"
 strict = true

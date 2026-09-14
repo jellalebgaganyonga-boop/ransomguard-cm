@@ -8,7 +8,7 @@ from uuid import uuid4
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from cryptography.hazmat.primitives.serialization import Encoding, NoEncryption, PrivateFormat, PublicFormat
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -22,6 +22,7 @@ os.environ["GRID_DEBUG"] = "true"
 
 # Use a file-based SQLite for test engine so multiple connections share the same DB
 import tempfile
+
 _test_db_path = os.path.join(tempfile.gettempdir(), "ransomguard_grid_test.db")
 _test_engine = create_async_engine(f"sqlite+aiosqlite:///{_test_db_path}", echo=False)
 _test_session_factory = async_sessionmaker(bind=_test_engine, expire_on_commit=False)

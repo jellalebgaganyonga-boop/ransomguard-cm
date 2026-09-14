@@ -6,6 +6,9 @@ asyncmy>=0.2.10
 alembic>=1.14.0
 pydantic>=2.10.0
 pydantic-settings>=2.6.0
+# used directly by scripts/seed_initial_data.py -- do not rely on the
+# transitive pydantic-settings dependency
+python-dotenv>=1.0.0
 python-jose[cryptography]>=3.3.0
 passlib[bcrypt]>=1.7.4
 cryptography>=44.0.0

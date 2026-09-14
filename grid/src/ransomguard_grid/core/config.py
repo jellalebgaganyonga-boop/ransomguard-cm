@@ -51,6 +51,18 @@ class Settings(BaseSettings):
     # Agent enrollment
     enrollment_otp_validity_minutes: int = Field(default=30, ge=5, le=1440)
 
+    # Email notifications (Mailjet SMTP relay)
+    smtp_host: str = Field(default="in-v3.mailjet.com")
+    smtp_port: int = Field(default=587, ge=1, le=65535)
+    smtp_username: str | None = None  # Mailjet API key
+    smtp_password: str | None = None  # Mailjet API secret
+    smtp_from_email: str = Field(default="noreply@ransomguard.local")
+    smtp_from_name: str = Field(default="RansomGuard-CM")
+    smtp_enabled: bool = False  # Set True when credentials are configured
+
+    # Agent auto-disconnect timeout (minutes since last heartbeat)
+    agent_disconnect_timeout_minutes: int = Field(default=5, ge=1, le=60)
+
 
 def get_settings() -> Settings:
     """Factory function for settings, enables test override."""

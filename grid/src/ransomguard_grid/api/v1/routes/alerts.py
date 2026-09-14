@@ -17,8 +17,11 @@ from ransomguard_grid.core.logging import get_logger
 from ransomguard_grid.core.rate_limit import InMemoryRateLimiter, get_rate_limiter
 from ransomguard_grid.db.models.agent import Agent
 from ransomguard_grid.db.models.alerts import Alert, AlertArtifact, AlertDetail
+from ransomguard_grid.db.models.notifications import NotificationPreference
+from ransomguard_grid.db.models.tenant_user import User
 from ransomguard_grid.db.repositories.alert_repository import AlertRepository
 from ransomguard_grid.db.session import get_db
+from ransomguard_grid.services.notification_service import NotificationService
 
 logger = get_logger("alerts")
 router = APIRouter(prefix="/agents/{agent_id}", tags=["alerts"])
@@ -79,7 +82,77 @@ async def _ingest_single_alert(
 
     await db.flush()
 
+    # Fire-and-forget email notifications for Critical/High alerts
+    severity_str = str(body.severity.value) if hasattr(body.severity, "value") else str(body.severity)
+    if severity_str in ("Critical", "High"):
+        try:
+            await _notify_alert_subscribers(
+                db=db,
+                tenant_id=agent.tenant_id,
+                agent_hostname=agent.hostname,
+                alert_id=alert_id,
+                alert_type=body.alert_type,
+                severity=severity_str,
+                summary=body.summary,
+                detected_at=body.detected_at,
+            )
+        except Exception:
+            logger.warning("Notification dispatch failed", alert_id=alert_id, exc_info=True)
+
     return AlertIngestResponse(alert_id=alert_id, status="ingested", ingested_at=now)
+
+
+async def _notify_alert_subscribers(
+    *,
+    db: AsyncSession,
+    tenant_id: str,
+    agent_hostname: str,
+    alert_id: str,
+    alert_type: str,
+    severity: str,
+    summary: str,
+    detected_at: datetime,
+) -> None:
+    """Send email to all users who have opted in for this severity level."""
+    from sqlalchemy import select
+
+    stmt = (
+        select(NotificationPreference)
+        .where(NotificationPreference.tenant_id == tenant_id)
+    )
+    result = await db.execute(stmt)
+    prefs = result.scalars().all()
+
+    if not prefs:
+        return
+
+    # Get tenant name
+    from ransomguard_grid.db.models.tenant_user import Tenant
+    tenant_stmt = select(Tenant).where(Tenant.id == tenant_id)
+    tenant = (await db.execute(tenant_stmt)).scalar_one_or_none()
+    tenant_name = tenant.name if tenant else "Unknown"
+
+    notifier = NotificationService()
+
+    for pref in prefs:
+        if not pref.should_notify(severity):
+            continue
+        user_stmt = select(User).where(User.id == pref.user_id)
+        user = (await db.execute(user_stmt)).scalar_one_or_none()
+        if not user or not user.is_active:
+            continue
+
+        await notifier.notify_alert(
+            to_email=user.email,
+            to_name=user.full_name,
+            alert_type=alert_type,
+            severity=severity,
+            summary=summary,
+            agent_hostname=agent_hostname,
+            detected_at=detected_at,
+            alert_id=alert_id,
+            tenant_name=tenant_name,
+        )
 
 
 @router.post("/alerts", response_model=AlertIngestResponse)

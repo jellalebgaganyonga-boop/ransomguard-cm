@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { LayoutDashboard, ShieldAlert, Monitor, Users, ScrollText, Settings } from 'lucide-react';
+import { LayoutDashboard, ShieldAlert, Monitor, Users, ScrollText, Settings, Bell, ClipboardList } from 'lucide-react';
 import type { Role } from '@/api/me';
 
 /**
@@ -56,6 +56,18 @@ export const NAV_ITEMS: NavItem[] = [
     to: '/audit',
     icon: ScrollText,
     roles: ['tenant_admin', 'read_only_auditor'],
+  },
+  {
+    labelKey: 'nav.userActions',
+    to: '/audit/user-actions',
+    icon: ClipboardList,
+    roles: ['tenant_admin', 'read_only_auditor'],
+  },
+  {
+    labelKey: 'nav.notifications',
+    to: '/settings/notifications',
+    icon: Bell,
+    roles: ['tenant_admin', 'security_analyst', 'read_only_auditor'],
   },
   {
     labelKey: 'nav.settings',

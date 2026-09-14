@@ -67,7 +67,7 @@ function AuthenticatedRoute() {
 
   const handleExpiredDismiss = useCallback(() => {
     setShowExpiredModal(false);
-    logoutMutation.mutate(false);
+    logoutMutation.mutate();
   }, [logoutMutation]);
 
   // AC1.2.3: mounted only when authenticated (me is loaded)

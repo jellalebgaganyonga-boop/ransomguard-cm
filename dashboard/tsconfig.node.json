@@ -1,6 +1,10 @@
 {
   "compilerOptions": {
     "composite": true,
+    // Composite projects must emit. Without an outDir the emitted
+    // vite.config.js sits next to vite.config.ts -- and Vite resolves .js
+    // FIRST, so a stale build output silently shadows the real config.
+    "outDir": "./node_modules/.tmp/tsconfig-node",
     "target": "ES2022",
     "lib": ["ES2023"],
     "module": "ESNext",

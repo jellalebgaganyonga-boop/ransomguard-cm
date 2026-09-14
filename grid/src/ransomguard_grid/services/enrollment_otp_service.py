@@ -59,3 +59,12 @@ class EnrollmentOtpService:
         for k in expired:
             del self._otps[k]
         return len(expired)
+
+
+# Module-level singleton — shared by enrollment and dashboard routes.
+_shared_otp_service = EnrollmentOtpService()
+
+
+def get_shared_otp_service() -> EnrollmentOtpService:
+    """Return the process-wide OTP service singleton."""
+    return _shared_otp_service

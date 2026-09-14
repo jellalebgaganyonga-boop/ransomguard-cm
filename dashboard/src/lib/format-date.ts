@@ -7,11 +7,26 @@
 import i18n from '@/i18n';
 
 /**
+ * Parse a datetime string from the backend as UTC.
+ * FastAPI returns naive datetimes (no timezone suffix). Without a "Z",
+ * JavaScript's Date constructor treats them as LOCAL time — causing
+ * wrong age calculations for users in non-UTC timezones (e.g. Africa/Douala UTC+1).
+ * We append "Z" if no timezone indicator is present.
+ */
+function parseUtc(isoString: string): Date {
+  const normalized =
+    isoString.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(isoString)
+      ? isoString
+      : isoString + 'Z';
+  return new Date(normalized);
+}
+
+/**
  * Format ISO datetime as relative time ("il y a 14 min" / "14 minutes ago").
  * Falls back to absolute date if timestamp is invalid.
  */
 export function formatDistanceToNow(isoString: string): string {
-  const date = new Date(isoString);
+  const date = parseUtc(isoString);
   if (isNaN(date.getTime())) return '—';
 
   const diffMs = Date.now() - date.getTime();
@@ -40,7 +55,7 @@ export function formatDistanceToNow(isoString: string): string {
  * "08/06/2026 06:42" (FR) or "06/08/2026 06:42 AM" (EN)
  */
 export function formatDateTime(isoString: string): string {
-  const date = new Date(isoString);
+  const date = parseUtc(isoString);
   if (isNaN(date.getTime())) return '—';
 
   const lang = i18n.language?.startsWith('en') ? 'en-US' : 'fr-FR';
@@ -55,7 +70,7 @@ export function formatDateTime(isoString: string): string {
  * Format ISO date only (for audit log dates, compliance dates).
  */
 export function formatDate(isoString: string): string {
-  const date = new Date(isoString);
+  const date = parseUtc(isoString);
   if (isNaN(date.getTime())) return '—';
 
   const lang = i18n.language?.startsWith('en') ? 'en-US' : 'fr-FR';

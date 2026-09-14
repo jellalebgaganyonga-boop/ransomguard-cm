@@ -131,3 +131,71 @@ class AuditLogItem(BaseModel):
 
 class PaginatedAuditLogResponse(PaginatedResponse):
     items: list[AuditLogItem]
+
+
+# --- Notification Preferences ---
+
+
+class NotificationPreferenceItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    email_critical: bool
+    email_high: bool
+    email_medium: bool
+    email_low: bool
+
+
+class UpdateNotificationPreferenceRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    email_critical: bool = True
+    email_high: bool = True
+    email_medium: bool = False
+    email_low: bool = False
+
+
+# --- User Action Logs ---
+
+
+class UserActionLogItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    actor_user_id: str
+    actor_email: str | None = None
+    action_type: str
+    target_type: str | None
+    target_id: str | None
+    details_json: dict[str, Any] | None
+    ip_address: str | None
+    created_at: datetime
+
+
+class PaginatedUserActionLogResponse(PaginatedResponse):
+    items: list[UserActionLogItem]
+
+
+# --- User item with roles (for GET /users fix) ---
+
+
+class UserItemWithRoles(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    email: str
+    full_name: str
+    is_active: bool
+    last_login_at: datetime | None
+    roles: list[str] = Field(default_factory=list)
+
+
+class PaginatedUserWithRolesResponse(PaginatedResponse):
+    items: list[UserItemWithRoles]
+
+
+class ProvisionAgentResponse(BaseModel):
+    """Response for agent provisioning — contains the one-time enrollment token."""
+
+    otp: str = Field(description="One-time enrollment token (format: RG-CAM-YYYY-XXXXXX)")
+    expires_in_minutes: int = Field(default=30)

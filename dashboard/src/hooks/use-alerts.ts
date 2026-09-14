@@ -31,7 +31,8 @@ export function useAlertList(params: AlertListParams = {}) {
     queryKey: ['alerts', tenantId, 'list', params],
     queryFn: () => fetchAlertList(params),
     enabled: !!tenantId,
-    staleTime: 15_000,
+    refetchInterval: 15_000,
+    staleTime: 10_000,
     placeholderData: (prev) => prev, // avoid layout flash on filter/page change
   });
 }

@@ -10,6 +10,7 @@ import {
   fetchAgentDetail,
   fetchAgentList,
   issueCommand,
+  provisionAgent,
   type AgentListParams,
   type IssueCommandPayload,
 } from '@/api/agents';
@@ -47,6 +48,14 @@ export function useAgentDetail(id: string | undefined) {
       if (status === 404) return false;
       return count < 2;
     },
+  });
+}
+
+// ── Provision new agent (tenant_admin only) ─────────────────
+
+export function useProvisionAgent() {
+  return useMutation({
+    mutationFn: () => provisionAgent(),
   });
 }
 

@@ -44,7 +44,7 @@ export function Header({ me, notificationCount = 0 }: HeaderProps) {
   };
 
   // AC1.2.1 + AC1.2.4: logout wired to backend, always clears client state
-  const handleLogout = () => logoutMutation.mutate(false);
+  const handleLogout = () => logoutMutation.mutate();
 
   return (
     <header className="flex h-16 shrink-0 items-center justify-between border-b border-border-subtle bg-canvas px-6 shadow-sm">

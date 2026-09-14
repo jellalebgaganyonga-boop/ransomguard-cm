@@ -167,8 +167,10 @@ async def test_me_returns_401_with_token_referencing_deleted_user(client: AsyncC
     # Delete user after JWT issuance
     async with _test_session_factory() as session:
         from sqlalchemy import delete as sql_delete
-        from ransomguard_grid.db.models.tenant_user import UserRole as UR
-        await session.execute(sql_delete(UR).where(UR.user_id == info["user_id"]))
+
+        from ransomguard_grid.db.models.tenant_user import UserRole
+
+        await session.execute(sql_delete(UserRole).where(UserRole.user_id == info["user_id"]))
         await session.execute(
             sql_delete(User).where(User.id == info["user_id"])
         )
