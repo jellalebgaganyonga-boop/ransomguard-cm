@@ -129,6 +129,11 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: E2E + accessibility (WCAG 2.2 AA)
+        env:
+          # The GRID server lives inside the Tailscale network and is not
+          # reachable from a runner. Point the dev proxy at a closed port so a
+          # request that escapes the mocks fails at once instead of hanging.
+          VITE_PROXY_TARGET: http://127.0.0.1:9
         run: npm run test:e2e -- --project=chromium
 
       - uses: actions/upload-artifact@v4

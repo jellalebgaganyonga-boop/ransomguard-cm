@@ -23,7 +23,11 @@ export default defineConfig({
       // Forward /api/* to GRID backend during development
       // Production: nginx handles this (deployment/grid/nginx/conf.d/dashboard.conf)
       '/api': {
-        target: 'https://100.85.208.124:8443',
+        // VITE_PROXY_TARGET lets CI point the proxy at a closed local port:
+        // the GRID server is only reachable inside the Tailscale network, so on
+        // a runner any request that escapes the E2E mocks would hang on a TCP
+        // connect timeout instead of failing immediately.
+        target: process.env.VITE_PROXY_TARGET ?? 'https://100.85.208.124:8443',
         changeOrigin: true,
         secure: false, // self-signed cert in dev (mTLS PKI from grid/)
       },

@@ -61,8 +61,13 @@ test.describe('Alert detail — security_analyst happy path', () => {
     // Confirm without note (default justification sent)
     await page.getByRole('dialog').getByRole('button', { name: /confirmer|prendre en charge/i }).click();
 
-    // After mutation: detail refetch returns Investigating → shows "En cours"
-    await expect(page.getByText(/en cours/i)).toBeVisible();
+    // After mutation: detail refetch returns Investigating -> the status badge
+    // reads "En cours".
+    // exact: true is required. Once the refetched status history renders, a
+    // loose /en cours/i also matches the history line "Nouveau -> En cours"
+    // and Playwright's strict mode rejects the two-element match. Locally the
+    // assertion usually ran before the history painted; on CI it did not.
+    await expect(page.getByText('En cours', { exact: true }).first()).toBeVisible();
   });
 
   test('Close (Investigating → Resolved): requires category + 20+ char notes', async ({ page }) => {
