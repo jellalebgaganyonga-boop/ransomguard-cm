@@ -12,12 +12,11 @@ from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from ransomguard_grid.db.base import Base
-
 # Importing the models package is what registers every table on Base.metadata.
 # Without it, create_all() builds whatever happened to be imported by the tests
 # selected for this run -- so a file run on its own could miss tables entirely.
 import ransomguard_grid.db.models  # noqa: F401,E402  (side-effecting import)
+from ransomguard_grid.db.base import Base
 
 # Set test environment before importing app
 os.environ["GRID_DATABASE_URL"] = "sqlite+aiosqlite://"
