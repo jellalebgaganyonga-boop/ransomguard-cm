@@ -1,5 +1,6 @@
 using System.Net;
 using System.Reflection;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -25,6 +26,7 @@ namespace RansomGuard.Agent.Tests.Communication;
 public sealed class AlertForwardingIntegrationTests : IDisposable
 {
     private readonly ServiceProvider _serviceProvider;
+    private readonly SqliteConnection _keepAliveConnection;
     private readonly Mock<IGridApiClient> _gridClientMock;
     private readonly AlertForwardingService _service;
     private readonly List<AlertIngestRequest> _receivedAlerts = [];
@@ -49,8 +51,17 @@ public sealed class AlertForwardingIntegrationTests : IDisposable
                 };
             });
 
-        // Build DI container with real SQLite
+        // Build DI container with real SQLite.
+        // A shared-cache in-memory database lives only as long as at least one
+        // connection to it is open. Without the keep-alive connection below it
+        // is destroyed when the schema-creating context is disposed at the end
+        // of this constructor, and every later scope silently gets an empty
+        // database -- which is exactly how the offline-persistence test came to
+        // fail while the code under test was correct.
         var dbName = $"file:alertfwd_{Guid.NewGuid()}?mode=memory&cache=shared";
+        _keepAliveConnection = new SqliteConnection($"Data Source={dbName}");
+        _keepAliveConnection.Open();
+
         var services = new ServiceCollection();
         services.AddDbContext<AgentDbContext>(opt => opt.UseSqlite($"Data Source={dbName}"));
         services.AddLogging(b => b.SetMinimumLevel(LogLevel.Warning));
@@ -72,7 +83,11 @@ public sealed class AlertForwardingIntegrationTests : IDisposable
             NullLogger<AlertForwardingService>.Instance);
     }
 
-    public void Dispose() => _serviceProvider.Dispose();
+    public void Dispose()
+    {
+        _serviceProvider.Dispose();
+        _keepAliveConnection.Dispose();
+    }
 
     // ===== Test 1: Full pipeline — CanaryAlert → GRID =====
     [Fact]
