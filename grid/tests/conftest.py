@@ -14,6 +14,11 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from ransomguard_grid.db.base import Base
 
+# Importing the models package is what registers every table on Base.metadata.
+# Without it, create_all() builds whatever happened to be imported by the tests
+# selected for this run -- so a file run on its own could miss tables entirely.
+import ransomguard_grid.db.models  # noqa: F401,E402  (side-effecting import)
+
 # Set test environment before importing app
 os.environ["GRID_DATABASE_URL"] = "sqlite+aiosqlite://"
 os.environ["GRID_JWT_SECRET_KEY"] = "test-secret-key-minimum-32-characters-long!"
@@ -70,7 +75,10 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
 
     app.dependency_overrides[get_db] = _override_get_db
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+    # https, not http: the refresh cookie is issued with Secure=true, and a
+    # client on a plain-http base URL silently drops it -- the cookie flow could
+    # never be exercised. The ASGI transport does not open a socket either way.
+    async with AsyncClient(transport=transport, base_url="https://test") as ac:
         yield ac
     app.dependency_overrides.pop(get_db, None)
 

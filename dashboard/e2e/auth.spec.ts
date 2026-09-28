@@ -3,7 +3,7 @@
  * AC1.1.x: Login, AC1.2.x: Logout, AC1.3.x: Session guard
  */
 
-import { test, expect, AxeBuilder, setupMocks, loginAs, MOCK_TOKENS } from './fixtures/index';
+import { test, expect, AxeBuilder, setupMocks, stubUnmockedApi, loginAs, MOCK_TOKENS } from './fixtures/index';
 
 test.describe('Login', () => {
   test('valid credentials → redirect to /dashboard', async ({ page }) => {
@@ -85,12 +85,15 @@ test.describe('Logout', () => {
 
 test.describe('Session guard', () => {
   test('unauthenticated access to /dashboard → redirect to /auth/login', async ({ page }) => {
-    // No login — fresh context, no tokens
+    // No login — fresh context, no tokens. The stub keeps the boot-time silent
+    // refresh from escaping to the dev proxy (and timing out) on CI.
+    await stubUnmockedApi(page);
     await page.goto('/dashboard');
     await expect(page).toHaveURL(/\/auth\/login/);
   });
 
   test('unauthenticated access to /alerts/:id → redirect to /auth/login', async ({ page }) => {
+    await stubUnmockedApi(page);
     await page.goto('/alerts/some-id');
     await expect(page).toHaveURL(/\/auth\/login/);
   });

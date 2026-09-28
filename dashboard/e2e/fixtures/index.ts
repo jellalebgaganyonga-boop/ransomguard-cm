@@ -179,17 +179,44 @@ export async function navigateTo(page: Page, path: string): Promise<void> {
 export type Role = keyof typeof MOCK_ME;
 
 /**
+ * Answer every API call that no other handler claims with 401.
+ *
+ * Without this, an unmocked request leaves the browser, hits the Vite dev
+ * proxy and is forwarded to the real GRID server -- which is unreachable from
+ * a CI runner and simply times out, so the test fails on a network condition
+ * instead of on the behaviour it asserts.
+ *
+ * Register it FIRST: Playwright matches routes last-registered-first, so every
+ * specific mock added afterwards still wins.
+ */
+export async function stubUnmockedApi(page: Page): Promise<void> {
+  await page.route('**/api/v1/**', (r) =>
+    r.fulfill({ status: 401, json: { detail: 'Unauthenticated (e2e default stub)' } }));
+}
+
+/**
  * Set up all default API mocks for the given role.
  * Call BEFORE page.goto() so no requests escape to the (absent) backend.
  */
 export async function setupMocks(page: Page, role: Role): Promise<void> {
+  await stubUnmockedApi(page);
+
   // Auth
   await page.route('**/api/v1/auth/login', (r) =>
     r.fulfill({ status: 200, json: MOCK_TOKENS }));
+  // The silent refresh has to stop working once the user logs out, exactly as
+  // it does against the real server: logout clears the HttpOnly refresh cookie
+  // (GRID-SEC-001), so a reload afterwards lands on the login page instead of
+  // silently restoring the session.
+  let loggedOut = false;
   await page.route('**/api/v1/auth/refresh', (r) =>
-    r.fulfill({ status: 200, json: MOCK_TOKENS }));
-  await page.route('**/api/v1/auth/logout', (r) =>
-    r.fulfill({ status: 200, json: { detail: 'Logged out successfully' } }));
+    loggedOut
+      ? r.fulfill({ status: 401, json: { detail: 'Refresh token revoked' } })
+      : r.fulfill({ status: 200, json: MOCK_TOKENS }));
+  await page.route('**/api/v1/auth/logout', (r) => {
+    loggedOut = true;
+    return r.fulfill({ status: 200, json: { detail: 'Logged out successfully' } });
+  });
 
   // Me
   await page.route('**/api/v1/dashboard/me', (r) =>
