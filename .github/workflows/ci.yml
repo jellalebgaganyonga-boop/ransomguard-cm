@@ -169,6 +169,24 @@ jobs:
         # they run in the nightly workflow instead.
         run: dotnet test RansomGuard.Agent.sln -c Release --no-build --filter "Category!=Stress" --logger "trx;LogFileName=agent-tests.trx"
 
+      # `dotnet test` writes failures only to the job log, which needs admin
+      # rights to read. Surfacing them as annotations makes a red run
+      # diagnosable from the run page (and from the API) by anyone.
+      - name: Report failing tests
+        if: failure()
+        shell: pwsh
+        run: |
+          $trx = Get-ChildItem -Recurse -Filter '*.trx' -Path . -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $trx) { Write-Host 'no trx file'; exit 0 }
+          [xml]$doc = Get-Content $trx.FullName
+          $ns = @{t='http://microsoft.com/schemas/VisualStudio/TeamTest/2010'}
+          $failed = Select-Xml -Xml $doc -Namespace $ns -XPath "//t:UnitTestResult[@outcome='Failed']"
+          foreach ($f in $failed) {
+            $name = $f.Node.testName
+            $msg  = ($f.Node.Output.ErrorInfo.Message -replace "`r?`n", ' ')
+            Write-Host "::error title=$name::$msg"
+          }
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
