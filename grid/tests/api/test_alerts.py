@@ -41,14 +41,14 @@ async def _setup_agent_with_cert(
 
 @pytest.mark.asyncio
 async def test_alert_requires_mtls(client: AsyncClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Outside development, no X-Client-Cert header must return 401 + challenge.
+    """Under agent_auth_mode=mtls, a request without a client certificate must
+    be rejected with the Mutual-TLS challenge.
 
-    The dependency deliberately falls back to agent_id authentication when
-    GRID_ENVIRONMENT=development (which is what the test suite runs as), so the
-    production behaviour has to be selected explicitly -- otherwise this test
-    asserts nothing about the security property it is named after.
+    The suite runs in "agent_id" mode because that is how agents authenticate
+    today, so this test selects the target mode explicitly -- otherwise it would
+    assert nothing about the security property it is named after.
     """
-    monkeypatch.setenv("GRID_ENVIRONMENT", "production")
+    monkeypatch.setenv("GRID_AGENT_AUTH_MODE", "mtls")
 
     response = await client.post("/api/v1/agents/fake-id/alerts", json={})
 

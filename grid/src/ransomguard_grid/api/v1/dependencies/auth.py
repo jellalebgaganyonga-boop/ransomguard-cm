@@ -21,20 +21,28 @@ async def get_authenticated_agent(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> Agent:
-    """Authenticate an agent via mTLS client certificate or agent_id path parameter (dev mode).
+    """Authenticate an agent, by client certificate or by agent id.
 
-    Production: nginx terminates TLS, verifies client cert, passes PEM in X-Client-Cert header.
-    Development: if no client cert header, fall back to agent_id from URL path.
-    Testing: inject X-Client-Cert header directly.
+    A presented certificate is always verified, whatever the configured mode:
+    an agent that has one is authenticated by it.
+
+    Without one, the outcome depends on `agent_auth_mode`:
+      * "mtls"     -- rejected with the Mutual-TLS challenge;
+      * "agent_id" -- identified by the id in the URL, which is what every
+                      deployment does until the mTLS chain is delivered.
+
+    The mode is an explicit setting on purpose. It used to be derived from the
+    environment name, so labelling a deployment "production" turned on an mTLS
+    requirement that nginx does not yet enforce -- and silently answered 401 to
+    every heartbeat of a perfectly healthy agent.
     """
     client_cert_pem = request.headers.get("X-Client-Cert")
 
     if client_cert_pem:
         return await _authenticate_via_mtls(request, db, client_cert_pem)
 
-    # Dev fallback: authenticate by agent_id from path
     settings = get_settings()
-    if settings.environment != "development":
+    if settings.agent_auth_mode != "agent_id":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Client certificate required",

@@ -69,6 +69,20 @@ class Settings(BaseSettings):
     # 0 disables collapsing.
     notification_throttle_minutes: int = Field(default=10, ge=0, le=1440)
 
+    # How agents prove who they are on /agents/* endpoints.
+    #   "mtls"     -- nginx verifies a client certificate and forwards it in
+    #                 X-Client-Cert. The target posture (Sprint 10).
+    #   "agent_id" -- the agent is identified by the id in its URL. Weak: anyone
+    #                 who learns the UUID can impersonate the endpoint, so it is
+    #                 only defensible on a closed network (the tailnet).
+    #
+    # This used to be inferred from `environment != "development"`, which meant
+    # naming a deployment "production" silently switched on an mTLS requirement
+    # whose plumbing is not built yet -- and every agent heartbeat started
+    # returning 401. A security control has to be chosen explicitly, not fall
+    # out of an environment label.
+    agent_auth_mode: str = Field(default="mtls", pattern="^(mtls|agent_id)$")
+
 
 def get_settings() -> Settings:
     """Factory function for settings, enables test override."""

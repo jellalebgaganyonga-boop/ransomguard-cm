@@ -70,6 +70,13 @@ MYSQL_PASSWORD=$(rnd 48 32)
 REDIS_PASSWORD=$(rnd 48 32)
 GRID_JWT_SECRET_KEY=$(rnd 96 64)
 GRID_ENVIRONMENT=production
+
+# How agents authenticate on /agents/*. "mtls" is the target (Sprint 10), but
+# nginx does not verify client certificates yet and agents hold none, so a
+# deployment set to "mtls" today answers 401 to every heartbeat. "agent_id" is
+# the posture every release has shipped with: defensible only because the
+# channel is confined to the tailnet.
+GRID_AGENT_AUTH_MODE=agent_id
 GRID_LOG_LEVEL=INFO
 GRID_ALIENVAULT_OTX_API_KEY=
 

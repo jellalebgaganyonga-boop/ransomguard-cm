@@ -10,6 +10,13 @@ import { defineConfig, devices } from '@playwright/test';
 
 const isCI = !!process.env.CI;
 
+// reuseExistingServer trusts whatever already listens on this port. When another
+// program holds it -- a WSL relay, a forgotten dev server -- Playwright points
+// the browser at it and every test fails for a reason that has nothing to do
+// with the app. E2E_PORT moves the whole suite off a contested port in one go.
+const port = Number(process.env.E2E_PORT ?? 5173);
+const baseURL = process.env.E2E_BASE_URL ?? `http://localhost:${port}`;
+
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: true,
@@ -21,7 +28,7 @@ export default defineConfig({
     : [['html', { open: 'on-failure' }], ['list']],
 
   use: {
-    baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:5173',
+    baseURL,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
@@ -59,8 +66,8 @@ export default defineConfig({
   ],
 
   webServer: {
-    command: 'npm run dev',
-    url: 'http://localhost:5173',
+    command: `npm run dev -- --port ${port} --strictPort`,
+    url: baseURL,
     reuseExistingServer: !isCI,
     timeout: 120_000,
   },

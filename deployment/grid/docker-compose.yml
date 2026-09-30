@@ -66,6 +66,10 @@ services:
       GRID_SMTP_FROM_EMAIL: ${GRID_SMTP_FROM_EMAIL:-noreply@ransomguard.local}
       GRID_SMTP_FROM_NAME: ${GRID_SMTP_FROM_NAME:-RansomGuard-CM}
       GRID_AGENT_DISCONNECT_TIMEOUT_MINUTES: ${GRID_AGENT_DISCONNECT_TIMEOUT_MINUTES:-5}
+      # Secure by default: an unset value rejects any agent without a client
+      # certificate. Deployments that have not reached Sprint 10 mTLS set this
+      # to agent_id explicitly, which keeps the weaker posture visible.
+      GRID_AGENT_AUTH_MODE: ${GRID_AGENT_AUTH_MODE:-mtls}
     volumes:
       - ./pki:/etc/ransomguard-grid/pki:ro
       - threat_intel_packages:/var/lib/ransomguard-grid/threat-intel-packages

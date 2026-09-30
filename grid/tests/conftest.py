@@ -22,6 +22,10 @@ from ransomguard_grid.db.base import Base
 os.environ["GRID_DATABASE_URL"] = "sqlite+aiosqlite://"
 os.environ["GRID_JWT_SECRET_KEY"] = "test-secret-key-minimum-32-characters-long!"
 os.environ["GRID_ENVIRONMENT"] = "development"
+# Agent-endpoint tests call /agents/* without a client certificate, which is
+# exactly what the "agent_id" mode is for. Tests that assert the mTLS challenge
+# switch the mode themselves.
+os.environ["GRID_AGENT_AUTH_MODE"] = "agent_id"
 os.environ["GRID_DEBUG"] = "true"
 
 # Use a file-based SQLite for test engine so multiple connections share the same DB
