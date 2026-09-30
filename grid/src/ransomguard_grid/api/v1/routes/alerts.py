@@ -21,7 +21,7 @@ from ransomguard_grid.db.models.notifications import NotificationPreference
 from ransomguard_grid.db.models.tenant_user import User
 from ransomguard_grid.db.repositories.alert_repository import AlertRepository
 from ransomguard_grid.db.session import get_db
-from ransomguard_grid.services.notification_service import NotificationService
+from ransomguard_grid.services.notification_queue import NotificationQueue, job_from_alert
 
 logger = get_logger("alerts")
 router = APIRouter(prefix="/agents/{agent_id}", tags=["alerts"])
@@ -113,46 +113,57 @@ async def _notify_alert_subscribers(
     summary: str,
     detected_at: datetime,
 ) -> None:
-    """Send email to all users who have opted in for this severity level."""
+    """Queue one notification per opted-in recipient.
+
+    This only writes to the queue. Sending happens in the grid-notifier service,
+    because an SMTP relay can take seconds to answer and the agent posting this
+    alert must not wait for it -- least of all during an attack. The queue also
+    gives the delivery a retry path and an audit trail, which the previous
+    in-request send (wrapped in a bare except) did not have.
+    """
     from sqlalchemy import select
 
-    stmt = (
-        select(NotificationPreference)
-        .where(NotificationPreference.tenant_id == tenant_id)
-    )
-    result = await db.execute(stmt)
-    prefs = result.scalars().all()
-
+    stmt = select(NotificationPreference).where(NotificationPreference.tenant_id == tenant_id)
+    prefs = (await db.execute(stmt)).scalars().all()
     if not prefs:
         return
 
-    # Get tenant name
     from ransomguard_grid.db.models.tenant_user import Tenant
-    tenant_stmt = select(Tenant).where(Tenant.id == tenant_id)
-    tenant = (await db.execute(tenant_stmt)).scalar_one_or_none()
+
+    tenant = (await db.execute(select(Tenant).where(Tenant.id == tenant_id))).scalar_one_or_none()
     tenant_name = tenant.name if tenant else "Unknown"
 
-    notifier = NotificationService()
+    queue = NotificationQueue()
+    queued = 0
+    try:
+        for pref in prefs:
+            if not pref.should_notify(severity):
+                continue
+            user = (await db.execute(select(User).where(User.id == pref.user_id))).scalar_one_or_none()
+            if not user or not user.is_active:
+                continue
 
-    for pref in prefs:
-        if not pref.should_notify(severity):
-            continue
-        user_stmt = select(User).where(User.id == pref.user_id)
-        user = (await db.execute(user_stmt)).scalar_one_or_none()
-        if not user or not user.is_active:
-            continue
+            await queue.publish(
+                job_from_alert(
+                    tenant_id=tenant_id,
+                    tenant_name=tenant_name,
+                    user_id=user.id,
+                    to_email=user.email,
+                    to_name=user.full_name,
+                    alert_id=alert_id,
+                    alert_type=alert_type,
+                    severity=severity,
+                    summary=summary,
+                    agent_hostname=agent_hostname,
+                    detected_at=detected_at,
+                )
+            )
+            queued += 1
+    finally:
+        await queue.close()
 
-        await notifier.notify_alert(
-            to_email=user.email,
-            to_name=user.full_name,
-            alert_type=alert_type,
-            severity=severity,
-            summary=summary,
-            agent_hostname=agent_hostname,
-            detected_at=detected_at,
-            alert_id=alert_id,
-            tenant_name=tenant_name,
-        )
+    if queued:
+        logger.info("Notifications queued", alert_id=alert_id, recipients=queued, severity=severity)
 
 
 @router.post("/alerts", response_model=AlertIngestResponse)

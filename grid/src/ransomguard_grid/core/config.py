@@ -63,6 +63,12 @@ class Settings(BaseSettings):
     # Agent auto-disconnect timeout (minutes since last heartbeat)
     agent_disconnect_timeout_minutes: int = Field(default=5, ge=1, le=60)
 
+    # Repeats of the same alert type for the same recipient are collapsed inside
+    # this window. A ransomware run fires dozens of identical alerts in seconds;
+    # one email each would bury the recipient and exhaust the relay quota.
+    # 0 disables collapsing.
+    notification_throttle_minutes: int = Field(default=10, ge=0, le=1440)
+
 
 def get_settings() -> Settings:
     """Factory function for settings, enables test override."""

@@ -15,6 +15,7 @@ from ransomguard_grid.db.models.alerts import (  # noqa: F401
     AuditLog,
 )
 from ransomguard_grid.db.models.notifications import (  # noqa: F401
+    NotificationDelivery,
     NotificationPreference,
     UserActionLog,
 )
@@ -42,5 +43,5 @@ __all__ = [
     "Alert", "AlertDetail", "AlertArtifact", "AuditLog", "AlertCorrelation", "AlertStatusChange",
     "ThreatIntelVersion", "ThreatIntelPackage", "AgentThreatIntelVersion",
     "CommandQueue", "CommandResponse", "SystemLog",
-    "NotificationPreference", "UserActionLog",
+    "NotificationDelivery", "NotificationPreference", "UserActionLog",
 ]

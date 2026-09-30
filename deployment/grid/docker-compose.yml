@@ -87,6 +87,46 @@ services:
       # Compose declared the API unhealthy and refused to start nginx.
       start_period: 180s
 
+  # ── Notification delivery service ───────────────────────────────
+  # Same image as the API, different entrypoint. Separate container on purpose:
+  # a stuck SMTP relay must not slow alert ingestion, and restarting the
+  # notifier must not restart the API. Scale it with `--scale grid-notifier=N`
+  # -- the Redis consumer group splits the stream between the instances.
+  grid-notifier:
+    image: ransomguard/grid-api:${GRID_IMAGE_TAG:-local}
+    container_name: grid-notifier
+    restart: unless-stopped
+    command: ["python", "-m", "ransomguard_grid.workers.notification_worker"]
+    environment:
+      GRID_DATABASE_URL: mysql+aiomysql://${MYSQL_USER:-grid}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE:-ransomguard_grid}
+      GRID_REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      GRID_JWT_SECRET_KEY: ${GRID_JWT_SECRET_KEY:?required}
+      GRID_ENVIRONMENT: ${GRID_ENVIRONMENT:-production}
+      GRID_LOG_LEVEL: ${GRID_LOG_LEVEL:-INFO}
+      GRID_SMTP_ENABLED: ${GRID_SMTP_ENABLED:-false}
+      GRID_SMTP_HOST: ${GRID_SMTP_HOST:-in-v3.mailjet.com}
+      GRID_SMTP_PORT: ${GRID_SMTP_PORT:-587}
+      GRID_SMTP_USERNAME: ${GRID_SMTP_USERNAME:-}
+      GRID_SMTP_PASSWORD: ${GRID_SMTP_PASSWORD:-}
+      GRID_SMTP_FROM_EMAIL: ${GRID_SMTP_FROM_EMAIL:-noreply@ransomguard.local}
+      GRID_SMTP_FROM_NAME: ${GRID_SMTP_FROM_NAME:-RansomGuard-CM}
+      GRID_NOTIFICATION_THROTTLE_MINUTES: ${GRID_NOTIFICATION_THROTTLE_MINUTES:-10}
+    networks:
+      - grid_internal
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      grid-api:
+        condition: service_healthy   # the API image runs the migrations
+    healthcheck:
+      test: ["CMD", "python", "-c", "import redis,os;r=redis.from_url(os.environ['GRID_REDIS_URL']);r.ping()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
   nginx:
     image: nginx:1.27-alpine
     container_name: grid-nginx

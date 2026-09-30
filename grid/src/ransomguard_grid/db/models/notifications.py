@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
 from sqlalchemy.dialects.sqlite import JSON
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -61,3 +61,34 @@ class UserActionLog(Base):
 
     def __repr__(self) -> str:
         return f"<UserActionLog {self.action_type} by={self.actor_user_id[:8]}>"
+
+
+class NotificationDelivery(Base):
+    """Record of one notification delivery attempt.
+
+    Law 2024/017 makes the facility accountable for reacting to an incident, so
+    "we alerted the security officer" has to be provable after the fact. The
+    alert table says a threat was seen; this table says someone was told, when,
+    and whether it actually left the building.
+
+    Also the only way to see a relay outage: a run of rows in status 'failed'
+    is visible, a swallowed exception is not.
+    """
+
+    __tablename__ = "notification_deliveries"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id", ondelete="RESTRICT"), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True)
+    alert_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    channel: Mapped[str] = mapped_column(String(20), nullable=False, default="email")
+    to_address: Mapped[str] = mapped_column(String(255), nullable=False)
+    # sent | failed | suppressed (collapsed by the throttle window) | dead_letter
+    status: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    attempt: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    error_message: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    queued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    def __repr__(self) -> str:
+        return f"<NotificationDelivery {self.status} to={self.to_address} alert={self.alert_id[:8]}>"

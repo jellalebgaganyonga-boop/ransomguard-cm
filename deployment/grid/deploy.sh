@@ -130,6 +130,17 @@ check() { # name url
         printf '  [FAIL] %-28s %s (expected %s)\n' "$1" "$code" "${3:-200}"; fail=1
     fi
 }
+# A dead notifier is invisible from the outside: alerts still ingest, the queue
+# just fills up and nobody is told. Check it explicitly.
+notifier_state="$(docker inspect -f '{{.State.Status}}' grid-notifier 2>/dev/null || echo missing)"
+if [ "$notifier_state" = "running" ]; then
+    printf '  [ok]   %-28s %s
+' "grid-notifier" "$notifier_state"
+else
+    printf '  [FAIL] %-28s %s (expected running)
+' "grid-notifier" "$notifier_state"; fail=1
+fi
+
 check "agent health (:443)"      "https://${HOST}/api/v1/health"
 check "dashboard health (:8443)" "https://${HOST}:8443/api/v1/health"
 check "dashboard SPA"            "https://${HOST}:8443/"
