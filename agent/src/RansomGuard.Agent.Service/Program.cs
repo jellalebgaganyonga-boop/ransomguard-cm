@@ -138,19 +138,8 @@ try
     // All agent services via shared registration (enables IHost-based testing)
     ServiceRegistration.ConfigureServices(builder.Services, builder.Configuration);
 
-    // SENTINEL deployment runs before Worker to ensure canaries exist
-    builder.Services.AddHostedService<SentinelDeploymentService>();
-    builder.Services.AddHostedService<SentinelMonitor>();
-    builder.Services.AddHostedService<EntropyMonitor>();
-
-    // USB GUARD monitor
-    builder.Services.AddHostedService<UsbDeviceMonitor>();
-
-    // EXFIL WATCH monitor + firewall rule cleanup
-    builder.Services.AddHostedService<ExfilWatchMonitor>();
-    builder.Services.AddHostedService<ExfilFirewallRuleCleanupService>();
-
-    builder.Services.AddHostedService<Worker>();
+    // The detection monitors (hosted services), in start order
+    ServiceRegistration.AddMonitors(builder.Services);
 
     var host = builder.Build();
 

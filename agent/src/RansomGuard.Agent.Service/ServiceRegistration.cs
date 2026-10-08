@@ -42,6 +42,28 @@ public static class ServiceRegistration
     /// <summary>
     /// Registers all RansomGuard agent services into the DI container.
     /// </summary>
+    /// <summary>
+    /// Registers the detection monitors as hosted services, in start order. Kept here rather
+    /// than in Program.cs so the full set of agent services can be built in tests, with scope
+    /// validation, exactly as the agent builds them.
+    /// </summary>
+    public static void AddMonitors(IServiceCollection services)
+    {
+        // SENTINEL deployment runs before Worker to ensure canaries exist
+        services.AddHostedService<SentinelDeploymentService>();
+        services.AddHostedService<SentinelMonitor>();
+        services.AddHostedService<EntropyMonitor>();
+
+        // USB GUARD monitor
+        services.AddHostedService<UsbDeviceMonitor>();
+
+        // EXFIL WATCH monitor + firewall rule cleanup
+        services.AddHostedService<ExfilWatchMonitor>();
+        services.AddHostedService<ExfilFirewallRuleCleanupService>();
+
+        services.AddHostedService<Worker>();
+    }
+
     public static void ConfigureServices(IServiceCollection services, IConfiguration configuration)
     {
         // Bind configuration
