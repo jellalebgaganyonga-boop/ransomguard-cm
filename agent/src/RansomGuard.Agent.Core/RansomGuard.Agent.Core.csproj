@@ -39,6 +39,10 @@
     <EmbeddedResource Include="Detection\ThreatIntel\Data\*.json" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="RansomGuard.Agent.Tests" />
+  </ItemGroup>
+
   <!--
     SixLabors.ImageSharp 2.1.x: five advisories, fixed only in 4.1.2 (no 2.x backport).
     None is reachable from this agent:
