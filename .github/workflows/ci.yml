@@ -228,24 +228,12 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: pip-audit (GRID)
-        # PYSEC-2026-1325 (ecdsa): no fixed release exists upstream. ecdsa is
-        # pulled in by python-jose only to support ES* JWT algorithms; this
-        # deployment signs with HS256 (core/config.py: jwt_algorithm), so the
-        # vulnerable code path is never reached. Re-check when a fix ships.
-        #
-        # CVE-2026-85394 (python-jose <= 3.5.0, alias GHSA-3qf3-8w2g-rqmx):
-        # algorithm confusion, a DER public key accepted as HMAC secret. No
-        # fixed release. Unreachable: the only verification key is the
-        # symmetric jwt_secret_key, and every decode restricts the algorithms
-        # explicitly (core/security.py:41-42, core/jwt_service.py:63,
-        # core/config.py:34 HS256).
-        #
-        # Both ignores are temporary: python-jose is being replaced by PyJWT
-        # (before R1), which removes python-jose, ecdsa and these two lines.
-        # See docs/security/dependency-risk-register.md.
+        # No ignored advisory. Before adding an --ignore-vuln, record the
+        # advisory and why it is unreachable in
+        # docs/security/dependency-risk-register.md.
         run: |
           pip install pip-audit
-          pip-audit -r grid/requirements.txt --strict --ignore-vuln PYSEC-2026-1325 --ignore-vuln CVE-2026-85394
+          pip-audit -r grid/requirements.txt --strict
 
   # ── Required status check ───────────────────────────────────────
   ci:

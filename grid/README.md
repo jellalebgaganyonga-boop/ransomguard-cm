@@ -70,7 +70,7 @@ uvicorn ransomguard_grid.main:app --reload
 | MySQL Driver | aiomysql | 0.2+ |
 | Cache/Rate Limit | Redis | 7 |
 | Logging | structlog | 24+ |
-| JWT | python-jose | 3.3+ |
+| JWT | PyJWT (HS256 only) | 2.15+ |
 | Ed25519 Signing | PyNaCl + cryptography | 1.5+ / 44+ |
 | Reverse Proxy | nginx | 1.27 |
 | Runtime | Python | 3.12 (Docker) |

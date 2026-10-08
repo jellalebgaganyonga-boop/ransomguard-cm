@@ -3,9 +3,9 @@
 from datetime import UTC, datetime
 from uuid import uuid4
 
+import jwt
 import pytest
 from httpx import AsyncClient
-from jose import jwt  # type: ignore[import-untyped]
 
 from ransomguard_grid.core.security import hash_password
 from ransomguard_grid.db.models.agent import Agent
@@ -120,9 +120,9 @@ async def test_jwt_tampering_rejected(client: AsyncClient) -> None:
     setup = await _create_two_tenants()
     token_a = await _login(client, setup["tenant_a_code"], setup["user_a_email"])
 
-    payload = jwt.decode(token_a, "dummy", options={"verify_signature": False}, algorithms=["HS256"])
+    payload = jwt.decode(token_a, options={"verify_signature": False})
     payload["tenant_id"] = setup["tenant_b_id"]
-    tampered = jwt.encode(payload, "wrong_secret", algorithm="HS256")
+    tampered = jwt.encode(payload, "wrong-secret-also-at-least-32-characters", algorithm="HS256")
 
     resp = await client.get("/api/v1/dashboard/alerts", headers={"Authorization": f"Bearer {tampered}"})
     assert resp.status_code == 401

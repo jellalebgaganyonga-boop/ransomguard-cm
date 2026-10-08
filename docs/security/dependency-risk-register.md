@@ -58,43 +58,8 @@ Dernière mise à jour : 2026-10-08.
 
 ## GRID (Python)
 
-### DEP-GRID-01 — python-jose / ecdsa, PYSEC-2026-1325
-
-- **Paquet** : `ecdsa`, tiré par `python-jose` pour les algorithmes ES*.
-- **Corrigé en** : aucune version.
-- **Pourquoi non atteignable** : le GRID signe et vérifie en HS256 uniquement
-  (`core/config.py:34`) ; aucun algorithme ES* n'est jamais utilisé.
-- **Neutralisation** : `--ignore-vuln PYSEC-2026-1325` dans
-  `.github/workflows/ci.yml` (job *Dependency audit*).
-- **Décision** : antérieure au 2026-09-30 (déjà présente dans la CI) ;
-  réenregistrée ici le 2026-10-08.
-- **Corrigé par** : remplacement de python-jose par PyJWT, **juste après
-  react-router v7, avant R1**. Retire python-jose, ecdsa et l'exclusion.
-- **Réexamen** : 2026-11-07.
-- **Statut** : accepté, remplacement planifié.
-
-### DEP-GRID-02 — python-jose 3.5.0, CVE-2026-85394
-
-- **Alias** : GHSA-3qf3-8w2g-rqmx (correctif incomplet de CVE-2024-33663),
-  publié le 2026-09-03.
-- **Composant** : initialisation HMAC ; une clé publique encodée en DER est
-  acceptée comme secret, ce qui permet de forger un jeton HS256 quand les
-  algorithmes ne sont pas restreints (confusion d'algorithme).
-- **Corrigé en** : aucune version.
-- **Pourquoi non atteignable** :
-  - la seule clé de vérification est le secret symétrique `jwt_secret_key` ;
-    aucune clé publique ne passe par `jose` (Ed25519 passe par PyNaCl) ;
-  - chaque `decode` restreint explicitement les algorithmes :
-    `core/security.py:41-42` et `core/jwt_service.py:63`,
-    `algorithms=[HS256]` (`core/config.py:34`).
-- **Neutralisation** : `--ignore-vuln CVE-2026-85394` dans
-  `.github/workflows/ci.yml`.
-- **Décision** : 2026-10-08.
-- **Corrigé par** : remplacement par PyJWT, avant R1 (même lot que
-  DEP-GRID-01). C'est la dépendance d'authentification du SaaS, et c'est son
-  deuxième avis sans correctif.
-- **Réexamen** : 2026-11-07.
-- **Statut** : accepté, remplacement planifié.
+Aucun avis accepté : python-jose a été remplacé par PyJWT (voir *Résolus*,
+DEP-GRID-01 et DEP-GRID-02). `pip-audit --strict` tourne sans exclusion.
 
 ---
 
@@ -182,4 +147,35 @@ Aucune de ces dépendances n'est livrée au navigateur. Le contrôle de la CI
 - **Correction** : future flags v7 activés sur la v6 (cf9a53d), puis
   react-router-dom 7.18.4 (commit du passage en v7). `npm audit --omit=dev` :
   0 vulnérabilité.
+- **Statut** : **Résolu** le 2026-10-08.
+
+### DEP-GRID-01 — python-jose / ecdsa, PYSEC-2026-1325
+
+- **Paquet** : `ecdsa`, tiré par `python-jose` pour les algorithmes ES*.
+- **Corrigé en** : aucune version.
+- **Pourquoi il était non atteignable** : le GRID signe et vérifie en HS256
+  uniquement ; aucun algorithme ES* n'était utilisé.
+- **Neutralisation (retirée)** : `--ignore-vuln PYSEC-2026-1325` dans
+  `.github/workflows/ci.yml`.
+- **Correction** : python-jose remplacé par PyJWT ; python-jose et ecdsa ne
+  sont plus installés, l'exclusion est supprimée.
+- **Statut** : **Résolu** le 2026-10-08.
+
+### DEP-GRID-02 — python-jose 3.5.0, CVE-2026-85394
+
+- **Alias** : GHSA-3qf3-8w2g-rqmx (correctif incomplet de CVE-2024-33663),
+  publié le 2026-09-03. Confusion d'algorithme : une clé publique DER acceptée
+  comme secret HMAC.
+- **Corrigé en** : aucune version de python-jose.
+- **Pourquoi il était non atteignable** : seule clé de vérification, le secret
+  symétrique `jwt_secret_key` ; chaque `decode` restreignait les algorithmes.
+- **Neutralisation (retirée)** : `--ignore-vuln CVE-2026-85394` dans
+  `.github/workflows/ci.yml`.
+- **Correction** : python-jose remplacé par PyJWT. Chaque `decode` passe
+  `algorithms=["HS256"]` en dur (`core/jwt_service.py`, `core/security.py`),
+  jamais lu depuis le jeton ni depuis la configuration ; `jwt_algorithm` n'accepte
+  plus que `"HS256"`. Tests de sécurité écrits avant la migration et passés
+  avant et après (`grid/tests/test_jwt_security.py`) : alg none, confusion
+  d'algorithme, signature modifiée, jeton expiré, et décodage par PyJWT d'un
+  jeton émis par python-jose.
 - **Statut** : **Résolu** le 2026-10-08.

@@ -1,6 +1,6 @@
 # ADR-023: GRID Server Tech Stack — FastAPI Python
 
-**Status:** Accepted — amended 2026-10-01 (see Amendment 1: single MySQL driver)
+**Status:** Accepted — amended 2026-10-01 (Amendment 1: single MySQL driver) and 2026-10-08 (Amendment 2: PyJWT replaces python-jose)
 **Date:** 2026-05-29
 **Sprint:** 6
 
@@ -101,3 +101,21 @@ aiomysql is the one and only MySQL driver. asyncmy is removed from
   new ADR, not a second driver kept "just in case".
 - Any environment with an `mysql+asyncmy://` URL must switch to
   `mysql+aiomysql://`. No tracked deployment file uses asyncmy.
+
+## Amendment 2 — 2026-10-08: PyJWT replaces python-jose
+
+**Supersedes:** "python-jose (JWT)" in *Decision*.
+
+python-jose reached its second advisory without a fixed release:
+PYSEC-2026-1325 (its `ecdsa` dependency) and CVE-2026-85394 (algorithm
+confusion, a DER public key accepted as an HMAC secret). Neither was reachable
+in the GRID, but it is the authentication dependency of the SaaS, and an
+unmaintained one cannot stay there.
+
+- The GRID uses **PyJWT**, HS256 only. Every `decode` passes
+  `algorithms=["HS256"]` explicitly: the algorithm is never read from the
+  token, nor from configuration (`jwt_algorithm` only accepts `"HS256"`).
+- python-jose and ecdsa are no longer installed; `pip-audit --strict` runs in
+  CI with no ignored advisory.
+- Tokens already issued stay valid: same secret, same algorithm, same claims
+  (`grid/tests/test_jwt_security.py` decodes a token issued by python-jose).

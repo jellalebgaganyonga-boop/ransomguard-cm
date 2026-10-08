@@ -4,7 +4,7 @@ import calendar
 from datetime import UTC, datetime, timedelta
 
 import bcrypt
-from jose import JWTError, jwt  # type: ignore[import-untyped]
+import jwt
 
 from ransomguard_grid.core.config import get_settings
 
@@ -31,16 +31,12 @@ def create_access_token(
         expires_delta or timedelta(minutes=_settings.jwt_access_token_expire_minutes)
     )
     to_encode["exp"] = calendar.timegm(expire.utctimetuple())
-    encoded: str = jwt.encode(to_encode, _settings.jwt_secret_key, algorithm=_settings.jwt_algorithm)
+    encoded: str = jwt.encode(to_encode, _settings.jwt_secret_key, algorithm="HS256")
     return encoded
 
 
 def decode_access_token(token: str) -> dict[str, str | list[str]]:
-    """Decode and verify a JWT access token. Raises JWTError on failure."""
-    try:
-        payload: dict[str, str | list[str]] = jwt.decode(
-            token, _settings.jwt_secret_key, algorithms=[_settings.jwt_algorithm]
-        )
-        return payload
-    except JWTError:
-        raise
+    """Decode and verify a JWT access token. Raises jwt.PyJWTError on failure."""
+    # Explicit, fixed algorithm list: never taken from the token's header.
+    payload: dict[str, str | list[str]] = jwt.decode(token, _settings.jwt_secret_key, algorithms=["HS256"])
+    return payload

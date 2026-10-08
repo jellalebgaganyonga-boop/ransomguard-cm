@@ -1,6 +1,7 @@
 """Application configuration via Pydantic Settings with environment variable support."""
 
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -31,7 +32,9 @@ class Settings(BaseSettings):
 
     # JWT (dashboard)
     jwt_secret_key: str = Field(default="dev-secret-key-minimum-32-characters-long!", min_length=32)
-    jwt_algorithm: str = "HS256"
+    # HS256 only: the algorithm is fixed in code (core/jwt_service.py). Kept so an
+    # existing GRID_JWT_ALGORITHM setting fails at startup unless it says HS256.
+    jwt_algorithm: Literal["HS256"] = "HS256"
     jwt_access_token_expire_minutes: int = Field(default=60, ge=5, le=480)
 
     # Ed25519 (threat intel signing)
