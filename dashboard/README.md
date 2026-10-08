@@ -159,11 +159,12 @@ Lighthouse report: `docs/lighthouse-report.md`
 ### Security audit
 
 ```bash
-npm audit --audit-level=high --omit=dev  # 0 production vulnerabilities
+npm audit --audit-level=high --omit=dev  # the CI gate: production, high and above
 ```
 
-6 dev-only advisories (GHSA-67mh-4wv8-2f99) in vite/esbuild/vitest chain —
-not in the production bundle. Vite v5→v8 breaking upgrade deferred to Sprint 8.
+Every advisory that is not fixed right away (dev toolchain: Vite, Vitest,
+Tailwind, style-dictionary) is recorded, with its reason, its fixing lot and a
+review date, in `docs/security/dependency-risk-register.md`.
 
 ---
 
