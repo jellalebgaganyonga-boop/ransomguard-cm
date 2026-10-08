@@ -18,8 +18,8 @@ const THIRTY_MIN_MS = 30 * 60 * 1000;
 /**
  * The URL reaching /dashboard does not mean the idle timer is running: the
  * timer is armed by AuthenticatedRoute only once /me has loaded
- * (protected-route.tsx, `enabled: !!me`). With React Router's
- * v7_startTransition the route renders as a transition, after the URL change,
+ * (protected-route.tsx, `enabled: !!me`). React Router v7 renders route
+ * changes as transitions (startTransition), after the URL change,
  * so fast-forwarding the clock right after waitForURL can happen before the
  * timer exists. The app shell's <main> is rendered only once /me has loaded.
  */

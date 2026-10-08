@@ -170,15 +170,16 @@ Aucune de ces dépendances n'est livrée au navigateur. Le contrôle de la CI
 
 ---
 
-## En cours de correction (non accepté)
+## Résolus
 
 ### DEP-DASH-04 — react-router / react-router-dom 6.30.6 (production)
 
 - **Avis** : GHSA-wrjc-x8rr-h8h6 (redirection ouverte via une barre oblique
   inverse dans `<Link>` et `useNavigate`), GHSA-337j-9hxr-rhxg (injection de
   constructeur à la désérialisation). Gravité moyenne.
-- **Corrigé en** : react-router-dom 7.18.4 (version majeure).
-- **Décision** : 2026-10-08, **corriger maintenant, avant R1** : la console
-  d'un produit de sécurité ne doit pas porter une redirection ouverte. En deux
-  commits : future flags de la v6, puis passage en v7.
-- **Statut** : en cours.
+- **Décision** : 2026-10-08, corriger avant R1 : la console d'un produit de
+  sécurité ne doit pas porter une redirection ouverte.
+- **Correction** : future flags v7 activés sur la v6 (cf9a53d), puis
+  react-router-dom 7.18.4 (commit du passage en v7). `npm audit --omit=dev` :
+  0 vulnérabilité.
+- **Statut** : **Résolu** le 2026-10-08.
