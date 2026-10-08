@@ -31,6 +31,8 @@ class AlertItem(BaseModel):
     # Joined from agents on agent_id AND tenant_id; None when the agent is not in the
     # caller's tenant (or no longer exists) -- never another hospital's machine name.
     agent_hostname: str | None = None
+    # Stable module code derived from alert_type (core/alert_modules.py); UNKNOWN, never empty.
+    module: str = "UNKNOWN"
 
 
 class PaginatedAlertResponse(PaginatedResponse):

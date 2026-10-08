@@ -130,9 +130,12 @@ export function AlertDetailPage() {
         </div>
         <div>
           <span className="text-[10px] font-semibold uppercase text-text-secondary">
-            {t('alerts.module', 'Type')}
+            {t('alerts.list.col.module', 'Module')}
           </span>
-          <p className="mt-0.5 font-semibold text-text-primary">{alert.alert_type}</p>
+          <p className="mt-0.5 font-semibold text-text-primary">
+            {t(`modules.${alert.module ?? 'UNKNOWN'}`, alert.module ?? 'UNKNOWN')}
+          </p>
+          <p className="font-mono text-[10px] text-text-secondary">{alert.alert_type}</p>
         </div>
       </div>
 

@@ -392,5 +392,13 @@
       "title": "Error",
       "description": "An unexpected error occurred. Please try again."
     }
+  },
+  "modules": {
+    "SENTINEL": "SENTINEL — decoy files",
+    "ENTROPY": "ENTROPY — encryption",
+    "GENEALOGY": "GENEALOGY — process origin",
+    "USB_GUARD": "USB GUARD — removable media",
+    "EXFIL_WATCH": "EXFIL WATCH — data exfiltration",
+    "UNKNOWN": "Unknown module"
   }
 }

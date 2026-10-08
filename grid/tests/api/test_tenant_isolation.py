@@ -238,3 +238,15 @@ async def test_alert_pointing_at_another_tenants_agent_does_not_leak_its_hostnam
     detail = await client.get(f"/api/v1/dashboard/alerts/{rogue_alert_id}", headers=headers)
     assert detail.status_code == 200
     assert detail.json()["agent_hostname"] is None
+
+
+@pytest.mark.asyncio
+async def test_alert_carries_its_module_code(client: AsyncClient) -> None:
+    """MODULE: the API exposes a stable module code; an unmapped alert_type is UNKNOWN, never empty."""
+    setup = await _create_two_tenants()
+    token_a = await _login(client, setup["tenant_a_code"], setup["user_a_email"])
+
+    listed = await client.get("/api/v1/dashboard/alerts", headers={"Authorization": f"Bearer {token_a}"})
+    item = next(a for a in listed.json()["items"] if a["id"] == setup["alert_a_id"])
+    assert item["alert_type"] == "USB"  # test data, not an agent type
+    assert item["module"] == "UNKNOWN"

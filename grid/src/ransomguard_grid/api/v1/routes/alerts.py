@@ -13,11 +13,14 @@ from ransomguard_grid.api.v1.schemas.alert import (
     BatchAlertIngestRequest,
     BatchAlertIngestResponse,
 )
+from ransomguard_grid.core.alert_modules import UNKNOWN, module_for
 from ransomguard_grid.core.logging import get_logger
 from ransomguard_grid.core.rate_limit import InMemoryRateLimiter, get_rate_limiter
 from ransomguard_grid.db.models.agent import Agent
 from ransomguard_grid.db.models.alerts import Alert, AlertArtifact, AlertDetail
+from ransomguard_grid.db.models.enums import LogLevel
 from ransomguard_grid.db.models.notifications import NotificationPreference
+from ransomguard_grid.db.models.operations import SystemLog
 from ransomguard_grid.db.models.tenant_user import User
 from ransomguard_grid.db.repositories.alert_repository import AlertRepository
 from ransomguard_grid.db.session import get_db
@@ -60,6 +63,19 @@ async def _ingest_single_alert(
         raw_payload_json=body.raw_payload,
     )
     db.add(alert)
+
+    # An alert_type with no module still gets in (UNKNOWN), but never silently.
+    if module_for(body.alert_type) == UNKNOWN:
+        logger.warning("alert_type_without_module", alert_type=body.alert_type, alert_id=alert_id)
+        db.add(SystemLog(
+            id=str(uuid4()),
+            tenant_id=agent.tenant_id,
+            level=LogLevel.Warning,
+            component="alert-ingest",
+            message=f"alert_type '{body.alert_type}' maps to no module: shown as UNKNOWN",
+            context_json={"alert_type": body.alert_type, "alert_id": alert_id, "agent_id": agent.id},
+            created_at=now,
+        ))
 
     for detail in body.details:
         db.add(AlertDetail(

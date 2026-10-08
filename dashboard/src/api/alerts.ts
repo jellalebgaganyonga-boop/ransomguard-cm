@@ -8,7 +8,7 @@
  *   - Pagination: offset/limit, not page/page_size
  *   - Status update: { new_status, justification(min=5) }, not { status, note }
  *   - AlertItem: agent_hostname (joined on agent_id AND tenant_id, null when unknown); no priority_score;
- *     has alert_type/detected_at/ingested_at
+ *     module (stable code derived server-side, UNKNOWN when unmapped); has alert_type/detected_at/ingested_at
  *   - AlertDetail: confidence_score, artifacts, status_history are optional (not yet in backend)
  */
 
@@ -50,6 +50,8 @@ export const AlertListItemSchema = z.object({
   status: AlertStatusSchema,
   agent_id: z.string(),
   agent_hostname: z.string().nullable().optional(),
+  /** Stable module code derived server-side from alert_type (UNKNOWN when unmapped). */
+  module: z.string().optional(),
   alert_type: z.string(),
   mitre_technique_id: z.string().nullable(),
   summary: z.string(),
@@ -121,6 +123,8 @@ export const AlertDetailSchema = z.object({
   status: AlertStatusSchema,
   agent_id: z.string(),
   agent_hostname: z.string().nullable().optional(),
+  /** Stable module code derived server-side from alert_type (UNKNOWN when unmapped). */
+  module: z.string().optional(),
   alert_type: z.string(),
   mitre_technique_id: z.string().nullable(),
   summary: z.string(),

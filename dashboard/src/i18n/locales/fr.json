@@ -392,5 +392,13 @@
       "title": "Erreur",
       "description": "Une erreur inattendue est survenue. Veuillez réessayer."
     }
+  },
+  "modules": {
+    "SENTINEL": "SENTINEL — fichiers leurres",
+    "ENTROPY": "ENTROPY — chiffrement",
+    "GENEALOGY": "GENEALOGY — origine du processus",
+    "USB_GUARD": "USB GUARD — supports amovibles",
+    "EXFIL_WATCH": "EXFIL WATCH — fuite de données",
+    "UNKNOWN": "Module inconnu"
   }
 }

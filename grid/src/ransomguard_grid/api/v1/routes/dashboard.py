@@ -33,6 +33,7 @@ from ransomguard_grid.api.v1.schemas.dashboard import (
     UserItemWithRoles,
     UserWithRolesItem,
 )
+from ransomguard_grid.core.alert_modules import module_for
 from ransomguard_grid.core.security import hash_password
 from ransomguard_grid.db.models.agent import Agent
 from ransomguard_grid.db.models.alerts import Alert, AlertStatusChange
@@ -123,7 +124,9 @@ def _agent_join_condition() -> ColumnElement[bool]:
 
 
 def _alert_item(alert: Alert, agent_hostname: str | None) -> AlertItem:
-    return AlertItem.model_validate(alert).model_copy(update={"agent_hostname": agent_hostname})
+    return AlertItem.model_validate(alert).model_copy(
+        update={"agent_hostname": agent_hostname, "module": module_for(alert.alert_type)}
+    )
 
 
 async def _hostname_for(db: AsyncSession, alert: Alert) -> str | None:
