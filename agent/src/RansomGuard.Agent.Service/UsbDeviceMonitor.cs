@@ -5,6 +5,7 @@ using System.Threading.Channels;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using RansomGuard.Agent.Core.Configuration;
+using RansomGuard.Agent.Core.Diagnostics;
 using RansomGuard.Agent.Core.Detection;
 using RansomGuard.Agent.Core.Detection.Genealogy;
 using RansomGuard.Agent.Core.Detection.UsbGuard;
@@ -12,6 +13,7 @@ using RansomGuard.Agent.Core.Detection.UsbGuard.Actions;
 using RansomGuard.Agent.Core.Detection.UsbGuard.Models;
 using RansomGuard.Agent.Core.Detection.UsbGuard.Scanning;
 using RansomGuard.Agent.Core.Detection.UsbGuard.Wmi;
+using RansomGuard.Agent.Core.Communication;
 using RansomGuard.Agent.Core.Persistence;
 using RansomGuard.Agent.Core.Persistence.Entities;
 using RansomGuard.Agent.Core.Security.RateLimiting;
@@ -39,6 +41,8 @@ public sealed class UsbDeviceMonitor : BackgroundService, IUsbDeviceMonitor
     private readonly ConcurrentDictionary<string, CancellationTokenSource> _activeScanCts = new();
     private readonly ConcurrentDictionary<string, UsbDevice> _connectedDevices = new();
     private readonly IOperationRateLimiter? _scanRateLimiter;
+    private readonly IAlertForwardingQueue? _alertQueue;
+    private readonly IModuleStateRegistry _moduleState;
     private long _totalEventsProcessed;
 
     /// <summary>Number of currently connected USB devices.</summary>
@@ -55,7 +59,9 @@ public sealed class UsbDeviceMonitor : BackgroundService, IUsbDeviceMonitor
         BootableUsbDetector bootableDetector,
         IServiceScopeFactory scopeFactory,
         IOptionsMonitor<AgentConfiguration> config,
-        RateLimiterFactory? rateLimiterFactory = null)
+        IModuleStateRegistry moduleState,
+        RateLimiterFactory? rateLimiterFactory = null,
+        IAlertForwardingQueue? alertQueue = null)
     {
         _logger = logger;
         _wmiSubscriber = wmiSubscriber;
@@ -63,7 +69,9 @@ public sealed class UsbDeviceMonitor : BackgroundService, IUsbDeviceMonitor
         _bootableDetector = bootableDetector;
         _scopeFactory = scopeFactory;
         _config = config.CurrentValue;
+        _moduleState = moduleState;
         _scanRateLimiter = rateLimiterFactory?.GetLimiter("usb-scan");
+        _alertQueue = alertQueue;
         _eventChannel = Channel.CreateBounded<UsbConnectionEvent>(
             new BoundedChannelOptions(EventChannelCapacity)
             {
@@ -75,10 +83,31 @@ public sealed class UsbDeviceMonitor : BackgroundService, IUsbDeviceMonitor
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        bool reachedActive = false;
+        try
+        {
         if (_config.UsbGuard is null || !_config.UsbGuard.Enabled)
         {
             _logger.LogInformation("USB GUARD module is disabled");
+            _moduleState.Publish(ModuleCode.UsbGuard, ModuleState.DisabledByConfig, ModuleReasonCode.DisabledByConfig);
             return;
+        }
+
+        // Strict + empty whitelist: warn at startup, do not block (A5).
+        UsbOperatingMode startupMode = ResolveOperatingMode();
+        try
+        {
+            await using var startupScope = _scopeFactory.CreateAsyncScope();
+            await UsbGuardStartupCheck.WarnIfStrictWithEmptyWhitelistAsync(
+                startupMode,
+                startupScope.ServiceProvider.GetRequiredService<IUsbWhitelistService>(),
+                _logger,
+                stoppingToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // The whitelist service itself could not be built (e.g. database unavailable).
+            _logger.LogWarning(ex, UsbGuardStartupCheck.UnreadableWhitelistWarning);
         }
 
         // Start WMI subscribers
@@ -87,7 +116,10 @@ public sealed class UsbDeviceMonitor : BackgroundService, IUsbDeviceMonitor
         // Start consumer task
         Task consumerTask = ConsumeEventsAsync(stoppingToken);
 
-        _logger.LogInformation("USB GUARD monitor active");
+        _logger.LogInformation("USB GUARD monitor active (mode: {Mode})", startupMode);
+        var (postureState, postureReason) = UsbGuardStartupCheck.RunningPosture(startupMode);
+        _moduleState.Publish(ModuleCode.UsbGuard, postureState, postureReason);
+        reachedActive = true;
 
         // Heartbeat
         using var heartbeat = new PeriodicTimer(TimeSpan.FromSeconds(60));
@@ -105,7 +137,30 @@ public sealed class UsbDeviceMonitor : BackgroundService, IUsbDeviceMonitor
         _eventChannel.Writer.TryComplete();
         await consumerTask;
         await _wmiSubscriber.StopAsync();
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Normal shutdown.
+        }
+        catch (Exception ex)
+        {
+            // Publish the real state and do NOT rethrow: one module crashing must
+            // not take the host — and all other protection — down with it.
+            _moduleState.Publish(ModuleCode.UsbGuard, ModuleState.Inactive,
+                reachedActive ? ModuleReasonCode.StoppedUnexpectedly : ModuleReasonCode.InitFailed);
+            _logger.LogError(ex, "USB GUARD monitor stopped unexpectedly");
+        }
     }
+
+    /// <summary>
+    /// Operating mode from Agent:UsbGuard:OperatingMode. An unrecognised value still
+    /// falls back to Permissive silently: that belongs to the configuration-validation
+    /// work on silent defaults, not to this module.
+    /// </summary>
+    private UsbOperatingMode ResolveOperatingMode() =>
+        Enum.TryParse<UsbOperatingMode>(_config.UsbGuard?.OperatingMode, true, out var mode)
+            ? mode
+            : UsbOperatingMode.Permissive;
 
     private async Task ConsumeEventsAsync(CancellationToken ct)
     {
@@ -163,10 +218,7 @@ public sealed class UsbDeviceMonitor : BackgroundService, IUsbDeviceMonitor
             var contentScanner = scope.ServiceProvider.GetRequiredService<IUsbContentScanner>();
             var actionEngine = scope.ServiceProvider.GetRequiredService<IUsbActionEngine>();
 
-            // Parse operating mode from config
-            var operatingMode = Enum.TryParse<UsbOperatingMode>(_config.UsbGuard?.OperatingMode, true, out var mode)
-                ? mode
-                : UsbOperatingMode.Permissive;
+            var operatingMode = ResolveOperatingMode();
 
             // Build runtime policy from config
             var policy = new UsbPolicy
@@ -326,7 +378,10 @@ public sealed class UsbDeviceMonitor : BackgroundService, IUsbDeviceMonitor
             Title = $"USB GUARD: {severity} — {device.ProductDescription}",
             Description = description,
             Severity = severity.ToString(),
-            ActionTaken = actionResult.ActionType.ToString()
+            // Never claim an action that did not happen (forwarded to the GRID as action_taken).
+            ActionTaken = actionResult.Success
+                ? actionResult.ActionType.ToString()
+                : $"{actionResult.ActionType} ({actionResult.ReasonCode ?? "failed"})"
         };
 
         dbContext.UsbAlerts.Add(alert);
@@ -334,6 +389,9 @@ public sealed class UsbDeviceMonitor : BackgroundService, IUsbDeviceMonitor
 
         _logger.LogWarning("USB GUARD ALERT: {Title} — Action: {Action}",
             alert.Title, alert.ActionTaken);
+
+        // Forward to GRID
+        _alertQueue?.TryEnqueue(AlertMapper.FromUsbAlert(alert));
 
         return alert;
     }

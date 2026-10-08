@@ -298,6 +298,13 @@ The hybrid client-server architecture with distributed intelligence was retained
 *Impact:* Catastrophic — SolarWinds scenario.
 *Mitigation:* Mandatory dual signature, canary deployment 1%→10%→50%→100% with automatic monitoring, publishable reproducible build.
 
+**R12 — A third-party antivirus blocks or quarantines the agent**
+*Observed:* 2026-10-08, on the development machine. Bitdefender silently denied access to freshly compiled agent binaries (`RansomGuard.Agent.Core.dll`, `RansomGuard.Agent.Tests.dll`): no Defender detection, correct ACLs, no process holding the file. The agent legitimately behaves like what antivirus heuristics hunt for (file-system monitoring, entropy measurement, canary files, encryption simulation in tests).
+*Diagnosis (2026-10-08):* the refusal comes from a file-system filter driver, not from a detection. The exact error is MSBuild's `MSB3021: Unable to copy file "obj\...\RansomGuard.Agent.Tests.dll" ... Access to the path '...' is denied.` — not `contains a virus` (Defender, `ERROR_VIRUS_INFECTED`) nor `Application Control policy has blocked this file` (Smart App Control, which is off on that machine; no CodeIntegrity event). A Bitdefender filter driver, **even without an active licence**, silently denies access to an unsigned DLL right after it is written: no alert, no quarantine, no entry on the antivirus side. ACLs were correct and no process held the file; deleting `bin`/`obj` and rebuilding reproduces it.
+*Impact:* Critical — in a hospital the agent will run next to Kaspersky, Bitdefender or Defender. A blocked or quarantined agent is a workstation that looks protected and is not; an antivirus fighting the agent can also slow the workstation down until it is uninstalled.
+*Mitigation:* Prerequisites of the installer (Sprint 12), not options: (1) Authenticode code signing of every binary (already planned); (2) false-positive submission of each signed release to Kaspersky, Bitdefender and Microsoft before distribution; (3) a cohabitation test with each of the three antiviruses, real-time protection on, covering installation, startup, detection and update. On development machines, the exclusion is limited to the repository folder, never the whole user profile.
+*Consequence for hospitals:* installing or updating the agent could fail with nothing recorded on the antivirus side — the installer only sees an access-denied error, the antivirus console shows nothing. The cohabitation test that gates the installer (Sprint 12) must therefore cover **installation, update and first start**, with real-time protection on, and check the antivirus' own logs as well as the agent's.
+
 ### 7.2 Legal Risks
 
 **R5 — Non-compliance with Law N°2024/017 from June 2026**

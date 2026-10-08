@@ -54,6 +54,9 @@ public sealed record ExfilFinding
 
     /// <summary>MITRE ATT&amp;CK technique ID.</summary>
     public required string MitreId { get; init; }
+
+    /// <summary>UTC timestamp when the finding was created (detection time).</summary>
+    public DateTime DetectedAt { get; init; } = DateTime.UtcNow;
 }
 
 /// <summary>

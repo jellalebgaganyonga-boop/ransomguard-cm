@@ -8,20 +8,29 @@ from uuid import uuid4
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from cryptography.hazmat.primitives.serialization import Encoding, NoEncryption, PrivateFormat, PublicFormat
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+# Importing the models package is what registers every table on Base.metadata.
+# Without it, create_all() builds whatever happened to be imported by the tests
+# selected for this run -- so a file run on its own could miss tables entirely.
+import ransomguard_grid.db.models  # noqa: F401,E402  (side-effecting import)
 from ransomguard_grid.db.base import Base
 
 # Set test environment before importing app
 os.environ["GRID_DATABASE_URL"] = "sqlite+aiosqlite://"
 os.environ["GRID_JWT_SECRET_KEY"] = "test-secret-key-minimum-32-characters-long!"
 os.environ["GRID_ENVIRONMENT"] = "development"
+# Agent-endpoint tests call /agents/* without a client certificate, which is
+# exactly what the "agent_id" mode is for. Tests that assert the mTLS challenge
+# switch the mode themselves.
+os.environ["GRID_AGENT_AUTH_MODE"] = "agent_id"
 os.environ["GRID_DEBUG"] = "true"
 
 # Use a file-based SQLite for test engine so multiple connections share the same DB
 import tempfile
+
 _test_db_path = os.path.join(tempfile.gettempdir(), "ransomguard_grid_test.db")
 _test_engine = create_async_engine(f"sqlite+aiosqlite:///{_test_db_path}", echo=False)
 _test_session_factory = async_sessionmaker(bind=_test_engine, expire_on_commit=False)
@@ -69,7 +78,10 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
 
     app.dependency_overrides[get_db] = _override_get_db
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+    # https, not http: the refresh cookie is issued with Secure=true, and a
+    # client on a plain-http base URL silently drops it -- the cookie flow could
+    # never be exercised. The ASGI transport does not open a socket either way.
+    async with AsyncClient(transport=transport, base_url="https://test") as ac:
         yield ac
     app.dependency_overrides.pop(get_db, None)
 

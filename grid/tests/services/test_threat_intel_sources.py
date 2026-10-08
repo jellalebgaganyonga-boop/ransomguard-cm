@@ -1,13 +1,13 @@
 """Tests for individual threat intel source fetchers."""
 
-import pytest
 import httpx
+import pytest
 
-from ransomguard_grid.services.threat_intel_sources.tor_project import TorProjectSource
-from ransomguard_grid.services.threat_intel_sources.threatfox import ThreatFoxSource
+from ransomguard_grid.services.threat_intel_sources.alienvault_otx import AlienVaultOtxSource
 from ransomguard_grid.services.threat_intel_sources.aws import AwsIpRangesSource
 from ransomguard_grid.services.threat_intel_sources.gcp import GcpIpRangesSource
-from ransomguard_grid.services.threat_intel_sources.alienvault_otx import AlienVaultOtxSource
+from ransomguard_grid.services.threat_intel_sources.threatfox import ThreatFoxSource
+from ransomguard_grid.services.threat_intel_sources.tor_project import TorProjectSource
 
 
 @pytest.mark.asyncio

@@ -89,8 +89,14 @@ async def test_refresh_returns_new_access_token(client: AsyncClient) -> None:
     login_resp = await client.post("/api/v1/auth/login", json={
         "tenant_code": code, "email": email, "password": "TestPass123!",
     })
-    refresh_token = login_resp.json()["refresh_token"]
+    assert login_resp.status_code == 200
 
-    resp = await client.post("/api/v1/auth/refresh", json={"refresh_token": refresh_token})
+    # GRID-SEC-001: the refresh token is delivered as an HttpOnly cookie and the
+    # response body field is intentionally empty. The client replays the cookie,
+    # which is exactly what the browser does.
+    assert login_resp.cookies.get("rg_refresh_token")
+    assert login_resp.json()["refresh_token"] == ""
+
+    resp = await client.post("/api/v1/auth/refresh")
     assert resp.status_code == 200
     assert "access_token" in resp.json()

@@ -1,0 +1,404 @@
+{
+  "app": {
+    "name": "RansomGuard-CM",
+    "tagline": "Console de sécurité"
+  },
+  "nav": {
+    "dashboard": "Tableau de bord",
+    "alerts": "Alertes",
+    "agents": "Agents",
+    "users": "Utilisateurs",
+    "audit": "Journal d'audit",
+    "userActions": "Actions utilisateur",
+    "notifications": "Notifications",
+    "settings": "Paramètres"
+  },
+  "header": {
+    "notifications": "Notifications",
+    "language": "Langue",
+    "profile": "Profil",
+    "logout": "Se déconnecter"
+  },
+  "auth": {
+    "login": {
+      "title": "Connexion",
+      "email": "Email",
+      "password": "Mot de passe",
+      "rememberMe": "Se souvenir de moi",
+      "submit": "Se connecter",
+      "showPassword": "Afficher le mot de passe",
+      "hidePassword": "Masquer le mot de passe",
+      "capsLockWarning": "Verrouillage majuscules activé",
+      "tenantCode": "Code établissement",
+      "errors": {
+        "invalidCredentials": "Email ou mot de passe incorrect",
+        "serverError": "Erreur serveur, veuillez réessayer",
+        "networkError": "Connexion perdue, vérifiez votre réseau",
+        "tenantCodeRequired": "Le code établissement est requis",
+        "emailRequired": "L'email est requis",
+        "emailInvalid": "Format d'email invalide",
+        "passwordRequired": "Le mot de passe est requis"
+      }
+    },
+    "sessionExpired": {
+      "title": "Votre session a expiré",
+      "body": "Vous avez été déconnecté après 30 minutes d'inactivité.",
+      "cta": "Se reconnecter"
+    }
+  },
+  "severity": {
+    "critical": "Critique",
+    "high": "Haut",
+    "medium": "Moyen",
+    "low": "Faible",
+    "info": "Info"
+  },
+  "status": {
+    "new": "Nouveau",
+    "in_progress": "En cours",
+    "acknowledged": "En cours",
+    "investigating": "En cours",
+    "resolved": "Résolu",
+    "closed": "Résolu",
+    "falsepositive": "Faux positif",
+    "suppressed": "Supprimé",
+    "isolated": "Isolé",
+    "online": "Actif",
+    "offline": "Hors ligne",
+    "stale": "Obsolète",
+    "provisioned": "Provisionné",
+    "active": "Actif",
+    "disconnected": "Déconnecté",
+    "decommissioned": "Désactivé"
+  },
+  "dashboard": {
+    "exec": {
+      "title": "Tableau de bord exécutif",
+      "subtitle": "Vue d'ensemble de la sécurité de l'hôpital",
+      "criticalStatus": "{count} incidents critiques requièrent votre attention",
+      "highStatus": "{count} alertes à examiner",
+      "allNormal": "Tous les systèmes normaux",
+      "viewDetails": "Voir les détails →",
+      "recentAlerts": "ALERTES RÉCENTES",
+      "noAlerts": "Aucune alerte récente",
+      "quickActions": "Actions rapides",
+      "manageUsers": "Gérer les utilisateurs",
+      "viewAudit": "Consulter les journaux d'audit",
+      "report": "Rapport trimestriel (Sprint 8)",
+      "compliance": "Conformité réglementaire",
+      "anticLaw": "Loi 2024/017 :",
+      "nextAudit": "Prochain audit ANTIC : 15 septembre 2026",
+      "downloadReport": "Télécharger le rapport (Sprint 8)",
+      "kpi": {
+        "agents": "Postes protégés",
+        "alerts24h": "Alertes 24h",
+        "critical24h": "Critiques 24h",
+        "daysSince": "Jours sans incident critique",
+        "offline": "hors ligne",
+        "todayReset": "Reset aujourd'hui"
+      }
+    },
+    "ops": {
+      "title": "Console opérationnelle",
+      "commandHint": "pour la palette de commandes",
+      "staleWarning": "{count} agents n'ont pas envoyé de heartbeat depuis plus d'1 heure",
+      "agents": {
+        "title": "AGENTS",
+        "active": "actifs",
+        "stale": "obsolètes",
+        "offline": "hors ligne"
+      },
+      "feed": {
+        "title": "FLUX D'ALERTES",
+        "refresh": "Toutes les 15s",
+        "lastHour": "Dernière heure"
+      }
+    },
+    "readonly": {
+      "title": "Vue de conformité",
+      "subtitle": "Accès en lecture seule",
+      "compliance": "CONFORMITÉ ACTUELLE : 98%",
+      "law": "Loi 2024/017 : Conforme",
+      "nextAudit": "Prochain audit ANTIC : 15 septembre 2026",
+      "auditBtn": "Consulter les journaux d'audit",
+      "auditSub": "Recherche, filtres par date, exportation CSV",
+      "alertsBtn": "Consulter les alertes",
+      "alertsSub": "Lecture seule des alertes de sécurité",
+      "reportBtn": "Rapport de conformité trimestriel",
+      "soon": "Bientôt",
+      "notice": "Vous êtes connectée en mode auditeur. Aucune modification n'est possible.",
+      "kpi": {
+        "alerts24h": "Alertes dernières 24h",
+        "critical": "dont",
+        "auditEntries": "Journal derniers 7 jours",
+        "auditSub": "entrées d'audit"
+      }
+    }
+  },
+  "alerts": {
+    "acknowledge": "Prendre en charge",
+    "backToList": "Retour aux alertes",
+    "notFound": "Alerte non trouvée",
+    "id": "Alerte",
+    "copyId": "Copier l'ID",
+    "detectedAt": "Détecté",
+    "agent": "Agent",
+    "module": "Module",
+    "close": "Fermer l'incident",
+    "markFalsePositive": "Marquer faux positif",
+    "readOnlyNotice": "Mode lecture seule — aucune action disponible",
+    "whatHappened": "QUE S'EST-IL PASSÉ ?",
+    "confidence": "Confiance de détection",
+    "artifacts": "Artefacts associés",
+    "technicalDetails": "Détails techniques",
+    "timeline": "Chronologie",
+    "statusChange": "{from} → {to}",
+    "created": "Alerte créée",
+    "list": {
+      "searchPlaceholder": "Rechercher (hôte...)",
+      "allSeverities": "Toutes sévérités",
+      "allStatuses": "Tous statuts",
+      "empty": {
+        "title": "Aucune alerte ne correspond à vos filtres",
+        "body": "Essayez d'élargir votre recherche ou de réinitialiser les filtres."
+      },
+      "col": {
+        "id": "ID",
+        "score": "Score",
+        "detected": "Détecté",
+        "severity": "Sévérité",
+        "status": "Statut",
+        "agent": "Hôte",
+        "module": "Module",
+        "actions": "Actions"
+      }
+    },
+    "ackModal": {
+      "title": "Prendre en charge cette alerte ?",
+      "description": "Vous allez vous assigner cette alerte.",
+      "noteLabel": "Note (facultative, 0-500 caractères)",
+      "notePlaceholder": "Investigation en cours..."
+    },
+    "closeModal": {
+      "title": "Fermer l'incident",
+      "categoryLabel": "Catégorie de résolution",
+      "categoryPlaceholder": "Sélectionner...",
+      "category": {
+        "fp": "Faux positif",
+        "tpContained": "Vrai positif — Contenu",
+        "tpEscalated": "Vrai positif — Escaladé",
+        "inconclusive": "Non concluant"
+      },
+      "notesLabel": "Notes de résolution",
+      "notesHint": "20-2000 caractères",
+      "notesPlaceholder": "Détail de l'investigation et des actions prises...",
+      "minChars": "{count} caractères minimum",
+      "submit": "Fermer l'incident"
+    }
+  },
+  "users": {
+    "createUser": "Créer un utilisateur",
+    "email": "Email",
+    "fullName": "Nom complet",
+    "status": "Statut",
+    "lastLogin": "Dernière connexion",
+    "editRoles": "Rôles",
+    "never": "Jamais",
+    "active": "Actif",
+    "disabled": "Désactivé",
+    "enable": "Réactiver",
+    "disable": "Désactiver",
+    "list": {
+      "totalUsers": "utilisateurs enregistrés",
+      "empty": "Aucun utilisateur trouvé",
+      "you": "vous"
+    },
+    "createModal": {
+      "title": "Créer un utilisateur",
+      "password": "Mot de passe provisoire",
+      "passwordHint": "8 caractères minimum",
+      "roles": "Rôles initiaux (facultatif)",
+      "submit": "Créer"
+    },
+    "disableModal": {
+      "title": "Désactiver cet utilisateur ?",
+      "body": "sera immédiatement désactivé.",
+      "warning": "L'utilisateur ne pourra plus se connecter immédiatement.",
+      "submit": "Désactiver",
+      "selfErrorTitle": "Action impossible",
+      "selfErrorBody": "Vous ne pouvez pas désactiver votre propre compte. Cette action est bloquée pour éviter tout verrouillage accidentel."
+    },
+    "enableModal": {
+      "title": "Réactiver cet utilisateur ?",
+      "body": "pourra de nouveau se connecter.",
+      "submit": "Réactiver"
+    },
+    "roles": {
+      "title": "Attribuer des rôles",
+      "chooseRoles": "Sélectionnez les rôles :",
+      "gapWarning": "Les rôles actuels ne sont pas affichés (limitation backend connue). Cochez les rôles que cet utilisateur doit avoir — la liste ci-dessous remplacera l'intégralité des rôles existants.",
+      "submit": "Enregistrer les rôles",
+      "tenantAdmin": "Administrateur (tenant_admin)",
+      "securityAnalyst": "Analyste sécurité (security_analyst)",
+      "readOnlyAuditor": "Auditeur lecture seule (read_only_auditor)",
+      "selfDemotionError": "Vous ne pouvez pas retirer le rôle tenant_admin de votre propre compte."
+    }
+  },
+  "agents": {
+    "hostname": "Hôte",
+    "os": "OS",
+    "heartbeat": "Heartbeat",
+    "status": "État",
+    "list": {
+      "totalEndpoints": "endpoints enregistrés",
+      "active": "Actif",
+      "disconnected": "Déconnecté",
+      "provisioned": "Provisionné",
+      "decommissioned": "Désactivé",
+      "version": "Version",
+      "empty": "Aucun agent enregistré",
+      "autoRefresh": "Actualisation auto toutes les 30 s",
+      "addAgent": "Ajouter un agent"
+    },
+    "provision": {
+      "title": "Ajouter un nouvel agent",
+      "subtitle": "Un OTP d'enrôlement est généré. Copiez-le dans l'appsettings.json de l'agent avant l'expiration de 30 minutes.",
+      "otpLabel": "OTP d'enrôlement",
+      "expires": "— expire dans {n} min",
+      "installLabel": "Commande PowerShell (exécuter en tant qu'Administrateur sur la machine cible)",
+      "hint": "Après l'enrôlement, l'agent apparaîtra ici dans les 60 secondes (prochain rafraîchissement auto).",
+      "regenerate": "Générer un nouvel OTP"
+    },
+    "detail": {
+      "notFound": "Agent non trouvé",
+      "backToList": "Retour aux agents",
+      "fqdn": "FQDN",
+      "neverReported": "Jamais",
+      "recentAlerts": "Alertes récentes",
+      "noAlerts": "Aucune alerte pour cet agent",
+      "allAlerts": "Toutes les alertes",
+      "tabOverview": "Vue d'ensemble",
+      "tabAlerts": "Alertes",
+      "tabHeartbeats": "Heartbeats",
+      "tabConfig": "Configuration"
+    },
+    "command": {
+      "isolate": "Isoler le terminal",
+      "title": "Isoler le terminal",
+      "warningTitle": "Action destructrice",
+      "warningBody": "L'isolation de \"{hostname}\" coupera immédiatement l'accès réseau de cet agent. Il sera inaccessible jusqu'à ce qu'un opérateur effectue une restauration physique ou logicielle.",
+      "reasonLabel": "Motif (obligatoire)",
+      "reasonPlaceholder": "Ex: Suspicion de compromission — ransomware détecté en cours d'exécution...",
+      "minChars": "{count} caractères minimum",
+      "ackLabel": "Je comprends que cette action déconnectera immédiatement le terminal du réseau.",
+      "submit": "Isoler le terminal",
+      "lastCommand": "Dernière commande",
+      "status": {
+        "pending": "En attente",
+        "dispatched": "Envoyée",
+        "acknowledged": "Reçue",
+        "completed": "Exécutée",
+        "failed": "Échouée"
+      }
+    }
+  },
+  "common": {
+    "loading": "Chargement...",
+    "error": "Une erreur est survenue",
+    "retry": "Réessayer",
+    "cancel": "Annuler",
+    "confirm": "Confirmer",
+    "save": "Enregistrer",
+    "close": "Fermer",
+    "search": "Rechercher",
+    "filters": "Filtres",
+    "resetFilters": "Réinitialiser les filtres",
+    "noResults": "Aucun résultat",
+    "results": "résultats",
+    "previous": "Précédent",
+    "next": "Suivant",
+    "page": "Page {page} / {totalPages}",
+    "comingInSprint8": "Disponible à partir de Sprint 8",
+    "all": "Tous",
+    "viewAll": "Voir tout →",
+    "view": "Voir →",
+    "access": "Accéder →",
+    "copied": "Copié !"
+  },
+  "audit": {
+    "title": "Journal d'audit",
+    "subtitle": "Intégrité du journal d'audit — chaîne Ed25519 par agent",
+    "totalEntries": "entrées",
+    "empty": "Aucune entrée trouvée",
+    "exportCsv": "Exporter CSV",
+    "exportCsvTitle": "Exporter la page courante en CSV (frontend uniquement, pas d'endpoint backend)",
+    "filterAgentId": "ID Agent",
+    "filterAgentIdPlaceholder": "UUID agent...",
+    "filterAfter": "Reçu après",
+    "filterBefore": "Reçu avant",
+    "gapWarning": "Discontinuité détectée dans la séquence — entrées manquantes ou désordonnées.",
+    "col": {
+      "agentId": "Agent",
+      "sequenceNumber": "Séquence",
+      "signingKeyId": "Clé de signature",
+      "receivedAt": "Reçu le"
+    }
+  },
+  "settings": {
+    "notifications": {
+      "title": "Préférences de notification",
+      "description": "Recevez des notifications par email lorsque de nouvelles alertes sont détectées.",
+      "severity": "Sévérité",
+      "email": "Email",
+      "saved": "Préférences sauvegardées."
+    }
+  },
+  "userActions": {
+    "title": "Journal des actions utilisateur",
+    "subtitle": "Qui a fait quoi sur le tableau de bord",
+    "filterByAction": "Filtrer par action",
+    "empty": "Aucune action enregistrée",
+    "actionType": {
+      "login": "Connexion",
+      "logout": "Déconnexion",
+      "alert_status_change": "Changement statut alerte",
+      "command_issued": "Commande envoyée",
+      "user_create": "Création utilisateur",
+      "user_disable": "Désactivation utilisateur",
+      "user_enable": "Activation utilisateur",
+      "agent_decommission": "Décommissionnement agent",
+      "agent_provision": "Provisionnement agent"
+    },
+    "col": {
+      "date": "Date",
+      "action": "Action",
+      "user": "Utilisateur",
+      "target": "Cible",
+      "details": "Détails",
+      "ip": "IP"
+    }
+  },
+  "errors": {
+    "notFound": {
+      "title": "Page introuvable",
+      "description": "La page que vous recherchez n'existe pas.",
+      "backToDashboard": "Retour au tableau de bord"
+    },
+    "forbidden": {
+      "title": "Accès refusé",
+      "description": "Vous n'avez pas les autorisations nécessaires pour accéder à cette page."
+    },
+    "generic": {
+      "title": "Erreur",
+      "description": "Une erreur inattendue est survenue. Veuillez réessayer."
+    }
+  },
+  "modules": {
+    "SENTINEL": "SENTINEL — fichiers leurres",
+    "ENTROPY": "ENTROPY — chiffrement",
+    "GENEALOGY": "GENEALOGY — origine du processus",
+    "USB_GUARD": "USB GUARD — supports amovibles",
+    "EXFIL_WATCH": "EXFIL WATCH — fuite de données",
+    "UNKNOWN": "Module inconnu"
+  }
+}

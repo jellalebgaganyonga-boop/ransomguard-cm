@@ -26,10 +26,9 @@ public sealed record AgentConfiguration
     public required DetectionOptions Detection { get; init; }
 
     /// <summary>
-    /// Logging configuration.
+    /// Logging configuration. Has legitimate absolute defaults, so the section may be absent.
     /// </summary>
-    [Required]
-    public required LoggingOptions Logging { get; init; }
+    public LoggingOptions Logging { get; init; } = new();
 
     /// <summary>
     /// Server communication settings.
@@ -38,10 +37,9 @@ public sealed record AgentConfiguration
     public required ServerOptions Server { get; init; }
 
     /// <summary>
-    /// Local database settings.
+    /// Local database settings. Has legitimate absolute defaults, so the section may be absent.
     /// </summary>
-    [Required]
-    public required DatabaseOptions Database { get; init; }
+    public DatabaseOptions Database { get; init; } = new();
 
     /// <summary>
     /// SENTINEL canary file detection settings.
@@ -149,12 +147,6 @@ public sealed record AgentIdentityOptions
     /// </summary>
     [Required]
     public required string Version { get; init; }
-
-    /// <summary>
-    /// Deployment environment (Development, Staging, Production).
-    /// </summary>
-    [Required]
-    public required string Environment { get; init; }
 }
 
 /// <summary>
@@ -193,17 +185,19 @@ public sealed record DetectionOptions
 /// </summary>
 public sealed record LoggingOptions
 {
+    /// <summary>Default log file: absolute, under %ProgramData%, never relative to the working directory.</summary>
+    public const string DefaultLogFilePath = @"%ProgramData%\RansomGuard-CM\logs\agent-.log";
+
     /// <summary>
     /// Minimum log level (Verbose, Debug, Information, Warning, Error, Fatal).
     /// </summary>
-    [Required]
-    public required string MinimumLevel { get; init; }
+    public string MinimumLevel { get; init; } = "Information";
 
     /// <summary>
-    /// File path for log output. Supports environment variables.
+    /// File path for log output. Supports environment variables. Must be absolute once
+    /// they are resolved (a relative path would land in System32 for a Windows service).
     /// </summary>
-    [Required]
-    public required string LogFilePath { get; init; }
+    public string LogFilePath { get; init; } = DefaultLogFilePath;
 
     /// <summary>
     /// Maximum size of a single log file in megabytes.
@@ -240,6 +234,17 @@ public sealed record ServerOptions
     /// </summary>
     [Range(1, 120)]
     public int ConnectionTimeoutSeconds { get; init; } = 10;
+
+    /// <summary>
+    /// One-time enrollment token for initial GRID registration.
+    /// Format: RG-CAM-YYYY-XXXXXX. Consumed on first successful enrollment.
+    /// </summary>
+    public string? EnrollmentOtp { get; init; }
+
+    /// <summary>
+    /// Whether to trust any server SSL certificate (dev mode only).
+    /// </summary>
+    public bool TrustAnyCertificate { get; init; }
 }
 
 /// <summary>
@@ -247,11 +252,23 @@ public sealed record ServerOptions
 /// </summary>
 public sealed record DatabaseOptions
 {
+    /// <summary>Default database: absolute, under %ProgramData%, never relative to the working directory.</summary>
+    public const string DefaultConnectionString = @"Data Source=%ProgramData%\RansomGuard-CM\data\agent.db";
+
+    /// <summary>Default key directory (database key and audit signing key).</summary>
+    public const string DefaultKeyDirectory = @"%ProgramData%\RansomGuard-CM\keys";
+
     /// <summary>
-    /// SQLite connection string. Supports environment variables in path.
+    /// SQLite connection string. Supports environment variables in path. The data source must
+    /// be absolute once they are resolved.
     /// </summary>
-    [Required]
-    public required string ConnectionString { get; init; }
+    public string ConnectionString { get; init; } = DefaultConnectionString;
+
+    /// <summary>
+    /// Directory of the database key and the audit signing key. Supports environment
+    /// variables; must be absolute once they are resolved.
+    /// </summary>
+    public string KeyDirectory { get; init; } = DefaultKeyDirectory;
 
     /// <summary>
     /// Maximum number of days to retain detection events and audit logs.
@@ -309,7 +326,11 @@ public sealed record UsbGuardOptions
     /// <summary>Whether USB monitoring is enabled.</summary>
     public bool Enabled { get; init; } = true;
 
-    /// <summary>Operating mode: Audit (log only), Permissive (log+quarantine), Strict (block).</summary>
+    /// <summary>
+    /// Operating mode: Audit, Permissive or Strict (decision matrix in docs/modules/usb-guard.md).
+    /// The code default stays Permissive on purpose: it applies to any installation that
+    /// forgets to configure, and Strict (ejection) must be a written choice, never inherited.
+    /// </summary>
     public string OperatingMode { get; init; } = "Permissive";
 
     /// <summary>Maximum file size in MB for content scanning.</summary>

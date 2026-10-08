@@ -3,9 +3,9 @@
 from datetime import UTC, datetime
 from uuid import uuid4
 
+import jwt
 import pytest
 from httpx import AsyncClient
-from jose import jwt  # type: ignore[import-untyped]
 
 from ransomguard_grid.core.security import hash_password
 from ransomguard_grid.db.models.agent import Agent
@@ -29,6 +29,7 @@ async def _create_two_tenants() -> dict[str, str]:
 
             # Ensure role exists (idempotent)
             from sqlalchemy import select
+
             from ransomguard_grid.db.models.tenant_user import Role as RoleModel
             existing_role = (await session.execute(select(RoleModel).where(RoleModel.name == "tenant_admin"))).scalar_one_or_none()
             if not existing_role:
@@ -119,9 +120,9 @@ async def test_jwt_tampering_rejected(client: AsyncClient) -> None:
     setup = await _create_two_tenants()
     token_a = await _login(client, setup["tenant_a_code"], setup["user_a_email"])
 
-    payload = jwt.decode(token_a, "dummy", options={"verify_signature": False}, algorithms=["HS256"])
+    payload = jwt.decode(token_a, options={"verify_signature": False})
     payload["tenant_id"] = setup["tenant_b_id"]
-    tampered = jwt.encode(payload, "wrong_secret", algorithm="HS256")
+    tampered = jwt.encode(payload, "wrong-secret-also-at-least-32-characters", algorithm="HS256")
 
     resp = await client.get("/api/v1/dashboard/alerts", headers={"Authorization": f"Bearer {tampered}"})
     assert resp.status_code == 401
@@ -196,3 +197,56 @@ async def test_cross_tenant_metrics_isolated(client: AsyncClient) -> None:
     data = resp.json()
     assert data["total_agents"] == 1  # Only tenant A's agent
     assert data["alerts_24h"] == 1  # Only tenant A's alert
+
+
+@pytest.mark.asyncio
+async def test_alert_shows_its_own_agent_hostname(client: AsyncClient) -> None:
+    """HOST: the alert carries the hostname of its agent, joined within the tenant."""
+    setup = await _create_two_tenants()
+    token_a = await _login(client, setup["tenant_a_code"], setup["user_a_email"])
+    headers = {"Authorization": f"Bearer {token_a}"}
+
+    listed = await client.get("/api/v1/dashboard/alerts", headers=headers)
+    item = next(a for a in listed.json()["items"] if a["id"] == setup["alert_a_id"])
+    assert item["agent_hostname"] == "pc-a"
+
+    detail = await client.get(f"/api/v1/dashboard/alerts/{setup['alert_a_id']}", headers=headers)
+    assert detail.json()["agent_hostname"] == "pc-a"
+
+
+@pytest.mark.asyncio
+async def test_alert_pointing_at_another_tenants_agent_does_not_leak_its_hostname(client: AsyncClient) -> None:
+    """HOST: the join is on agent_id AND tenant_id. An alert of tenant A whose agent_id
+    designates an agent of tenant B must not return B's hostname."""
+    setup = await _create_two_tenants()
+    rogue_alert_id = str(uuid4())
+    async with _test_session_factory() as session:
+        session.add(Alert(
+            id=rogue_alert_id, tenant_id=setup["tenant_a_id"], agent_id=setup["agent_b_id"],
+            client_message_id=f"rogue-{uuid4().hex[:6]}", alert_type="USB", severity=Severity.High,
+            status=AlertStatus.New, detected_at=datetime.now(UTC), summary="Alert of A pointing at B's agent",
+        ))
+        await session.commit()
+
+    token_a = await _login(client, setup["tenant_a_code"], setup["user_a_email"])
+    headers = {"Authorization": f"Bearer {token_a}"}
+
+    listed = await client.get("/api/v1/dashboard/alerts", headers=headers)
+    item = next(a for a in listed.json()["items"] if a["id"] == rogue_alert_id)
+    assert item["agent_hostname"] is None
+
+    detail = await client.get(f"/api/v1/dashboard/alerts/{rogue_alert_id}", headers=headers)
+    assert detail.status_code == 200
+    assert detail.json()["agent_hostname"] is None
+
+
+@pytest.mark.asyncio
+async def test_alert_carries_its_module_code(client: AsyncClient) -> None:
+    """MODULE: the API exposes a stable module code; an unmapped alert_type is UNKNOWN, never empty."""
+    setup = await _create_two_tenants()
+    token_a = await _login(client, setup["tenant_a_code"], setup["user_a_email"])
+
+    listed = await client.get("/api/v1/dashboard/alerts", headers={"Authorization": f"Bearer {token_a}"})
+    item = next(a for a in listed.json()["items"] if a["id"] == setup["alert_a_id"])
+    assert item["alert_type"] == "USB"  # test data, not an agent type
+    assert item["module"] == "UNKNOWN"

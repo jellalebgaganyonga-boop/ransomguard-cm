@@ -14,17 +14,15 @@ from ransomguard_grid.db.models.agent import Agent, AgentCertificate
 from ransomguard_grid.db.models.enums import AgentStatus
 from ransomguard_grid.db.repositories.agent_repository import AgentRepository
 from ransomguard_grid.db.session import get_db
-from ransomguard_grid.services.enrollment_otp_service import EnrollmentOtpService
+from ransomguard_grid.services.enrollment_otp_service import EnrollmentOtpService, get_shared_otp_service
 
 logger = get_logger("enrollment")
 router = APIRouter(prefix="/agents", tags=["enrollment"])
 
-_otp_service = EnrollmentOtpService()
-
 
 def get_otp_service() -> EnrollmentOtpService:
-    """FastAPI dependency for OTP service."""
-    return _otp_service
+    """FastAPI dependency — uses process-wide OTP singleton."""
+    return get_shared_otp_service()
 
 
 @router.post("/enroll", response_model=EnrollmentResponse)

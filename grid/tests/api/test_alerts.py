@@ -8,7 +8,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ransomguard_grid.db.models.agent import Agent, AgentCertificate
-from ransomguard_grid.db.models.enums import AgentStatus, Severity, TenantStatus
+from ransomguard_grid.db.models.enums import AgentStatus, TenantStatus
 from ransomguard_grid.db.models.tenant_user import Tenant
 
 
@@ -40,9 +40,18 @@ async def _setup_agent_with_cert(
 
 
 @pytest.mark.asyncio
-async def test_alert_requires_mtls(client: AsyncClient) -> None:
-    """No X-Client-Cert header should return 401."""
+async def test_alert_requires_mtls(client: AsyncClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Under agent_auth_mode=mtls, a request without a client certificate must
+    be rejected with the Mutual-TLS challenge.
+
+    The suite runs in "agent_id" mode because that is how agents authenticate
+    today, so this test selects the target mode explicitly -- otherwise it would
+    assert nothing about the security property it is named after.
+    """
+    monkeypatch.setenv("GRID_AGENT_AUTH_MODE", "mtls")
+
     response = await client.post("/api/v1/agents/fake-id/alerts", json={})
+
     assert response.status_code == 401
     assert "Mutual-TLS" in response.headers.get("WWW-Authenticate", "")
 

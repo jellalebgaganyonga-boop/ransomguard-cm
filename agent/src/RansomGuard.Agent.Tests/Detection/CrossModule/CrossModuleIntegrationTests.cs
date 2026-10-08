@@ -212,7 +212,6 @@ public sealed class CrossModuleIntegrationTests
                 ["Agent:Identity:Id"] = "test-agent",
                 ["Agent:Identity:Hostname"] = "TEST",
                 ["Agent:Identity:Version"] = "0.3.0",
-                ["Agent:Identity:Environment"] = "Test",
                 ["Agent:Detection:WatchPaths:0"] = @"C:\Temp",
                 ["Agent:Logging:MinimumLevel"] = "Warning",
                 ["Agent:Logging:LogFilePath"] = @"C:\Temp\test.log",

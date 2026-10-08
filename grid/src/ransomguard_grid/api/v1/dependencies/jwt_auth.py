@@ -14,7 +14,7 @@ from ransomguard_grid.db.session import get_db
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
 _settings = get_settings()
-_jwt_service = JwtService(_settings.jwt_secret_key, _settings.jwt_algorithm)
+_jwt_service = JwtService(_settings.jwt_secret_key)
 
 
 def get_jwt_service() -> JwtService:

@@ -31,7 +31,7 @@ public sealed record UsbActionResult
     /// <summary>The action type that was executed.</summary>
     public required UsbActionType ActionType { get; init; }
 
-    /// <summary>Whether the action succeeded.</summary>
+    /// <summary>Whether the action was actually carried out. Never true for an action that did not happen.</summary>
     public required bool Success { get; init; }
 
     /// <summary>Description of the action taken.</summary>
@@ -39,6 +39,16 @@ public sealed record UsbActionResult
 
     /// <summary>Fallback action executed if primary failed, null if no fallback needed.</summary>
     public UsbActionType? FallbackAction { get; init; }
+
+    /// <summary>Why the action was not carried out (see <see cref="UsbActionReasonCode"/>); null on success.</summary>
+    public string? ReasonCode { get; init; }
+}
+
+/// <summary>Stable reason codes for a USB action that was not carried out.</summary>
+public static class UsbActionReasonCode
+{
+    /// <summary>The action was selected but is not implemented: nothing was done to the device.</summary>
+    public const string NotImplemented = "not_implemented";
 }
 
 /// <summary>

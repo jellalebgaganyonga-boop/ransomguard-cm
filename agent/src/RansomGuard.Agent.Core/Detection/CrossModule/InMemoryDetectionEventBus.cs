@@ -4,20 +4,18 @@ using Microsoft.Extensions.Logging;
 namespace RansomGuard.Agent.Core.Detection.CrossModule;
 
 /// <summary>
-/// Channel-based in-memory implementation of <see cref="IDetectionEventBus"/>.
-/// Bounded channel (5000 events). Subscribers receive on background tasks.
-/// Failures are logged but do not block the publisher.
+/// In-memory implementation of <see cref="IDetectionEventBus"/>.
+/// Publication is synchronous: there is no queue and no background dispatch.
+/// <see cref="PublishAsync{TSignal}"/> invokes the subscribers of the signal type one after
+/// the other, on the caller's thread, and awaits each one before moving to the next.
+/// Nothing is buffered, so nothing can be dropped. A subscriber that throws is logged
+/// and does not prevent the following subscribers from running; a slow subscriber,
+/// however, delays both the remaining subscribers and the publisher (debt AGT-BUS-001).
 /// </summary>
 public sealed class InMemoryDetectionEventBus : IDetectionEventBus, IDisposable
 {
-    private const int ChannelCapacity = 5000;
-
     private readonly ConcurrentDictionary<Type, SubscriptionList> _subscriptions = new();
     private readonly ILogger<InMemoryDetectionEventBus> _logger;
-    private long _droppedCount;
-
-    /// <summary>Number of signals dropped due to channel saturation.</summary>
-    public long DroppedCount => Interlocked.Read(ref _droppedCount);
 
     /// <summary>Initializes the in-memory detection event bus.</summary>
     public InMemoryDetectionEventBus(ILogger<InMemoryDetectionEventBus> logger)
@@ -60,43 +58,42 @@ public sealed class InMemoryDetectionEventBus : IDetectionEventBus, IDisposable
         where TSignal : IDetectionSignal
     {
         var list = _subscriptions.GetOrAdd(typeof(TSignal), _ => new SubscriptionList());
-        var subscription = new Subscription<TSignal>(handler, list);
-        list.Add(subscription.BoxedHandler);
+        var subscription = new Subscription(list);
+        list.Add(subscription, handler);
         return subscription;
     }
 
+    /// <summary>Number of handlers currently stored, across all signal types (diagnostics and tests).</summary>
+    internal int StoredHandlerCount => _subscriptions.Values.Sum(list => list.Count);
+
+    /// <summary>
+    /// Handlers of one signal type, keyed by their subscription. Unsubscribing removes the
+    /// entry, so memory stays proportional to the live subscriptions: the agent runs for
+    /// months without restarting. Keying by subscription rather than by delegate means the
+    /// same handler subscribed twice is two subscriptions, and disposing one keeps the other.
+    /// </summary>
     private sealed class SubscriptionList
     {
-        private readonly ConcurrentBag<Delegate> _handlers = new();
-        private readonly ConcurrentBag<Delegate> _removed = new();
+        private readonly ConcurrentDictionary<Subscription, Delegate> _handlers = new();
 
-        public void Add(Delegate handler) => _handlers.Add(handler);
+        public int Count => _handlers.Count;
 
-        public void Remove(Delegate handler) => _removed.Add(handler);
+        public void Add(Subscription subscription, Delegate handler) => _handlers.TryAdd(subscription, handler);
 
-        public IEnumerable<Delegate> GetHandlers()
-        {
-            var removed = _removed.ToHashSet();
-            foreach (var h in _handlers)
-            {
-                if (!removed.Contains(h))
-                    yield return h;
-            }
-        }
+        public void Remove(Subscription subscription) => _handlers.TryRemove(subscription, out _);
+
+        public IEnumerable<Delegate> GetHandlers() => _handlers.Values;
     }
 
-    private sealed class Subscription<TSignal> : IDisposable
-        where TSignal : IDetectionSignal
+    private sealed class Subscription : IDisposable
     {
         private readonly SubscriptionList _list;
-        public Func<TSignal, CancellationToken, Task> BoxedHandler { get; }
 
-        public Subscription(Func<TSignal, CancellationToken, Task> handler, SubscriptionList list)
+        public Subscription(SubscriptionList list)
         {
-            BoxedHandler = handler;
             _list = list;
         }
 
-        public void Dispose() => _list.Remove(BoxedHandler);
+        public void Dispose() => _list.Remove(this);
     }
 }

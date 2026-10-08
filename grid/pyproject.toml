@@ -14,13 +14,16 @@ dependencies = [
     "alembic>=1.14.0",
     "pydantic>=2.10.0",
     "pydantic-settings>=2.6.0",
-    "python-jose[cryptography]>=3.3.0",
+    "PyJWT>=2.15.1,<3",
     "passlib[bcrypt]>=1.7.4",
     "cryptography>=44.0.0",
     "pynacl>=1.5.0",
     "structlog>=24.4.0",
     "httpx>=0.28.0",
     "tenacity>=9.0.0",
+    # Required, not optional: the alert ingest route imports the notification
+    # queue (Redis Stream), so the app cannot even be imported without it.
+    "redis>=5.2.0",
 ]
 
 [project.optional-dependencies]
@@ -28,14 +31,11 @@ dev = [
     "pytest>=8.3.0",
     "pytest-asyncio>=0.25.0",
     "pytest-cov>=6.0.0",
-    "ruff>=0.8.0",
+    "ruff==0.16.9",  # keep in sync with requirements-dev.txt
     "mypy>=1.14.0",
 ]
 mysql = [
-    "asyncmy>=0.2.10",
-]
-redis = [
-    "redis>=5.2.0",
+    "aiomysql>=0.2.0",
 ]
 
 [tool.setuptools.packages.find]
@@ -53,6 +53,13 @@ line-length = 130
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "A", "SIM"]
 ignore = ["B008", "UP042", "UP046", "SIM105"]
+
+[tool.ruff.lint.per-file-ignores]
+# Fixtures and expected payloads read better on one line than wrapped.
+"tests/**" = ["E501"]
+# Inline-CSS HTML email template: the markup cannot be wrapped without hurting
+# readability, and a string literal cannot carry a per-line noqa.
+"src/ransomguard_grid/services/notification_service.py" = ["E501"]
 
 [tool.mypy]
 python_version = "3.12"

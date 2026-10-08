@@ -13,12 +13,18 @@ from ransomguard_grid.api.v1.schemas.alert import (
     BatchAlertIngestRequest,
     BatchAlertIngestResponse,
 )
+from ransomguard_grid.core.alert_modules import UNKNOWN, module_for
 from ransomguard_grid.core.logging import get_logger
 from ransomguard_grid.core.rate_limit import InMemoryRateLimiter, get_rate_limiter
 from ransomguard_grid.db.models.agent import Agent
 from ransomguard_grid.db.models.alerts import Alert, AlertArtifact, AlertDetail
+from ransomguard_grid.db.models.enums import LogLevel
+from ransomguard_grid.db.models.notifications import NotificationPreference
+from ransomguard_grid.db.models.operations import SystemLog
+from ransomguard_grid.db.models.tenant_user import User
 from ransomguard_grid.db.repositories.alert_repository import AlertRepository
 from ransomguard_grid.db.session import get_db
+from ransomguard_grid.services.notification_queue import NotificationQueue, job_from_alert
 
 logger = get_logger("alerts")
 router = APIRouter(prefix="/agents/{agent_id}", tags=["alerts"])
@@ -58,6 +64,19 @@ async def _ingest_single_alert(
     )
     db.add(alert)
 
+    # An alert_type with no module still gets in (UNKNOWN), but never silently.
+    if module_for(body.alert_type) == UNKNOWN:
+        logger.warning("alert_type_without_module", alert_type=body.alert_type, alert_id=alert_id)
+        db.add(SystemLog(
+            id=str(uuid4()),
+            tenant_id=agent.tenant_id,
+            level=LogLevel.Warning,
+            component="alert-ingest",
+            message=f"alert_type '{body.alert_type}' maps to no module: shown as UNKNOWN",
+            context_json={"alert_type": body.alert_type, "alert_id": alert_id, "agent_id": agent.id},
+            created_at=now,
+        ))
+
     for detail in body.details:
         db.add(AlertDetail(
             id=str(uuid4()),
@@ -79,7 +98,88 @@ async def _ingest_single_alert(
 
     await db.flush()
 
+    # Fire-and-forget email notifications for Critical/High alerts
+    severity_str = str(body.severity.value) if hasattr(body.severity, "value") else str(body.severity)
+    if severity_str in ("Critical", "High"):
+        try:
+            await _notify_alert_subscribers(
+                db=db,
+                tenant_id=agent.tenant_id,
+                agent_hostname=agent.hostname,
+                alert_id=alert_id,
+                alert_type=body.alert_type,
+                severity=severity_str,
+                summary=body.summary,
+                detected_at=body.detected_at,
+            )
+        except Exception:
+            logger.warning("Notification dispatch failed", alert_id=alert_id, exc_info=True)
+
     return AlertIngestResponse(alert_id=alert_id, status="ingested", ingested_at=now)
+
+
+async def _notify_alert_subscribers(
+    *,
+    db: AsyncSession,
+    tenant_id: str,
+    agent_hostname: str,
+    alert_id: str,
+    alert_type: str,
+    severity: str,
+    summary: str,
+    detected_at: datetime,
+) -> None:
+    """Queue one notification per opted-in recipient.
+
+    This only writes to the queue. Sending happens in the grid-notifier service,
+    because an SMTP relay can take seconds to answer and the agent posting this
+    alert must not wait for it -- least of all during an attack. The queue also
+    gives the delivery a retry path and an audit trail, which the previous
+    in-request send (wrapped in a bare except) did not have.
+    """
+    from sqlalchemy import select
+
+    stmt = select(NotificationPreference).where(NotificationPreference.tenant_id == tenant_id)
+    prefs = (await db.execute(stmt)).scalars().all()
+    if not prefs:
+        return
+
+    from ransomguard_grid.db.models.tenant_user import Tenant
+
+    tenant = (await db.execute(select(Tenant).where(Tenant.id == tenant_id))).scalar_one_or_none()
+    tenant_name = tenant.name if tenant else "Unknown"
+
+    queue = NotificationQueue()
+    queued = 0
+    try:
+        for pref in prefs:
+            if not pref.should_notify(severity):
+                continue
+            user = (await db.execute(select(User).where(User.id == pref.user_id))).scalar_one_or_none()
+            if not user or not user.is_active:
+                continue
+
+            await queue.publish(
+                job_from_alert(
+                    tenant_id=tenant_id,
+                    tenant_name=tenant_name,
+                    user_id=user.id,
+                    to_email=user.email,
+                    to_name=user.full_name,
+                    alert_id=alert_id,
+                    alert_type=alert_type,
+                    severity=severity,
+                    summary=summary,
+                    agent_hostname=agent_hostname,
+                    detected_at=detected_at,
+                )
+            )
+            queued += 1
+    finally:
+        await queue.close()
+
+    if queued:
+        logger.info("Notifications queued", alert_id=alert_id, recipients=queued, severity=severity)
 
 
 @router.post("/alerts", response_model=AlertIngestResponse)

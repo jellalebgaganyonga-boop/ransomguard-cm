@@ -3,16 +3,25 @@ set -euo pipefail
 
 # Sprint 6 PKI Initialization
 # Generates Root CA, Intermediate CA, server cert, DH params, and Ed25519 signing keys.
-# Usage: ./init-pki.sh <hospital_name> <country_code>
+# Usage: ./init-pki.sh <hospital_name> <country_code> [extra_sans]
+#
+# extra_sans: optional comma-separated SAN list added to the server certificate.
+#   Prefix each entry with "DNS:" or "IP:".
+#   Example: "DNS:ubuntu2204.tail6494ba.ts.net,IP:100.85.208.124"
+#
+# The deployment target (Tailscale IP / MagicDNS name) MUST be listed here,
+# otherwise agents cannot validate the server certificate and are forced into
+# insecure "-k" mode.
 
-if [ "$#" -ne 2 ]; then
-    echo "Usage: $0 <hospital_name> <country_code>"
-    echo "Example: $0 'Hopital Central Yaounde' CM"
+if [ "$#" -lt 2 ] || [ "$#" -gt 3 ]; then
+    echo "Usage: $0 <hospital_name> <country_code> [extra_sans]"
+    echo "Example: $0 'Hopital Central Yaounde' CM 'DNS:grid.example.ts.net,IP:100.85.208.124'"
     exit 1
 fi
 
 HOSPITAL_NAME="$1"
 COUNTRY_CODE="$2"
+EXTRA_SANS="${3:-${GRID_EXTRA_SANS:-}}"
 PKI_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$PKI_DIR"
 
@@ -68,6 +77,21 @@ DNS.2 = dashboard.grid.local
 DNS.3 = localhost
 IP.1 = 127.0.0.1
 EXTEOF
+    # Append deployment-specific SANs (Tailscale MagicDNS name, Tailscale IP, ...)
+    if [ -n "$EXTRA_SANS" ]; then
+        dns_i=3; ip_i=1
+        IFS=',' read -ra _sans <<< "$EXTRA_SANS"
+        for _san in "${_sans[@]}"; do
+            _san="$(echo "$_san" | xargs)"   # trim
+            case "$_san" in
+                DNS:*) dns_i=$((dns_i+1)); echo "DNS.$dns_i = ${_san#DNS:}" >> server.ext ;;
+                IP:*)  ip_i=$((ip_i+1));  echo "IP.$ip_i = ${_san#IP:}"   >> server.ext ;;
+                "")    ;;
+                *)     echo "[warn] ignoring malformed SAN (missing DNS:/IP: prefix): $_san" >&2 ;;
+            esac
+        done
+        echo "[info] extra SANs: $EXTRA_SANS"
+    fi
     openssl x509 -req -in server.csr -CA intermediate.crt -CAkey intermediate.key \
         -CAcreateserial -out server.crt -days 365 -extfile server.ext
     rm -f server.csr server.ext

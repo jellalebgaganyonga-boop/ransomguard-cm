@@ -25,6 +25,13 @@ docker exec grid-nginx wget -qO- http://grid-api:8000/api/v1/health
 # Expected: {"status":"ok","version":"0.8.0"}
 ```
 
+**Docker Desktop on Windows: port 443 may already be taken.** Docker Desktop's
+`wslrelay` process can hold `localhost:443`, and nginx then fails to publish it.
+Development workaround, no product code involved: set `NGINX_HTTPS_PORT=9443` in
+`deployment/grid/.env`, and point a local agent at it with
+`Agent:Server:BaseUrl = https://localhost:9443` (still a local server, so the
+development-only `TrustAnyCertificate` remains allowed).
+
 For local Python development without Docker:
 
 ```powershell
@@ -67,10 +74,10 @@ uvicorn ransomguard_grid.main:app --reload
 | ORM | SQLAlchemy (async) | 2.0+ |
 | Migrations | Alembic | 1.14+ |
 | Database | MySQL | 8.4 |
-| MySQL Driver | aiomysql / asyncmy | dual compat |
+| MySQL Driver | aiomysql | 0.2+ |
 | Cache/Rate Limit | Redis | 7 |
 | Logging | structlog | 24+ |
-| JWT | python-jose | 3.3+ |
+| JWT | PyJWT (HS256 only) | 2.15+ |
 | Ed25519 Signing | PyNaCl + cryptography | 1.5+ / 44+ |
 | Reverse Proxy | nginx | 1.27 |
 | Runtime | Python | 3.12 (Docker) |
@@ -126,7 +133,6 @@ pytest --cov=src --cov-report=term -v
 
 ## Known Issues / Sprint 6.5 Debt
 
-- **asyncmy/aiomysql dual install**: Python 3.14 dev machine needs aiomysql (pure Python); Docker 3.12 can use either
 - **Azure IP ranges source**: Not implemented (URL changes weekly, requires manual download)
 - **docker-compose version key**: `version: "3.9"` triggers deprecation warning (cosmetic)
 - **Worker lifespan tests**: Not added as separate test file (worker tested via service tests)

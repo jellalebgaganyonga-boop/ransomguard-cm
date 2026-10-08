@@ -4,7 +4,7 @@ import calendar
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
-from jose import JWTError, jwt  # type: ignore[import-untyped]
+import jwt
 from pydantic import BaseModel
 
 from ransomguard_grid.core.exceptions import AuthenticationError
@@ -23,13 +23,12 @@ class JwtPayload(BaseModel):
 
 
 class JwtService:
-    """Creates and verifies JWT tokens."""
+    """Creates and verifies JWT tokens. HS256 only, by design."""
 
-    def __init__(self, secret_key: str, algorithm: str = "HS256") -> None:
+    def __init__(self, secret_key: str) -> None:
         if len(secret_key) < 32:
             raise ValueError("JWT secret key must be at least 32 characters")
         self._secret = secret_key
-        self._algorithm = algorithm
 
     def create_access_token(
         self, user_id: str, tenant_id: str, roles: list[str], expires_minutes: int = 60,
@@ -42,7 +41,7 @@ class JwtService:
             "exp": calendar.timegm((now + timedelta(minutes=expires_minutes)).utctimetuple()),
             "jti": str(uuid4()),
         }
-        encoded: str = jwt.encode(payload, self._secret, algorithm=self._algorithm)
+        encoded: str = jwt.encode(payload, self._secret, algorithm="HS256")
         return encoded
 
     def create_refresh_token(self, user_id: str, tenant_id: str, expires_days: int = 7) -> str:
@@ -54,15 +53,18 @@ class JwtService:
             "exp": calendar.timegm((now + timedelta(days=expires_days)).utctimetuple()),
             "jti": str(uuid4()),
         }
-        encoded: str = jwt.encode(payload, self._secret, algorithm=self._algorithm)
+        encoded: str = jwt.encode(payload, self._secret, algorithm="HS256")
         return encoded
 
     def decode(self, token: str) -> JwtPayload:
         """Decode and validate a JWT. Raises AuthenticationError on failure."""
         try:
-            raw: dict[str, object] = jwt.decode(token, self._secret, algorithms=[self._algorithm])
+            # Explicit, fixed algorithm list: never taken from the token's header.
+            # Rules out "alg: none" and algorithm confusion (a public key used as
+            # an HMAC secret, CVE-2026-85394 in python-jose).
+            raw: dict[str, object] = jwt.decode(token, self._secret, algorithms=["HS256"])
             return JwtPayload(**raw)  # type: ignore[arg-type]
-        except JWTError as e:
+        except jwt.PyJWTError as e:
             raise AuthenticationError(f"Invalid token: {e}") from e
 
 

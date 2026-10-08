@@ -187,3 +187,25 @@ certs/local/
 *.original
 *.bak
 *.backup
+
+# Build outputs of tsconfig.node.json (composite project). They used to land
+# next to the sources, where Vite loads vite.config.js in preference to
+# vite.config.ts -- a stale artefact silently shadowed the real config.
+dashboard/*.config.js
+!dashboard/eslint.config.js
+!dashboard/postcss.config.js
+dashboard/*.config.d.ts
+dashboard/*.tsbuildinfo
+
+# Agent build outputs and release archives (244 MB). The CD pipeline builds the
+# package from source on a Windows runner and uploads it to the GRID server --
+# binaries never belong in git.
+agent/publish/
+agent/publish-sc/
+agent/*.zip
+agent/**/RansomGuard-Agent-*.zip
+
+# Development PKI material generated locally
+deployment/grid/pki/*.srl
+dashboard/pki/
+.claude/settings.local.json

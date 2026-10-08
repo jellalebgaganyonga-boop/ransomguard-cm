@@ -106,8 +106,7 @@ public sealed class SentinelConfigurationTests
         {
             Id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
             Hostname = "TEST-HOST",
-            Version = "0.4.0",
-            Environment = "Development"
+            Version = "0.4.0"
         },
         Detection = new DetectionOptions
         {
@@ -129,7 +128,7 @@ public sealed class SentinelConfigurationTests
         },
         Database = new DatabaseOptions
         {
-            ConnectionString = "Data Source=agent.db",
+            ConnectionString = @"Data Source=C:\ProgramData\RansomGuard-CM\data\agent.db",
             MaxRetentionDays = 90
         },
         Sentinel = new SentinelOptions

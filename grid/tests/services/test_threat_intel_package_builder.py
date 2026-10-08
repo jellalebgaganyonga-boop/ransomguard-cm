@@ -4,7 +4,6 @@ import json
 import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
-from tempfile import TemporaryDirectory
 
 import pytest
 

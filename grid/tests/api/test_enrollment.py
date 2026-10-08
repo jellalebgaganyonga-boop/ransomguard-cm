@@ -7,7 +7,9 @@ from httpx import AsyncClient
 @pytest.mark.asyncio
 async def test_enrollment_with_valid_otp(client: AsyncClient) -> None:
     """Successful enrollment with valid OTP should return agent_id."""
-    from ransomguard_grid.api.v1.routes.enrollment import _otp_service
+    from ransomguard_grid.services.enrollment_otp_service import get_shared_otp_service
+
+    _otp_service = get_shared_otp_service()
 
     otp = _otp_service.generate("default", validity_minutes=5)
 
@@ -28,7 +30,9 @@ async def test_enrollment_with_valid_otp(client: AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_enrollment_with_expired_otp(client: AsyncClient) -> None:
     """Expired OTP should return 401."""
-    from ransomguard_grid.api.v1.routes.enrollment import _otp_service
+    from ransomguard_grid.services.enrollment_otp_service import get_shared_otp_service
+
+    _otp_service = get_shared_otp_service()
 
     otp = _otp_service.generate("default", validity_minutes=0)
     # OTP expires immediately (0 minutes)
@@ -64,7 +68,9 @@ async def test_enrollment_with_invalid_otp(client: AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_enrollment_duplicate_fingerprint_rejected(client: AsyncClient) -> None:
     """Re-enrolling same fingerprint should return 409."""
-    from ransomguard_grid.api.v1.routes.enrollment import _otp_service
+    from ransomguard_grid.services.enrollment_otp_service import get_shared_otp_service
+
+    _otp_service = get_shared_otp_service()
 
     otp1 = _otp_service.generate("default", validity_minutes=5)
     fp = "d" * 64

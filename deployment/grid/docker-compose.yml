@@ -44,6 +44,9 @@ services:
     build:
       context: ../..
       dockerfile: deployment/grid/Dockerfile
+    # Explicit image name so a failed deployment can be rolled back to the
+    # previous digest deterministically (see deploy.sh).
+    image: ransomguard/grid-api:${GRID_IMAGE_TAG:-local}
     container_name: grid-api
     restart: unless-stopped
     environment:
@@ -55,6 +58,18 @@ services:
       GRID_THREAT_INTEL_SIGNING_KEY_PATH: /etc/ransomguard-grid/pki/threat-intel-ed25519.key
       GRID_THREAT_INTEL_PACKAGES_DIR: /var/lib/ransomguard-grid/threat-intel-packages
       GRID_ALIENVAULT_OTX_API_KEY: ${GRID_ALIENVAULT_OTX_API_KEY:-}
+      GRID_SMTP_ENABLED: ${GRID_SMTP_ENABLED:-false}
+      GRID_SMTP_HOST: ${GRID_SMTP_HOST:-in-v3.mailjet.com}
+      GRID_SMTP_PORT: ${GRID_SMTP_PORT:-587}
+      GRID_SMTP_USERNAME: ${GRID_SMTP_USERNAME:-}
+      GRID_SMTP_PASSWORD: ${GRID_SMTP_PASSWORD:-}
+      GRID_SMTP_FROM_EMAIL: ${GRID_SMTP_FROM_EMAIL:-noreply@ransomguard.local}
+      GRID_SMTP_FROM_NAME: ${GRID_SMTP_FROM_NAME:-RansomGuard-CM}
+      GRID_AGENT_DISCONNECT_TIMEOUT_MINUTES: ${GRID_AGENT_DISCONNECT_TIMEOUT_MINUTES:-5}
+      # Secure by default: an unset value rejects any agent without a client
+      # certificate. Deployments that have not reached Sprint 10 mTLS set this
+      # to agent_id explicitly, which keeps the weaker posture visible.
+      GRID_AGENT_AUTH_MODE: ${GRID_AGENT_AUTH_MODE:-mtls}
     volumes:
       - ./pki:/etc/ransomguard-grid/pki:ro
       - threat_intel_packages:/var/lib/ransomguard-grid/threat-intel-packages
@@ -68,26 +83,86 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import httpx; r=httpx.get('http://localhost:8000/api/v1/health'); exit(0 if r.status_code==200 else 1)"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      # First boot runs the Alembic migrations before uvicorn binds. On the
+      # 2-vCPU production VM that took longer than the previous 40s window, so
+      # Compose declared the API unhealthy and refused to start nginx.
+      start_period: 180s
+
+  # ── Notification delivery service ───────────────────────────────
+  # Same image as the API, different entrypoint. Separate container on purpose:
+  # a stuck SMTP relay must not slow alert ingestion, and restarting the
+  # notifier must not restart the API. Scale it with `--scale grid-notifier=N`
+  # -- the Redis consumer group splits the stream between the instances.
+  grid-notifier:
+    image: ransomguard/grid-api:${GRID_IMAGE_TAG:-local}
+    container_name: grid-notifier
+    restart: unless-stopped
+    command: ["python", "-m", "ransomguard_grid.workers.notification_worker"]
+    environment:
+      GRID_DATABASE_URL: mysql+aiomysql://${MYSQL_USER:-grid}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE:-ransomguard_grid}
+      GRID_REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      GRID_JWT_SECRET_KEY: ${GRID_JWT_SECRET_KEY:?required}
+      GRID_ENVIRONMENT: ${GRID_ENVIRONMENT:-production}
+      GRID_LOG_LEVEL: ${GRID_LOG_LEVEL:-INFO}
+      GRID_SMTP_ENABLED: ${GRID_SMTP_ENABLED:-false}
+      GRID_SMTP_HOST: ${GRID_SMTP_HOST:-in-v3.mailjet.com}
+      GRID_SMTP_PORT: ${GRID_SMTP_PORT:-587}
+      GRID_SMTP_USERNAME: ${GRID_SMTP_USERNAME:-}
+      GRID_SMTP_PASSWORD: ${GRID_SMTP_PASSWORD:-}
+      GRID_SMTP_FROM_EMAIL: ${GRID_SMTP_FROM_EMAIL:-noreply@ransomguard.local}
+      GRID_SMTP_FROM_NAME: ${GRID_SMTP_FROM_NAME:-RansomGuard-CM}
+      GRID_NOTIFICATION_THROTTLE_MINUTES: ${GRID_NOTIFICATION_THROTTLE_MINUTES:-10}
+    networks:
+      - grid_internal
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      grid-api:
+        condition: service_healthy   # the API image runs the migrations
+    healthcheck:
+      test: ["CMD", "python", "-c", "import redis,os;r=redis.from_url(os.environ['GRID_REDIS_URL']);r.ping()"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
+      start_period: 20s
 
   nginx:
     image: nginx:1.27-alpine
     container_name: grid-nginx
     restart: unless-stopped
     ports:
-      - "${NGINX_HTTPS_PORT:-443}:443"
-      - "${NGINX_DASHBOARD_PORT:-8443}:8443"
-      - "80:80"
+      # BIND_ADDR pins published ports to a single interface (the Tailscale IP in
+      # production). Docker publishes through its own iptables chain and bypasses
+      # UFW entirely, so binding the address is the only reliable way to keep the
+      # LAN from reaching the stack. Defaults to 0.0.0.0 for local development.
+      - "${BIND_ADDR:-0.0.0.0}:${NGINX_HTTPS_PORT:-443}:443"
+      - "${BIND_ADDR:-0.0.0.0}:${NGINX_DASHBOARD_PORT:-8443}:8443"
+      - "${BIND_ADDR:-0.0.0.0}:${NGINX_HTTP_PORT:-80}:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
-      - ./pki/server.crt:/etc/nginx/ssl/server.crt:ro
+      # Internal PKI — agent mTLS channel (:443). Never replaced by a public CA:
+      # agents authenticate with client certificates signed by this CA.
+      - ./pki/server-fullchain.crt:/etc/nginx/ssl/server.crt:ro
       - ./pki/server.key:/etc/nginx/ssl/server.key:ro
       - ./pki/ca.crt:/etc/nginx/ssl/ca.crt:ro
       - ./pki/dhparam.pem:/etc/nginx/ssl/dhparam.pem:ro
+      # Browser-facing certificate for the dashboard (:8443). In production this
+      # directory holds the Let's Encrypt chain issued by `tailscale cert`; the
+      # deploy script falls back to copying the internal cert so nginx always
+      # finds the same two filenames.
+      - ${TLS_PUBLIC_DIR:-./pki-public}:/etc/nginx/ssl/public:ro
+      - ${DASHBOARD_DIST_DIR:-../../dashboard/dist}:/usr/share/nginx/html:ro
+      # Agent installer + release packages downloaded by endpoints over Tailscale.
+      # Mounted BESIDE the SPA, not inside it: Docker cannot create a mountpoint
+      # within an existing read-only bind mount. dashboard.conf maps the /agent/
+      # URL onto this path with its own root.
+      - ${AGENT_PACKAGES_DIR:-../../agent/packages}:/usr/share/nginx/agent:ro
     networks:
       - grid_public
     depends_on:

@@ -3,10 +3,12 @@ using System.Threading.Channels;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using RansomGuard.Agent.Core.Configuration;
+using RansomGuard.Agent.Core.Diagnostics;
 using RansomGuard.Agent.Core.Detection.ExfilWatch;
 using RansomGuard.Agent.Core.Detection.ExfilWatch.Actions;
 using RansomGuard.Agent.Core.Detection.ExfilWatch.Models;
 using RansomGuard.Agent.Core.Detection.ExfilWatch.Rules;
+using RansomGuard.Agent.Core.Communication;
 using RansomGuard.Agent.Core.Security.RateLimiting;
 
 namespace RansomGuard.Agent.Service;
@@ -23,7 +25,9 @@ public sealed class ExfilWatchMonitor : BackgroundService
     private readonly ILogger<ExfilWatchMonitor> _logger;
     private readonly INetworkActivityMonitor _networkMonitor;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IAlertForwardingQueue? _alertQueue;
     private readonly AgentConfiguration _config;
+    private readonly IModuleStateRegistry _moduleState;
     private readonly Channel<NetworkEvent> _eventChannel;
     private long _totalEventsProcessed;
 
@@ -35,12 +39,16 @@ public sealed class ExfilWatchMonitor : BackgroundService
         ILogger<ExfilWatchMonitor> logger,
         INetworkActivityMonitor networkMonitor,
         IServiceScopeFactory scopeFactory,
-        IOptionsMonitor<AgentConfiguration> config)
+        IOptionsMonitor<AgentConfiguration> config,
+        IModuleStateRegistry moduleState,
+        IAlertForwardingQueue? alertQueue = null)
     {
         _logger = logger;
         _networkMonitor = networkMonitor;
         _scopeFactory = scopeFactory;
+        _alertQueue = alertQueue;
         _config = config.CurrentValue;
+        _moduleState = moduleState;
         _eventChannel = Channel.CreateBounded<NetworkEvent>(
             new BoundedChannelOptions(EventChannelCapacity)
             {
@@ -52,9 +60,23 @@ public sealed class ExfilWatchMonitor : BackgroundService
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        bool reachedActive = false;
+        try
+        {
         if (_config.ExfilWatch is null || !_config.ExfilWatch.Enabled)
         {
             _logger.LogInformation("EXFIL WATCH module is disabled");
+            _moduleState.Publish(ModuleCode.ExfilWatch, ModuleState.DisabledByConfig, ModuleReasonCode.DisabledByConfig);
+            return;
+        }
+
+        // Kernel ETW (the core TCP/IP capture) requires elevation. Without it the
+        // module cannot do its job, so report it honestly as inactive rather than
+        // letting it look active on a degraded capture.
+        if (!IsElevated())
+        {
+            _logger.LogWarning("EXFIL WATCH inactive: administrator rights missing (kernel ETW unavailable)");
+            _moduleState.Publish(ModuleCode.ExfilWatch, ModuleState.Inactive, ModuleReasonCode.AdminRightsMissing);
             return;
         }
 
@@ -68,6 +90,8 @@ public sealed class ExfilWatchMonitor : BackgroundService
         Task consumerTask = ConsumeEventsAsync(stoppingToken);
 
         _logger.LogInformation("EXFIL WATCH monitor active");
+        _moduleState.Publish(ModuleCode.ExfilWatch, ModuleState.Active);
+        reachedActive = true;
 
         // Heartbeat
         using var heartbeat = new PeriodicTimer(TimeSpan.FromSeconds(60));
@@ -85,6 +109,32 @@ public sealed class ExfilWatchMonitor : BackgroundService
         _eventChannel.Writer.TryComplete();
         await consumerTask;
         await _networkMonitor.StopAsync();
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Normal shutdown.
+        }
+        catch (Exception ex)
+        {
+            // Publish the real state and do NOT rethrow: one module crashing must
+            // not take the host — and all other protection — down with it.
+            _moduleState.Publish(ModuleCode.ExfilWatch, ModuleState.Inactive,
+                reachedActive ? ModuleReasonCode.StoppedUnexpectedly : ModuleReasonCode.InitFailed);
+            _logger.LogError(ex, "EXFIL WATCH monitor stopped unexpectedly");
+        }
+    }
+
+    /// <summary>True when the agent runs with administrator rights (required for kernel ETW).</summary>
+    private static bool IsElevated()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return false;
+        }
+
+        using var identity = System.Security.Principal.WindowsIdentity.GetCurrent();
+        return new System.Security.Principal.WindowsPrincipal(identity)
+            .IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
     }
 
     private async Task ConsumeEventsAsync(CancellationToken ct)
@@ -116,6 +166,9 @@ public sealed class ExfilWatchMonitor : BackgroundService
                             {
                                 // Fire-and-forget for non-blocking pipeline
                                 _ = Task.Run(() => actionEngine.ExecuteAsync(finding, ct), ct);
+
+                                // Forward to GRID in parallel
+                                _alertQueue?.TryEnqueue(AlertMapper.FromExfilFinding(finding));
                             }
                         }
                     }

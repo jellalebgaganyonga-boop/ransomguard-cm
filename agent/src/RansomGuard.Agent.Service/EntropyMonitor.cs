@@ -2,12 +2,14 @@ using System.Threading.Channels;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using RansomGuard.Agent.Core.Configuration;
+using RansomGuard.Agent.Core.Diagnostics;
 using RansomGuard.Agent.Core.Detection;
 using RansomGuard.Agent.Core.Detection.Entropy;
 using RansomGuard.Agent.Core.Persistence;
 using RansomGuard.Agent.Core.Persistence.Entities;
 using RansomGuard.Agent.Core.Persistence.Repositories;
 using Microsoft.EntityFrameworkCore;
+using RansomGuard.Agent.Core.Communication;
 using RansomGuard.Agent.Core.Detection.CrossModule;
 using RansomGuard.Agent.Core.Detection.Genealogy;
 using RansomGuard.Agent.Core.Security.RateLimiting;
@@ -32,6 +34,8 @@ public sealed class EntropyMonitor : BackgroundService
     private readonly List<FileSystemWatcher> _watchers = [];
     private readonly IOperationRateLimiter? _rateLimiter;
     private readonly IDetectionEventBus? _eventBus;
+    private readonly IAlertForwardingQueue? _alertQueue;
+    private readonly IModuleStateRegistry _moduleState;
 
     /// <summary>
     /// Initializes the entropy monitor.
@@ -42,16 +46,20 @@ public sealed class EntropyMonitor : BackgroundService
         IServiceScopeFactory scopeFactory,
         IFileEventDeduplicator deduplicator,
         IEntropyCalculator calculator,
+        IModuleStateRegistry moduleState,
         RateLimiterFactory? rateLimiterFactory = null,
-        IDetectionEventBus? eventBus = null)
+        IDetectionEventBus? eventBus = null,
+        IAlertForwardingQueue? alertQueue = null)
     {
         _logger = logger;
         _config = config.CurrentValue;
         _scopeFactory = scopeFactory;
         _deduplicator = deduplicator;
         _calculator = calculator;
+        _moduleState = moduleState;
         _rateLimiter = rateLimiterFactory?.GetLimiter(RateLimiterFactory.EntropyComputation);
         _eventBus = eventBus;
+        _alertQueue = alertQueue;
         _fileChannel = Channel.CreateBounded<string>(
             new BoundedChannelOptions(EventChannelCapacity)
             {
@@ -63,10 +71,14 @@ public sealed class EntropyMonitor : BackgroundService
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        bool reachedActive = false;
+        try
+        {
         EntropyOptions? entropy = _config.Entropy;
         if (entropy is null || !entropy.Enabled)
         {
             _logger.LogInformation("ENTROPY module is disabled");
+            _moduleState.Publish(ModuleCode.Entropy, ModuleState.DisabledByConfig, ModuleReasonCode.DisabledByConfig);
             return;
         }
 
@@ -104,6 +116,8 @@ public sealed class EntropyMonitor : BackgroundService
         }
 
         _logger.LogInformation("ENTROPY monitor active on {DirCount} directories", _watchers.Count);
+        _moduleState.Publish(ModuleCode.Entropy, ModuleState.Active);
+        reachedActive = true;
 
         // Keep alive
         try { await Task.Delay(Timeout.Infinite, stoppingToken); }
@@ -113,6 +127,19 @@ public sealed class EntropyMonitor : BackgroundService
         await consumerTask;
 
         foreach (var w in _watchers) { w.EnableRaisingEvents = false; w.Dispose(); }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Normal shutdown.
+        }
+        catch (Exception ex)
+        {
+            // Publish the real state and do NOT rethrow: one module crashing must
+            // not take the host — and all other protection — down with it.
+            _moduleState.Publish(ModuleCode.Entropy, ModuleState.Inactive,
+                reachedActive ? ModuleReasonCode.StoppedUnexpectedly : ModuleReasonCode.InitFailed);
+            _logger.LogError(ex, "ENTROPY monitor stopped unexpectedly");
+        }
     }
 
     private async Task BuildBaselinesAsync(CancellationToken ct)
@@ -212,6 +239,10 @@ public sealed class EntropyMonitor : BackgroundService
                         "ENTROPY ALERT: Rule {RuleId} ({RuleName}) on {FilePath} | Baseline: {Baseline:F2} Current: {Current:F2} Delta: {Delta:F2} | Severity: {Severity}",
                         alert.RuleId, alert.RuleName, filePath,
                         alert.BaselineEntropy, alert.CurrentEntropy, alert.Delta, alert.Severity);
+
+                    // Forward to GRID (skip Suppressed alerts)
+                    var mapped = AlertMapper.FromEntropyAlert(alert);
+                    if (mapped is not null) _alertQueue?.TryEnqueue(mapped);
 
                     // Fire-and-forget genealogy enrichment for process attribution
                     _ = Task.Run(async () =>

@@ -3,9 +3,11 @@ using System.Threading.Channels;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using RansomGuard.Agent.Core.Configuration;
+using RansomGuard.Agent.Core.Diagnostics;
 using RansomGuard.Agent.Core.Detection;
 using RansomGuard.Agent.Core.Detection.Genealogy;
 using RansomGuard.Agent.Core.Detection.Sentinel;
+using RansomGuard.Agent.Core.Communication;
 using RansomGuard.Agent.Core.Persistence.Entities;
 using RansomGuard.Agent.Core.Persistence.Repositories;
 
@@ -24,6 +26,8 @@ public sealed class SentinelMonitor : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IFileEventDeduplicator _deduplicator;
     private readonly RestartManagerHelper _restartManager;
+    private readonly IAlertForwardingQueue _alertQueue;
+    private readonly IModuleStateRegistry _moduleState;
     private readonly AgentConfiguration _config;
     private readonly List<FileSystemWatcher> _watchers = [];
     private readonly Channel<CanaryFileEvent> _eventChannel;
@@ -37,13 +41,17 @@ public sealed class SentinelMonitor : BackgroundService
         IOptionsMonitor<AgentConfiguration> config,
         IServiceScopeFactory scopeFactory,
         IFileEventDeduplicator deduplicator,
-        RestartManagerHelper restartManager)
+        RestartManagerHelper restartManager,
+        IAlertForwardingQueue alertQueue,
+        IModuleStateRegistry moduleState)
     {
         _logger = logger;
         _config = config.CurrentValue;
         _scopeFactory = scopeFactory;
         _deduplicator = deduplicator;
         _restartManager = restartManager;
+        _alertQueue = alertQueue;
+        _moduleState = moduleState;
         _eventChannel = Channel.CreateBounded<CanaryFileEvent>(
             new BoundedChannelOptions(EventChannelCapacity)
             {
@@ -55,9 +63,13 @@ public sealed class SentinelMonitor : BackgroundService
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        bool reachedActive = false;
+        try
+        {
         SentinelOptions? sentinel = _config.Sentinel;
         if (sentinel is null || !sentinel.Enabled)
         {
+            _moduleState.Publish(ModuleCode.Sentinel, ModuleState.DisabledByConfig, ModuleReasonCode.DisabledByConfig);
             return;
         }
 
@@ -89,6 +101,8 @@ public sealed class SentinelMonitor : BackgroundService
 
         _logger.LogInformation("SENTINEL monitor active — real-time watchers on {DirCount} directories, polling every {IntervalMs}ms",
             _watchers.Count, sentinel.CheckIntervalMs);
+        _moduleState.Publish(ModuleCode.Sentinel, ModuleState.Active);
+        reachedActive = true;
 
         // Periodic polling loop
         while (!stoppingToken.IsCancellationRequested)
@@ -105,6 +119,19 @@ public sealed class SentinelMonitor : BackgroundService
         {
             watcher.EnableRaisingEvents = false;
             watcher.Dispose();
+        }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Normal shutdown.
+        }
+        catch (Exception ex)
+        {
+            // Publish the real state and do NOT rethrow: one module crashing must
+            // not take the host — and all other protection — down with it.
+            _moduleState.Publish(ModuleCode.Sentinel, ModuleState.Inactive,
+                reachedActive ? ModuleReasonCode.StoppedUnexpectedly : ModuleReasonCode.InitFailed);
+            _logger.LogCritical(ex, "SENTINEL monitor stopped unexpectedly");
         }
     }
 
@@ -272,6 +299,9 @@ public sealed class SentinelMonitor : BackgroundService
             "SENTINEL ALERT: {AlertType} on canary {CanaryPath} | Process: {ProcessName} (PID: {ProcessId}) | Severity: {Severity}",
             alertType, canary.FilePath, attribution?.ProcessName ?? "unknown",
             attribution?.ProcessId.ToString() ?? "N/A", alert.Severity);
+
+        // Forward to GRID
+        _alertQueue.TryEnqueue(AlertMapper.FromCanaryAlert(alert));
 
         // Fire-and-forget genealogy enrichment for process attribution
         _ = Task.Run(async () =>

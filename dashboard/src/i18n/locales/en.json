@@ -1,0 +1,404 @@
+{
+  "app": {
+    "name": "RansomGuard-CM",
+    "tagline": "Security Console"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "alerts": "Alerts",
+    "agents": "Agents",
+    "users": "Users",
+    "audit": "Audit log",
+    "userActions": "User actions",
+    "notifications": "Notifications",
+    "settings": "Settings"
+  },
+  "header": {
+    "notifications": "Notifications",
+    "language": "Language",
+    "profile": "Profile",
+    "logout": "Sign out"
+  },
+  "auth": {
+    "login": {
+      "title": "Sign in",
+      "email": "Email",
+      "password": "Password",
+      "rememberMe": "Remember me",
+      "submit": "Sign in",
+      "showPassword": "Show password",
+      "hidePassword": "Hide password",
+      "capsLockWarning": "Caps Lock is on",
+      "tenantCode": "Organization code",
+      "errors": {
+        "invalidCredentials": "Incorrect email or password",
+        "serverError": "Server error, please try again",
+        "networkError": "Connection lost, check your network",
+        "tenantCodeRequired": "Organization code is required",
+        "emailRequired": "Email is required",
+        "emailInvalid": "Invalid email format",
+        "passwordRequired": "Password is required"
+      }
+    },
+    "sessionExpired": {
+      "title": "Your session has expired",
+      "body": "You were logged out after 30 minutes of inactivity.",
+      "cta": "Sign in again"
+    }
+  },
+  "severity": {
+    "critical": "Critical",
+    "high": "High",
+    "medium": "Medium",
+    "low": "Low",
+    "info": "Info"
+  },
+  "status": {
+    "new": "New",
+    "in_progress": "In progress",
+    "acknowledged": "In progress",
+    "investigating": "Investigating",
+    "resolved": "Resolved",
+    "closed": "Resolved",
+    "falsepositive": "False positive",
+    "suppressed": "Suppressed",
+    "isolated": "Isolated",
+    "online": "Active",
+    "offline": "Offline",
+    "stale": "Stale",
+    "provisioned": "Provisioned",
+    "active": "Active",
+    "disconnected": "Disconnected",
+    "decommissioned": "Decommissioned"
+  },
+  "dashboard": {
+    "exec": {
+      "title": "Executive dashboard",
+      "subtitle": "Hospital security overview",
+      "criticalStatus": "{count} critical incidents require your attention",
+      "highStatus": "{count} alerts to review",
+      "allNormal": "All systems normal",
+      "viewDetails": "View details →",
+      "recentAlerts": "RECENT ALERTS",
+      "noAlerts": "No recent alerts",
+      "quickActions": "Quick actions",
+      "manageUsers": "Manage users",
+      "viewAudit": "View audit logs",
+      "report": "Quarterly report (Sprint 8)",
+      "compliance": "Regulatory compliance",
+      "anticLaw": "Law 2024/017:",
+      "nextAudit": "Next ANTIC audit: September 15, 2026",
+      "downloadReport": "Download report (Sprint 8)",
+      "kpi": {
+        "agents": "Protected endpoints",
+        "alerts24h": "Alerts 24h",
+        "critical24h": "Critical 24h",
+        "daysSince": "Days since last critical",
+        "offline": "offline",
+        "todayReset": "Reset today"
+      }
+    },
+    "ops": {
+      "title": "Operational console",
+      "commandHint": "for command palette",
+      "staleWarning": "{count} agents have not sent a heartbeat in over 1 hour",
+      "agents": {
+        "title": "AGENTS",
+        "active": "active",
+        "stale": "stale",
+        "offline": "offline"
+      },
+      "feed": {
+        "title": "LIVE ALERT FEED",
+        "refresh": "Every 15s",
+        "lastHour": "Last hour"
+      }
+    },
+    "readonly": {
+      "title": "Compliance view",
+      "subtitle": "Read-only access",
+      "compliance": "CURRENT COMPLIANCE: 98%",
+      "law": "Law 2024/017: Compliant",
+      "nextAudit": "Next ANTIC audit: September 15, 2026",
+      "auditBtn": "View audit logs",
+      "auditSub": "Search, date filters, CSV export",
+      "alertsBtn": "View alerts",
+      "alertsSub": "Read-only security alerts",
+      "reportBtn": "Quarterly compliance report",
+      "soon": "Coming soon",
+      "notice": "You are connected in auditor mode. No modifications are possible.",
+      "kpi": {
+        "alerts24h": "Alerts last 24h",
+        "critical": "including",
+        "auditEntries": "Audit log — last 7 days",
+        "auditSub": "audit entries"
+      }
+    }
+  },
+  "alerts": {
+    "acknowledge": "Acknowledge",
+    "backToList": "Back to alerts",
+    "notFound": "Alert not found",
+    "id": "Alert",
+    "copyId": "Copy ID",
+    "detectedAt": "Detected",
+    "agent": "Agent",
+    "module": "Module",
+    "close": "Close incident",
+    "markFalsePositive": "Mark as false positive",
+    "readOnlyNotice": "Read-only mode — no action available",
+    "whatHappened": "WHAT HAPPENED?",
+    "confidence": "Detection confidence",
+    "artifacts": "Associated artifacts",
+    "technicalDetails": "Technical details",
+    "timeline": "Timeline",
+    "statusChange": "{from} → {to}",
+    "created": "Alert created",
+    "list": {
+      "searchPlaceholder": "Search (hostname...)",
+      "allSeverities": "All severities",
+      "allStatuses": "All statuses",
+      "empty": {
+        "title": "No alerts match your filters",
+        "body": "Try widening your search or resetting filters."
+      },
+      "col": {
+        "id": "ID",
+        "score": "Score",
+        "detected": "Detected",
+        "severity": "Severity",
+        "status": "Status",
+        "agent": "Host",
+        "module": "Module",
+        "actions": "Actions"
+      }
+    },
+    "ackModal": {
+      "title": "Acknowledge this alert?",
+      "description": "You will assign this alert to yourself.",
+      "noteLabel": "Note (optional, 0-500 characters)",
+      "notePlaceholder": "Investigation in progress..."
+    },
+    "closeModal": {
+      "title": "Close incident",
+      "categoryLabel": "Resolution category",
+      "categoryPlaceholder": "Select...",
+      "category": {
+        "fp": "False positive",
+        "tpContained": "True positive — Contained",
+        "tpEscalated": "True positive — Escalated",
+        "inconclusive": "Inconclusive"
+      },
+      "notesLabel": "Resolution notes",
+      "notesHint": "20-2000 characters",
+      "notesPlaceholder": "Detail of the investigation and actions taken...",
+      "minChars": "{count} characters minimum",
+      "submit": "Close incident"
+    }
+  },
+  "users": {
+    "createUser": "Create user",
+    "email": "Email",
+    "fullName": "Full name",
+    "status": "Status",
+    "lastLogin": "Last login",
+    "editRoles": "Roles",
+    "never": "Never",
+    "active": "Active",
+    "disabled": "Disabled",
+    "enable": "Enable",
+    "disable": "Disable",
+    "list": {
+      "totalUsers": "registered users",
+      "empty": "No users found",
+      "you": "you"
+    },
+    "createModal": {
+      "title": "Create user",
+      "password": "Temporary password",
+      "passwordHint": "Minimum 8 characters",
+      "roles": "Initial roles (optional)",
+      "submit": "Create"
+    },
+    "disableModal": {
+      "title": "Disable this user?",
+      "body": "will be immediately disabled.",
+      "warning": "The user will no longer be able to log in.",
+      "submit": "Disable",
+      "selfErrorTitle": "Action not allowed",
+      "selfErrorBody": "You cannot disable your own account. This action is blocked to prevent accidental lockout."
+    },
+    "enableModal": {
+      "title": "Enable this user?",
+      "body": "will be able to log in again.",
+      "submit": "Enable"
+    },
+    "roles": {
+      "title": "Assign roles",
+      "chooseRoles": "Select roles:",
+      "gapWarning": "Current roles are not shown (known backend limitation). Check the roles this user should have — the list below will replace all existing roles.",
+      "submit": "Save roles",
+      "tenantAdmin": "Administrator (tenant_admin)",
+      "securityAnalyst": "Security analyst (security_analyst)",
+      "readOnlyAuditor": "Read-only auditor (read_only_auditor)",
+      "selfDemotionError": "You cannot remove the tenant_admin role from your own account."
+    }
+  },
+  "agents": {
+    "hostname": "Host",
+    "os": "OS",
+    "heartbeat": "Heartbeat",
+    "status": "Status",
+    "list": {
+      "totalEndpoints": "registered endpoints",
+      "active": "Active",
+      "disconnected": "Disconnected",
+      "provisioned": "Provisioned",
+      "decommissioned": "Decommissioned",
+      "version": "Version",
+      "empty": "No agents registered",
+      "autoRefresh": "Auto-refresh every 30 s",
+      "addAgent": "Add Agent"
+    },
+    "provision": {
+      "title": "Add new agent",
+      "subtitle": "An enrollment OTP is generated. Copy it into the agent's appsettings.json before the 30-minute expiry.",
+      "otpLabel": "Enrollment OTP",
+      "expires": "— expires in {n} min",
+      "installLabel": "PowerShell one-liner (run as Administrator on target machine)",
+      "hint": "After the agent enrolls, it will appear here within 60 seconds (next auto-refresh).",
+      "regenerate": "Generate new OTP"
+    },
+    "detail": {
+      "notFound": "Agent not found",
+      "backToList": "Back to agents",
+      "fqdn": "FQDN",
+      "neverReported": "Never",
+      "recentAlerts": "Recent alerts",
+      "noAlerts": "No alerts for this agent",
+      "allAlerts": "All alerts",
+      "tabOverview": "Overview",
+      "tabAlerts": "Alerts",
+      "tabHeartbeats": "Heartbeats",
+      "tabConfig": "Configuration"
+    },
+    "command": {
+      "isolate": "Isolate endpoint",
+      "title": "Isolate endpoint",
+      "warningTitle": "Destructive action",
+      "warningBody": "Isolating \"{hostname}\" will immediately cut this agent's network access. It will be unreachable until an operator performs a physical or software restore.",
+      "reasonLabel": "Reason (required)",
+      "reasonPlaceholder": "E.g.: Suspected compromise — ransomware detected running...",
+      "minChars": "{count} characters minimum",
+      "ackLabel": "I understand this will immediately disconnect the endpoint from the network.",
+      "submit": "Isolate endpoint",
+      "lastCommand": "Last command",
+      "status": {
+        "pending": "Pending",
+        "dispatched": "Dispatched",
+        "acknowledged": "Acknowledged",
+        "completed": "Completed",
+        "failed": "Failed"
+      }
+    }
+  },
+  "common": {
+    "loading": "Loading...",
+    "error": "An error occurred",
+    "retry": "Retry",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "save": "Save",
+    "close": "Close",
+    "search": "Search",
+    "filters": "Filters",
+    "resetFilters": "Reset filters",
+    "noResults": "No results",
+    "results": "results",
+    "previous": "Previous",
+    "next": "Next",
+    "page": "Page {page} / {totalPages}",
+    "comingInSprint8": "Available from Sprint 8",
+    "all": "All",
+    "viewAll": "View all →",
+    "view": "View →",
+    "access": "Access →",
+    "copied": "Copied!"
+  },
+  "audit": {
+    "title": "Audit log",
+    "subtitle": "Agent audit chain integrity — Ed25519 signed batches",
+    "totalEntries": "entries",
+    "empty": "No entries found",
+    "exportCsv": "Export CSV",
+    "exportCsvTitle": "Export current page as CSV (frontend-only, no backend endpoint)",
+    "filterAgentId": "Agent ID",
+    "filterAgentIdPlaceholder": "Agent UUID...",
+    "filterAfter": "Received after",
+    "filterBefore": "Received before",
+    "gapWarning": "Sequence gap detected — entries are missing or out of order.",
+    "col": {
+      "agentId": "Agent",
+      "sequenceNumber": "Sequence",
+      "signingKeyId": "Signing key",
+      "receivedAt": "Received"
+    }
+  },
+  "settings": {
+    "notifications": {
+      "title": "Notification preferences",
+      "description": "Receive email notifications when new alerts are detected.",
+      "severity": "Severity",
+      "email": "Email",
+      "saved": "Preferences saved."
+    }
+  },
+  "userActions": {
+    "title": "User actions log",
+    "subtitle": "Who did what on the dashboard",
+    "filterByAction": "Filter by action",
+    "empty": "No actions recorded",
+    "actionType": {
+      "login": "Login",
+      "logout": "Logout",
+      "alert_status_change": "Alert status change",
+      "command_issued": "Command issued",
+      "user_create": "User created",
+      "user_disable": "User disabled",
+      "user_enable": "User enabled",
+      "agent_decommission": "Agent decommissioned",
+      "agent_provision": "Agent provisioned"
+    },
+    "col": {
+      "date": "Date",
+      "action": "Action",
+      "user": "User",
+      "target": "Target",
+      "details": "Details",
+      "ip": "IP"
+    }
+  },
+  "errors": {
+    "notFound": {
+      "title": "Page not found",
+      "description": "The page you are looking for does not exist.",
+      "backToDashboard": "Back to dashboard"
+    },
+    "forbidden": {
+      "title": "Access denied",
+      "description": "You do not have the necessary permissions to access this page."
+    },
+    "generic": {
+      "title": "Error",
+      "description": "An unexpected error occurred. Please try again."
+    }
+  },
+  "modules": {
+    "SENTINEL": "SENTINEL — decoy files",
+    "ENTROPY": "ENTROPY — encryption",
+    "GENEALOGY": "GENEALOGY — process origin",
+    "USB_GUARD": "USB GUARD — removable media",
+    "EXFIL_WATCH": "EXFIL WATCH — data exfiltration",
+    "UNKNOWN": "Unknown module"
+  }
+}

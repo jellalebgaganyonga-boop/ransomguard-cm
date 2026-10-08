@@ -1,0 +1,12 @@
+[Unit]
+Description=Nightly GRID backup
+
+[Timer]
+OnCalendar=*-*-* 02:30:00
+RandomizedDelaySec=30m
+# Runs on the next boot when the machine was off at 02:30 -- this server is a
+# VM that is not guaranteed to be up overnight.
+Persistent=true
+
+[Install]
+WantedBy=timers.target
