@@ -26,7 +26,6 @@ from httpx import AsyncClient
 
 from ransomguard_grid.core.exceptions import AuthenticationError
 from ransomguard_grid.core.jwt_service import JwtService
-from ransomguard_grid.core.security import create_access_token, decode_access_token
 from tests.api.test_tenant_isolation import _create_two_tenants, _login
 
 _SECRET = "jwt-security-test-secret-at-least-32-chars"
@@ -204,32 +203,6 @@ def test_expired_token_is_refused() -> None:
         service.decode(service.create_access_token("user-123", "tenant-A", ["tenant_admin"], expires_minutes=-5))
     with pytest.raises(AuthenticationError):
         service.decode(_hmac_token("HS256", _SECRET.encode(), _claims(exp_offset=-60)))
-
-
-# ── Refusals: core/security.py helpers ──────────────────────────
-# decode_access_token re-raises the library's own error (python-jose JWTError,
-# PyJWT InvalidTokenError), so only "it raises" is asserted here.
-
-
-def test_security_helpers_round_trip() -> None:
-    payload = decode_access_token(create_access_token({"sub": "user-123", "tenant_id": "tenant-A", "roles": ["admin"]}))
-    assert payload["sub"] == "user-123"
-    assert payload["tenant_id"] == "tenant-A"
-
-
-@pytest.mark.parametrize(
-    "make_token",
-    [
-        pytest.param(lambda: _unsigned_token("none", _claims()), id="alg_none"),
-        pytest.param(lambda: _hmac_token("HS256", _rsa_keys()[2], _claims()), id="HS256_hmac_with_rsa_public_der"),
-        pytest.param(lambda: _hmac_token("RS256", _rsa_keys()[1], _claims()), id="RS256_header_hmac_with_rsa_public_pem"),
-        pytest.param(lambda: _hmac_token("HS256", _APP_SECRET.encode(), _claims(exp_offset=-60)), id="expired"),
-        pytest.param(lambda: _hmac_token("HS512", _APP_SECRET.encode(), _claims()), id="HS512_with_right_secret"),
-    ],
-)
-def test_security_decode_refuses_hostile_tokens(make_token: Callable[[], str]) -> None:
-    with pytest.raises(Exception):  # noqa: B017 -- library-specific error type, see above
-        decode_access_token(make_token())
 
 
 # ── Refusals through the API ────────────────────────────────────

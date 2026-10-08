@@ -1,14 +1,10 @@
-"""Security utilities: JWT creation/verification, password hashing."""
+"""Security utilities: password hashing.
 
-import calendar
-from datetime import UTC, datetime, timedelta
+JWT creation and verification live in core/jwt_service.py (JwtService), the
+only JWT code path of the GRID.
+"""
 
 import bcrypt
-import jwt
-
-from ransomguard_grid.core.config import get_settings
-
-_settings = get_settings()
 
 
 def hash_password(password: str) -> str:
@@ -19,24 +15,3 @@ def hash_password(password: str) -> str:
 def verify_password(plain: str, hashed: str) -> bool:
     """Verify a password against its bcrypt hash."""
     return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
-
-
-def create_access_token(
-    data: dict[str, str | list[str]],
-    expires_delta: timedelta | None = None,
-) -> str:
-    """Create a JWT access token with integer exp claim."""
-    to_encode: dict[str, object] = dict(data)
-    expire = datetime.now(UTC) + (
-        expires_delta or timedelta(minutes=_settings.jwt_access_token_expire_minutes)
-    )
-    to_encode["exp"] = calendar.timegm(expire.utctimetuple())
-    encoded: str = jwt.encode(to_encode, _settings.jwt_secret_key, algorithm="HS256")
-    return encoded
-
-
-def decode_access_token(token: str) -> dict[str, str | list[str]]:
-    """Decode and verify a JWT access token. Raises jwt.PyJWTError on failure."""
-    # Explicit, fixed algorithm list: never taken from the token's header.
-    payload: dict[str, str | list[str]] = jwt.decode(token, _settings.jwt_secret_key, algorithms=["HS256"])
-    return payload

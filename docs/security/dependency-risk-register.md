@@ -172,7 +172,8 @@ Aucune de ces dépendances n'est livrée au navigateur. Le contrôle de la CI
 - **Neutralisation (retirée)** : `--ignore-vuln CVE-2026-85394` dans
   `.github/workflows/ci.yml`.
 - **Correction** : python-jose remplacé par PyJWT. Chaque `decode` passe
-  `algorithms=["HS256"]` en dur (`core/jwt_service.py`, `core/security.py`),
+  `algorithms=["HS256"]` en dur (`core/jwt_service.py`, seul chemin JWT du
+  GRID depuis la suppression des fonctions mortes de `core/security.py`),
   jamais lu depuis le jeton ni depuis la configuration ; `jwt_algorithm` n'accepte
   plus que `"HS256"`. Tests de sécurité écrits avant la migration et passés
   avant et après (`grid/tests/test_jwt_security.py`) : alg none, confusion
