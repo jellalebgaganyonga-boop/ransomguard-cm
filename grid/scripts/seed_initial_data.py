@@ -38,7 +38,7 @@ from sqlalchemy import select
 from ransomguard_grid.core.security import hash_password
 from ransomguard_grid.db.models.enums import TenantStatus
 from ransomguard_grid.db.models.tenant_user import Role, Tenant, User, UserRole
-from ransomguard_grid.db.session import AsyncSessionLocal
+from ransomguard_grid.db.session import AsyncSessionLocal, engine
 
 DEV_PASSWORD = "ChangeMe123!"
 
@@ -198,5 +198,19 @@ async def seed() -> None:
         print("[WARN] Admin password is the development default -- change it now")
 
 
+async def main() -> None:
+    """Seed, then release the connection pool while the event loop is still running.
+
+    Without the dispose, the pooled aiomysql connections are closed by the garbage
+    collector after asyncio.run() has closed the loop, which prints
+    "RuntimeError: Event loop is closed" after a successful seed -- and an error
+    message on a success ends up making an operator believe provisioning failed.
+    """
+    try:
+        await seed()
+    finally:
+        await engine.dispose()
+
+
 if __name__ == "__main__":
-    asyncio.run(seed())
+    asyncio.run(main())
