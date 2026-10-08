@@ -59,7 +59,10 @@ export function App() {
   }, [setAccessToken, setInitializing]);
 
   return (
-    <BrowserRouter>
+    // React Router v7 behaviour, opted into on v6 before the upgrade. These are
+    // the only two future flags <BrowserRouter> accepts; the others apply to
+    // data routers (createBrowserRouter), which this app does not use.
+    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Routes>
         {/* ── Public ── */}
         <Route element={<AuthLayout />}>

@@ -10,9 +10,22 @@
  * so the fake clock is active from the first script execution.
  */
 
+import type { Page } from '@playwright/test';
 import { test, expect, setupMocks, MOCK_TOKENS, MOCK_ME } from './fixtures/index';
 
 const THIRTY_MIN_MS = 30 * 60 * 1000;
+
+/**
+ * The URL reaching /dashboard does not mean the idle timer is running: the
+ * timer is armed by AuthenticatedRoute only once /me has loaded
+ * (protected-route.tsx, `enabled: !!me`). With React Router's
+ * v7_startTransition the route renders as a transition, after the URL change,
+ * so fast-forwarding the clock right after waitForURL can happen before the
+ * timer exists. The app shell's <main> is rendered only once /me has loaded.
+ */
+async function waitForIdleTimerArmed(page: Page): Promise<void> {
+  await expect(page.getByRole('main')).toBeVisible();
+}
 
 test.describe('Idle timeout', () => {
   test('session expired modal appears after 30 min idle → redirects to login on CTA click', async ({ page }) => {
@@ -31,6 +44,7 @@ test.describe('Idle timeout', () => {
     await page.locator('#password').fill('MotDePasseTest123!');
     await page.getByRole('button', { name: /se connecter/i }).click();
     await page.waitForURL('**/dashboard');
+    await waitForIdleTimerArmed(page);
 
     // Fast-forward 30 minutes + 1 ms to trigger the idle timeout
     await page.clock.fastForward(THIRTY_MIN_MS + 1);
@@ -58,6 +72,7 @@ test.describe('Idle timeout', () => {
     await page.locator('#password').fill('MotDePasseTest123!');
     await page.getByRole('button', { name: /se connecter/i }).click();
     await page.waitForURL('**/dashboard');
+    await waitForIdleTimerArmed(page);
 
     // Advance 20 minutes
     await page.clock.fastForward(20 * 60 * 1000);
