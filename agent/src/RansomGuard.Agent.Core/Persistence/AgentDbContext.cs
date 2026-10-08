@@ -163,6 +163,7 @@ public sealed class AgentDbContext : DbContext
         modelBuilder.Entity<AuditLog>(entity =>
         {
             entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.Sequence).IsUnique();
             entity.HasIndex(e => e.CreatedAt);
             entity.Property(e => e.Action).IsRequired().HasMaxLength(100);
             entity.Property(e => e.Details).IsRequired();

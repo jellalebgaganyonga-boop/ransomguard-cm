@@ -1,3 +1,4 @@
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using RansomGuard.Agent.Core.Persistence.Entities;
 using RansomGuard.Agent.Core.Security.Cryptography;
@@ -7,8 +8,26 @@ namespace RansomGuard.Agent.Core.Persistence.Repositories;
 /// <summary>
 /// SQLite-backed repository for the immutable, hash-chained, and Ed25519-signed <see cref="AuditLog"/>.
 /// </summary>
+/// <remarks>
+/// Appending reads the chain tail, then inserts the next link. Two concurrent appends would
+/// both read the same tail and fork the chain, and the integrity check would then report a
+/// tampering that never happened. Two guards prevent it:
+/// <list type="bullet">
+/// <item>one writer for the whole process: every append goes through <see cref="WriteGate"/>,
+///   whatever the DbContext or the scope;</item>
+/// <item>the chain order is <see cref="AuditLog.Sequence"/>, unique in the database: a writer in
+///   another process (a CLI sub-command while the service runs) cannot take the same position;
+///   it gets a constraint error, re-reads the tail and retries.</item>
+/// </list>
+/// </remarks>
 public sealed class AuditLogRepository : IAuditLogRepository
 {
+    private const int MaxAppendAttempts = 5;
+    private const int SqliteConstraintError = 19;
+
+    /// <summary>Process-wide single writer of the audit chain.</summary>
+    private static readonly SemaphoreSlim WriteGate = new(1, 1);
+
     private readonly AgentDbContext _context;
     private readonly AuditLogSigner? _signer;
 
@@ -26,35 +45,30 @@ public sealed class AuditLogRepository : IAuditLogRepository
     /// <inheritdoc />
     public async Task AppendAsync(string action, string details, string? entityType = null, Guid? entityId = null, CancellationToken cancellationToken = default)
     {
-        AuditLog? latest = await GetLatestAsync(cancellationToken);
-        string? previousHash = latest?.CurrentHash;
-
-        DateTime timestamp = DateTime.UtcNow;
-        string currentHash = AuditLog.ComputeHash(action, details, timestamp, previousHash);
-
-        Guid entryId = Guid.NewGuid();
-        string? signature = null;
-        if (OperatingSystem.IsWindows() && _signer is not null)
+        await WriteGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            signature = _signer.Sign(entryId, timestamp, action, previousHash, currentHash);
+            for (int attempt = 1; ; attempt++)
+            {
+                AuditLog entry = await BuildNextEntryAsync(action, details, entityType, entityId, cancellationToken)
+                    .ConfigureAwait(false);
+                _context.AuditLogs.Add(entry);
+                try
+                {
+                    await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                    return;
+                }
+                catch (DbUpdateException ex) when (IsSequenceTaken(ex) && attempt < MaxAppendAttempts)
+                {
+                    // Another process appended first: drop this link and rebuild on the new tail.
+                    _context.Entry(entry).State = EntityState.Detached;
+                }
+            }
         }
-
-        var entry = new AuditLog
+        finally
         {
-            Id = entryId,
-            Action = action,
-            Details = details,
-            EntityType = entityType,
-            EntityId = entityId,
-            PreviousHash = previousHash,
-            CurrentHash = currentHash,
-            Signature = signature,
-            CreatedAt = timestamp,
-            UpdatedAt = timestamp
-        };
-
-        _context.AuditLogs.Add(entry);
-        await _context.SaveChangesAsync(cancellationToken);
+            WriteGate.Release();
+        }
     }
 
     /// <inheritdoc />
@@ -62,7 +76,7 @@ public sealed class AuditLogRepository : IAuditLogRepository
     {
         return await _context.AuditLogs
             .AsNoTracking()
-            .OrderByDescending(a => a.CreatedAt)
+            .OrderByDescending(a => a.Sequence)
             .FirstOrDefaultAsync(cancellationToken);
     }
 
@@ -72,7 +86,7 @@ public sealed class AuditLogRepository : IAuditLogRepository
         return await _context.AuditLogs
             .AsNoTracking()
             .Where(a => a.CreatedAt >= from && a.CreatedAt <= to)
-            .OrderBy(a => a.CreatedAt)
+            .OrderBy(a => a.Sequence)
             .ToListAsync(cancellationToken);
     }
 
@@ -81,7 +95,7 @@ public sealed class AuditLogRepository : IAuditLogRepository
     {
         List<AuditLog> entries = await _context.AuditLogs
             .AsNoTracking()
-            .OrderBy(a => a.CreatedAt)
+            .OrderBy(a => a.Sequence)
             .ToListAsync(cancellationToken);
 
         if (entries.Count == 0)
@@ -128,4 +142,39 @@ public sealed class AuditLogRepository : IAuditLogRepository
 
         return true;
     }
+
+    private async Task<AuditLog> BuildNextEntryAsync(
+        string action, string details, string? entityType, Guid? entityId, CancellationToken cancellationToken)
+    {
+        AuditLog? latest = await GetLatestAsync(cancellationToken).ConfigureAwait(false);
+        string? previousHash = latest?.CurrentHash;
+
+        DateTime timestamp = DateTime.UtcNow;
+        string currentHash = AuditLog.ComputeHash(action, details, timestamp, previousHash);
+
+        Guid entryId = Guid.NewGuid();
+        string? signature = null;
+        if (OperatingSystem.IsWindows() && _signer is not null)
+        {
+            signature = _signer.Sign(entryId, timestamp, action, previousHash, currentHash);
+        }
+
+        return new AuditLog
+        {
+            Id = entryId,
+            Sequence = (latest?.Sequence ?? 0) + 1,
+            Action = action,
+            Details = details,
+            EntityType = entityType,
+            EntityId = entityId,
+            PreviousHash = previousHash,
+            CurrentHash = currentHash,
+            Signature = signature,
+            CreatedAt = timestamp,
+            UpdatedAt = timestamp
+        };
+    }
+
+    private static bool IsSequenceTaken(DbUpdateException ex) =>
+        ex.InnerException is SqliteException { SqliteErrorCode: SqliteConstraintError };
 }

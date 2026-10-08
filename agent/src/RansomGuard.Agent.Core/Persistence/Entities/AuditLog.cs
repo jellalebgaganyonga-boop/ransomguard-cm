@@ -15,6 +15,14 @@ public sealed class AuditLog
     public Guid Id { get; init; } = Guid.NewGuid();
 
     /// <summary>
+    /// Position in the chain: 1 for the genesis entry, then strictly increasing by one.
+    /// The chain order is this sequence, never <see cref="CreatedAt"/> (two entries can share a
+    /// clock tick, and the system clock can move backwards). Unique in the database, so two
+    /// entries can never claim the same position.
+    /// </summary>
+    public long Sequence { get; init; }
+
+    /// <summary>
     /// Action performed (e.g., "AgentStarted", "FileDetected", "AlertCreated").
     /// </summary>
     public required string Action { get; init; }
