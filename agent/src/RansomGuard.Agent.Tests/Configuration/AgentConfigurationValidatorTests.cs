@@ -56,34 +56,6 @@ public sealed class AgentConfigurationValidatorTests
         result.IsValid.ShouldBeTrue();
     }
 
-    [Theory]
-    [InlineData("")]
-    [InlineData("InvalidEnv")]
-    [InlineData("dev")]
-    public void Invalid_environment_should_fail(string environment)
-    {
-        AgentConfiguration config = CreateValidConfig() with
-        {
-            Identity = CreateValidConfig().Identity with { Environment = environment }
-        };
-        ValidationResult result = _validator.Validate(config);
-        result.IsValid.ShouldBeFalse();
-    }
-
-    [Theory]
-    [InlineData("Development")]
-    [InlineData("Staging")]
-    [InlineData("Production")]
-    public void Valid_environment_should_pass(string environment)
-    {
-        AgentConfiguration config = CreateValidConfig() with
-        {
-            Identity = CreateValidConfig().Identity with { Environment = environment }
-        };
-        ValidationResult result = _validator.Validate(config);
-        result.IsValid.ShouldBeTrue();
-    }
-
     [Fact]
     public void Empty_watch_paths_should_fail()
     {
@@ -242,8 +214,7 @@ public sealed class AgentConfigurationValidatorTests
         {
             Id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
             Hostname = "TEST-HOST",
-            Version = "0.3.0",
-            Environment = "Development"
+            Version = "0.3.0"
         },
         Detection = new DetectionOptions
         {

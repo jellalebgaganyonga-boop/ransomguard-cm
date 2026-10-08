@@ -106,8 +106,7 @@ public sealed class SentinelConfigurationTests
         {
             Id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
             Hostname = "TEST-HOST",
-            Version = "0.4.0",
-            Environment = "Development"
+            Version = "0.4.0"
         },
         Detection = new DetectionOptions
         {

@@ -44,7 +44,7 @@ public sealed class EndToEndAlertFlowTests : IDisposable
         var config = new AgentConfiguration
         {
             Identity = new AgentIdentityOptions
-                { Id = "test-agent-e2e", Hostname = "TEST-E2E", Version = "1.0.0", Environment = "Test" },
+                { Id = "test-agent-e2e", Hostname = "TEST-E2E", Version = "1.0.0" },
             Server = new ServerOptions { BaseUrl = "https://grid.test.local" },
             Detection = new DetectionOptions { WatchPaths = [] },
             Database = new DatabaseOptions

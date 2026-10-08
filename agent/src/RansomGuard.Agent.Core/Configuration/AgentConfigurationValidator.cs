@@ -46,11 +46,6 @@ public sealed class AgentIdentityOptionsValidator : AbstractValidator<AgentIdent
 
         RuleFor(x => x.Hostname).NotEmpty();
         RuleFor(x => x.Version).NotEmpty();
-
-        RuleFor(x => x.Environment)
-            .NotEmpty()
-            .Must(env => env is "Development" or "Staging" or "Production")
-            .WithMessage("Environment must be Development, Staging, or Production.");
     }
 }
 

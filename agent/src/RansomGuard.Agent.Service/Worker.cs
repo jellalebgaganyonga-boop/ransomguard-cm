@@ -56,7 +56,6 @@ public sealed class Worker : BackgroundService
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _logger.LogInformation("RansomGuard-CM Agent v{Version} starting", _config.Identity.Version);
-        _logger.LogInformation("Environment: {Environment}", _config.Identity.Environment);
 
         Task persistenceTask = ConsumeEventsAsync(stoppingToken);
 

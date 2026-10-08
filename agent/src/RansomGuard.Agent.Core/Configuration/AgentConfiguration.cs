@@ -149,12 +149,6 @@ public sealed record AgentIdentityOptions
     /// </summary>
     [Required]
     public required string Version { get; init; }
-
-    /// <summary>
-    /// Deployment environment (Development, Staging, Production).
-    /// </summary>
-    [Required]
-    public required string Environment { get; init; }
 }
 
 /// <summary>

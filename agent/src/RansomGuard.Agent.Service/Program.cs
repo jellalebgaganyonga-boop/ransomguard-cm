@@ -66,6 +66,7 @@ try
     Log.Information("RansomGuard-CM Agent starting up");
 
     var builder = Host.CreateApplicationBuilder(args);
+    Log.Information("Host environment: {Environment}", builder.Environment.EnvironmentName);
 
     // Enable running as a Windows Service
     builder.Services.AddWindowsService(options =>
@@ -85,8 +86,9 @@ try
         int maxFileSizeMb = agentConfig?.Logging?.MaxFileSizeMB ?? 50;
         int retainedFiles = agentConfig?.Logging?.RetainedFileCount ?? 30;
 
-        string? environment = agentConfig?.Identity?.Environment;
-        bool isProduction = string.Equals(environment, "Production", StringComparison.OrdinalIgnoreCase);
+        // The one notion of environment is the .NET host environment (DOTNET_ENVIRONMENT).
+        // A Windows service started without it runs as Production, which is what we want.
+        bool isProduction = builder.Environment.IsProduction();
 
         loggerConfig
             .MinimumLevel.Information()
