@@ -55,6 +55,9 @@ public sealed class UsbGuardIntegrationTests : IDisposable
             opt.UseSqlite($"Data Source={Path.Combine(_testDir, "di_test.db")}"));
         services.AddLogging();
         services.AddSingleton<IEntropyCalculator, EntropyCalculator>();
+        // The USB action engine writes every outcome to the audit log (as in ServiceRegistration).
+        services.AddScoped<IAuditLogRepository>(sp =>
+            new AuditLogRepository(sp.GetRequiredService<AgentDbContext>()));
 
         // USB GUARD services
         services.AddScoped<IUsbWhitelistService>(sp =>
@@ -80,6 +83,7 @@ public sealed class UsbGuardIntegrationTests : IDisposable
         sp.GetRequiredService<IUsbWhitelistService>().ShouldNotBeNull();
         sp.GetRequiredService<IUsbContentScanner>().ShouldNotBeNull();
         sp.GetRequiredService<IUsbActionEngine>().ShouldNotBeNull();
+        sp.GetRequiredService<IAuditLogRepository>().ShouldNotBeNull();
         sp.GetRequiredService<IMagicByteValidator>().ShouldNotBeNull();
         sp.GetRequiredService<AgentDbContext>().ShouldNotBeNull();
 
