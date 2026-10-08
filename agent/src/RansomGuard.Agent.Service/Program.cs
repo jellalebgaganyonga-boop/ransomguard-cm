@@ -68,6 +68,21 @@ try
     var builder = Host.CreateApplicationBuilder(args);
     Log.Information("Host environment: {Environment}", builder.Environment.EnvironmentName);
 
+    // TLS to the GRID: TrustAnyCertificate only in Development, against a local server.
+    bool trustAnyCertificate = builder.Configuration.GetValue<bool>(ServerTlsPolicy.SettingKey);
+    string? tlsRefusal = ServerTlsPolicy.Validate(
+        trustAnyCertificate,
+        builder.Configuration["Agent:Server:BaseUrl"],
+        builder.Environment.EnvironmentName);
+    if (tlsRefusal is not null)
+    {
+        throw new InvalidOperationException(tlsRefusal);
+    }
+    if (trustAnyCertificate)
+    {
+        Log.Warning(ServerTlsPolicy.ActiveWarning);
+    }
+
     // Enable running as a Windows Service
     builder.Services.AddWindowsService(options =>
     {

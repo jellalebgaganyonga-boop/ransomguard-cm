@@ -76,8 +76,15 @@ Write-Host "[2/6] Downloading agent package from $PackageUrl ..." -ForegroundCol
 
 $tempZip = Join-Path $env:TEMP "RansomGuard-Agent.zip"
 
-# Skip certificate validation for self-signed certs on internal network
-[System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
+# The package holds the executables that will run as LocalSystem: it is downloaded with
+# full TLS validation. Validation is bypassed only for a GRID on this machine (development),
+# never across the network -- same rule as the agent's Agent:Server:TrustAnyCertificate.
+$gridHost = $null
+try { $gridHost = ([Uri]"https://$GridServer").Host.Trim('[', ']').ToLowerInvariant() } catch { }
+if (@('localhost', '127.0.0.1', '::1') -contains $gridHost) {
+    Write-Host "  WARNING: certificate validation disabled for a LOCAL GRID ($GridServer) -- development only" -ForegroundColor Yellow
+    [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
+}
 try {
     # Use .NET WebClient for better progress and TLS control
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
@@ -89,6 +96,8 @@ catch {
     Write-Host "ERROR: Failed to download agent package." -ForegroundColor Red
     Write-Host "  $_" -ForegroundColor Red
     Write-Host "  Make sure the GRID server is reachable at $GridServer" -ForegroundColor Red
+    Write-Host "  and that its TLS certificate is trusted by this machine: certificate validation" -ForegroundColor Red
+    Write-Host "  is never disabled for a remote GRID." -ForegroundColor Red
     exit 1
 }
 finally {
