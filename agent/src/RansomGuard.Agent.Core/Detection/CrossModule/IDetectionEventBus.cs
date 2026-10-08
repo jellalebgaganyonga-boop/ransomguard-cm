@@ -8,7 +8,8 @@ public interface IDetectionEventBus
 {
     /// <summary>
     /// Publishes a detection signal to all subscribers of the signal type.
-    /// Fire-and-forget: subscriber failures are logged but do not block the publisher.
+    /// The returned task completes once every subscriber has run. A subscriber failure
+    /// is logged and does not stop the remaining subscribers.
     /// </summary>
     Task PublishAsync<TSignal>(TSignal signal, CancellationToken ct = default)
         where TSignal : IDetectionSignal;

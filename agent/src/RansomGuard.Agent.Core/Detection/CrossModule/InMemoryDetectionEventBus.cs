@@ -4,20 +4,18 @@ using Microsoft.Extensions.Logging;
 namespace RansomGuard.Agent.Core.Detection.CrossModule;
 
 /// <summary>
-/// Channel-based in-memory implementation of <see cref="IDetectionEventBus"/>.
-/// Bounded channel (5000 events). Subscribers receive on background tasks.
-/// Failures are logged but do not block the publisher.
+/// In-memory implementation of <see cref="IDetectionEventBus"/>.
+/// Publication is synchronous: there is no queue and no background dispatch.
+/// <see cref="PublishAsync{TSignal}"/> invokes the subscribers of the signal type one after
+/// the other, on the caller's thread, and awaits each one before moving to the next.
+/// Nothing is buffered, so nothing can be dropped. A subscriber that throws is logged
+/// and does not prevent the following subscribers from running; a slow subscriber,
+/// however, delays both the remaining subscribers and the publisher (debt AGT-BUS-001).
 /// </summary>
 public sealed class InMemoryDetectionEventBus : IDetectionEventBus, IDisposable
 {
-    private const int ChannelCapacity = 5000;
-
     private readonly ConcurrentDictionary<Type, SubscriptionList> _subscriptions = new();
     private readonly ILogger<InMemoryDetectionEventBus> _logger;
-    private long _droppedCount;
-
-    /// <summary>Number of signals dropped due to channel saturation.</summary>
-    public long DroppedCount => Interlocked.Read(ref _droppedCount);
 
     /// <summary>Initializes the in-memory detection event bus.</summary>
     public InMemoryDetectionEventBus(ILogger<InMemoryDetectionEventBus> logger)
