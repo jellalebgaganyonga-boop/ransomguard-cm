@@ -305,7 +305,8 @@ static InstalledDatabase? OpenInstalledDatabase(AgentConfiguration config)
 
 /// <summary>
 /// Verifies the audit log hash chain and Ed25519 signatures of the installed database.
-/// Exit 0 if valid, 1 if the integrity check fails, 2 if refused (nothing was done).
+/// Exit 0 if valid, 1 if the integrity check fails, 2 if refused (nothing was done),
+/// 3 if the chain is empty (INCONCLUSIVE: a fresh install and an erased chain look the same).
 /// </summary>
 static async Task VerifyAuditLogAsync()
 {
@@ -332,30 +333,31 @@ static async Task VerifyAuditLogAsync()
         Microsoft.Extensions.Logging.Abstractions.NullLogger<AuditLogSigner>.Instance);
     var repo = new AuditLogRepository(context, signer);
 
-    int entryCount = await context.AuditLogs.CountAsync();
+    var (verdict, entryCount) = await AuditChainVerification.VerifyAsync(context, repo);
     Console.WriteLine($"Database examined: {db.Path}");
     Console.WriteLine($"Audit log entries read: {entryCount}");
 
-    if (entryCount == 0)
+    switch (verdict)
     {
-        Console.WriteLine("No entries to verify.");
-        Console.WriteLine("RESULT: PASS (empty log)");
-        return;
-    }
+        case AuditChainVerdict.Pass:
+            Console.WriteLine("Hash chain: INTACT");
+            Console.WriteLine("Ed25519 signatures: VALID");
+            Console.WriteLine("Tampered rows: 0");
+            Console.WriteLine("RESULT: PASS");
+            break;
 
-    bool valid = await repo.VerifyChainIntegrityAsync();
+        case AuditChainVerdict.Inconclusive:
+            // A fresh install and an erased chain both have zero entries: never PASS.
+            Console.WriteLine("RESULT: INCONCLUSIVE — the audit chain is empty.");
+            Console.WriteLine("A fresh install and a chain wiped by an attacker look the same locally;");
+            Console.WriteLine("only the GRID's copy of the chain can tell them apart.");
+            Environment.ExitCode = CliExitCode.Inconclusive;
+            break;
 
-    if (valid)
-    {
-        Console.WriteLine("Hash chain: INTACT");
-        Console.WriteLine("Ed25519 signatures: VALID");
-        Console.WriteLine("Tampered rows: 0");
-        Console.WriteLine("RESULT: PASS");
-    }
-    else
-    {
-        Console.WriteLine("RESULT: FAIL — audit log integrity compromised");
-        Environment.ExitCode = CliExitCode.IntegrityFailure;
+        default:
+            Console.WriteLine("RESULT: FAIL — audit log integrity compromised");
+            Environment.ExitCode = CliExitCode.IntegrityFailure;
+            break;
     }
 }
 
@@ -530,4 +532,7 @@ static class CliExitCode
 
     /// <summary>Refused: nothing was done (invalid configuration, database missing).</summary>
     public const int Refused = 2;
+
+    /// <summary>--verify-audit-log on an empty chain: nothing can be concluded locally.</summary>
+    public const int Inconclusive = AuditChainVerification.InconclusiveExitCode;
 }

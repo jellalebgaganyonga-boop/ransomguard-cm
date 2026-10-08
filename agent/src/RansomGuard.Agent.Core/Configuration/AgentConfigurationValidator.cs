@@ -140,10 +140,13 @@ public sealed class ServerOptionsValidator : AbstractValidator<ServerOptions>
     /// </summary>
     public ServerOptionsValidator()
     {
+        // Stop at the first failure: a missing address is one message, not two.
         RuleFor(x => x.BaseUrl)
+            .Cascade(CascadeMode.Stop)
             .NotEmpty()
+            .WithMessage("is required and missing: there is no default GRID server address.")
             .Must(BeValidHttpsUri)
-            .WithMessage("Server.BaseUrl must be a valid HTTPS URI.");
+            .WithMessage("must be a valid HTTPS URI.");
 
         RuleFor(x => x.HeartbeatIntervalSeconds).InclusiveBetween(10, 3600);
         RuleFor(x => x.ConnectionTimeoutSeconds).InclusiveBetween(1, 120);

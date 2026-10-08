@@ -45,7 +45,8 @@ public sealed class AgentConfigurationLoaderTests
         AgentConfigurationLoadResult result = AgentConfigurationLoader.Load(shipped, "Production");
 
         result.Configuration.ShouldBeNull();
-        result.Errors.ShouldContain(e => e.StartsWith("Agent:Server:BaseUrl", StringComparison.Ordinal));
+        // One message, not two: BaseUrl validation stops at the first failure.
+        result.Errors.ShouldHaveSingleItem().ShouldStartWith("Agent:Server:BaseUrl: is required and missing");
     }
 
     [Fact]
