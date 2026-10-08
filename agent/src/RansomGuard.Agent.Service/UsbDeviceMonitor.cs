@@ -93,13 +93,30 @@ public sealed class UsbDeviceMonitor : BackgroundService, IUsbDeviceMonitor
             return;
         }
 
+        // Strict + empty whitelist: warn at startup, do not block (A5).
+        UsbOperatingMode startupMode = ResolveOperatingMode();
+        try
+        {
+            await using var startupScope = _scopeFactory.CreateAsyncScope();
+            await UsbGuardStartupCheck.WarnIfStrictWithEmptyWhitelistAsync(
+                startupMode,
+                startupScope.ServiceProvider.GetRequiredService<IUsbWhitelistService>(),
+                _logger,
+                stoppingToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // The whitelist service itself could not be built (e.g. database unavailable).
+            _logger.LogWarning(ex, UsbGuardStartupCheck.UnreadableWhitelistWarning);
+        }
+
         // Start WMI subscribers
         _wmiSubscriber.Start(_eventChannel.Writer, stoppingToken);
 
         // Start consumer task
         Task consumerTask = ConsumeEventsAsync(stoppingToken);
 
-        _logger.LogInformation("USB GUARD monitor active");
+        _logger.LogInformation("USB GUARD monitor active (mode: {Mode})", startupMode);
         _moduleState.Publish(ModuleCode.UsbGuard, ModuleState.Active);
         reachedActive = true;
 
@@ -133,6 +150,16 @@ public sealed class UsbDeviceMonitor : BackgroundService, IUsbDeviceMonitor
             _logger.LogError(ex, "USB GUARD monitor stopped unexpectedly");
         }
     }
+
+    /// <summary>
+    /// Operating mode from Agent:UsbGuard:OperatingMode. An unrecognised value still
+    /// falls back to Permissive silently: that belongs to the configuration-validation
+    /// work on silent defaults, not to this module.
+    /// </summary>
+    private UsbOperatingMode ResolveOperatingMode() =>
+        Enum.TryParse<UsbOperatingMode>(_config.UsbGuard?.OperatingMode, true, out var mode)
+            ? mode
+            : UsbOperatingMode.Permissive;
 
     private async Task ConsumeEventsAsync(CancellationToken ct)
     {
@@ -190,10 +217,7 @@ public sealed class UsbDeviceMonitor : BackgroundService, IUsbDeviceMonitor
             var contentScanner = scope.ServiceProvider.GetRequiredService<IUsbContentScanner>();
             var actionEngine = scope.ServiceProvider.GetRequiredService<IUsbActionEngine>();
 
-            // Parse operating mode from config
-            var operatingMode = Enum.TryParse<UsbOperatingMode>(_config.UsbGuard?.OperatingMode, true, out var mode)
-                ? mode
-                : UsbOperatingMode.Permissive;
+            var operatingMode = ResolveOperatingMode();
 
             // Build runtime policy from config
             var policy = new UsbPolicy

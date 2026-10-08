@@ -320,7 +320,11 @@ public sealed record UsbGuardOptions
     /// <summary>Whether USB monitoring is enabled.</summary>
     public bool Enabled { get; init; } = true;
 
-    /// <summary>Operating mode: Audit (log only), Permissive (log+quarantine), Strict (block).</summary>
+    /// <summary>
+    /// Operating mode: Audit, Permissive or Strict (decision matrix in docs/modules/usb-guard.md).
+    /// The code default stays Permissive on purpose: it applies to any installation that
+    /// forgets to configure, and Strict (ejection) must be a written choice, never inherited.
+    /// </summary>
     public string OperatingMode { get; init; } = "Permissive";
 
     /// <summary>Maximum file size in MB for content scanning.</summary>
