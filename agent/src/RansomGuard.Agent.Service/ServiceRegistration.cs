@@ -73,17 +73,17 @@ public static class ServiceRegistration
         // FluentValidation
         services.AddSingleton<IValidator<AgentConfiguration>, AgentConfigurationValidator>();
 
+        // One source: the bound AgentConfiguration (validated once by AgentConfigurationLoader
+        // in Program.cs). No raw read with its own ?? fallback: defaults live on the options.
+        AgentConfiguration agentConfig = configuration.GetSection(AgentConfiguration.SectionName).Get<AgentConfiguration>()
+            ?? throw new InvalidOperationException($"The '{AgentConfiguration.SectionName}' configuration section is missing.");
+
         // Database
-        var dbConnectionString = configuration
-            .GetSection("Agent:Database:ConnectionString")
-            .Value ?? "Data Source=agent.db";
-        dbConnectionString = EnvironmentVariableResolver.ResolvePath(dbConnectionString);
+        string dbConnectionString = EnvironmentVariableResolver.ResolvePath(agentConfig.Database.ConnectionString);
 
         SQLitePCL.Batteries_V2.Init();
 
-        string keyDir = EnvironmentVariableResolver.ResolvePath(
-            configuration.GetSection("Agent:Database:KeyDirectory").Value
-            ?? "%ProgramData%\\RansomGuard-CM\\keys");
+        string keyDir = EnvironmentVariableResolver.ResolvePath(agentConfig.Database.KeyDirectory);
 
         var dbKeyManager = new DatabaseKeyManager(keyDir,
             Microsoft.Extensions.Logging.Abstractions.NullLogger<DatabaseKeyManager>.Instance);
@@ -96,12 +96,9 @@ public static class ServiceRegistration
         services.AddDbContext<AgentDbContext>(options =>
             options.UseSqlite(encryptedConnectionString));
 
-        // Deduplicator
-        var deduplicationWindowMs = configuration
-            .GetSection("Agent:Detection:DeduplicationWindowMs")
-            .Get<int>();
-        if (deduplicationWindowMs <= 0) deduplicationWindowMs = 500;
-        services.AddSingleton<IFileEventDeduplicator>(new FileEventDeduplicator(deduplicationWindowMs));
+        // Deduplicator (DetectionOptions default 500 ms, validated range 50-5000)
+        services.AddSingleton<IFileEventDeduplicator>(
+            new FileEventDeduplicator(agentConfig.Detection.DeduplicationWindowMs));
 
         // Ed25519 audit signer
         var auditLogSigner = new AuditLogSigner(keyDir,
@@ -273,6 +270,9 @@ public static class ServiceRegistration
     {
         services.Configure<IronCladOptions>(configuration.GetSection("IronClad"));
 
+        // Documented fallback, kept on purpose: an absent IronClad section means the module is
+        // off (IronCladOptions.Enabled defaults to false), which is the safe state. Its
+        // CommunicationMode, when present, is validated by AgentConfigurationLoader.
         var ironCladOptions = configuration.GetSection("IronClad").Get<IronCladOptions>() ?? new IronCladOptions();
 
         // Communicators

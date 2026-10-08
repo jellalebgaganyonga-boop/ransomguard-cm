@@ -128,7 +128,7 @@ public sealed class SentinelConfigurationTests
         },
         Database = new DatabaseOptions
         {
-            ConnectionString = "Data Source=agent.db",
+            ConnectionString = @"Data Source=C:\ProgramData\RansomGuard-CM\data\agent.db",
             MaxRetentionDays = 90
         },
         Sentinel = new SentinelOptions

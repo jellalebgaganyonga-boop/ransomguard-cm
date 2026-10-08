@@ -26,10 +26,9 @@ public sealed record AgentConfiguration
     public required DetectionOptions Detection { get; init; }
 
     /// <summary>
-    /// Logging configuration.
+    /// Logging configuration. Has legitimate absolute defaults, so the section may be absent.
     /// </summary>
-    [Required]
-    public required LoggingOptions Logging { get; init; }
+    public LoggingOptions Logging { get; init; } = new();
 
     /// <summary>
     /// Server communication settings.
@@ -38,10 +37,9 @@ public sealed record AgentConfiguration
     public required ServerOptions Server { get; init; }
 
     /// <summary>
-    /// Local database settings.
+    /// Local database settings. Has legitimate absolute defaults, so the section may be absent.
     /// </summary>
-    [Required]
-    public required DatabaseOptions Database { get; init; }
+    public DatabaseOptions Database { get; init; } = new();
 
     /// <summary>
     /// SENTINEL canary file detection settings.
@@ -187,17 +185,19 @@ public sealed record DetectionOptions
 /// </summary>
 public sealed record LoggingOptions
 {
+    /// <summary>Default log file: absolute, under %ProgramData%, never relative to the working directory.</summary>
+    public const string DefaultLogFilePath = @"%ProgramData%\RansomGuard-CM\logs\agent-.log";
+
     /// <summary>
     /// Minimum log level (Verbose, Debug, Information, Warning, Error, Fatal).
     /// </summary>
-    [Required]
-    public required string MinimumLevel { get; init; }
+    public string MinimumLevel { get; init; } = "Information";
 
     /// <summary>
-    /// File path for log output. Supports environment variables.
+    /// File path for log output. Supports environment variables. Must be absolute once
+    /// they are resolved (a relative path would land in System32 for a Windows service).
     /// </summary>
-    [Required]
-    public required string LogFilePath { get; init; }
+    public string LogFilePath { get; init; } = DefaultLogFilePath;
 
     /// <summary>
     /// Maximum size of a single log file in megabytes.
@@ -252,11 +252,23 @@ public sealed record ServerOptions
 /// </summary>
 public sealed record DatabaseOptions
 {
+    /// <summary>Default database: absolute, under %ProgramData%, never relative to the working directory.</summary>
+    public const string DefaultConnectionString = @"Data Source=%ProgramData%\RansomGuard-CM\data\agent.db";
+
+    /// <summary>Default key directory (database key and audit signing key).</summary>
+    public const string DefaultKeyDirectory = @"%ProgramData%\RansomGuard-CM\keys";
+
     /// <summary>
-    /// SQLite connection string. Supports environment variables in path.
+    /// SQLite connection string. Supports environment variables in path. The data source must
+    /// be absolute once they are resolved.
     /// </summary>
-    [Required]
-    public required string ConnectionString { get; init; }
+    public string ConnectionString { get; init; } = DefaultConnectionString;
+
+    /// <summary>
+    /// Directory of the database key and the audit signing key. Supports environment
+    /// variables; must be absolute once they are resolved.
+    /// </summary>
+    public string KeyDirectory { get; init; } = DefaultKeyDirectory;
 
     /// <summary>
     /// Maximum number of days to retain detection events and audit logs.

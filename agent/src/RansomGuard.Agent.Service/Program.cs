@@ -68,17 +68,20 @@ try
     var builder = Host.CreateApplicationBuilder(args);
     Log.Information("Host environment: {Environment}", builder.Environment.EnvironmentName);
 
-    // TLS to the GRID: TrustAnyCertificate only in Development, against a local server.
-    bool trustAnyCertificate = builder.Configuration.GetValue<bool>(ServerTlsPolicy.SettingKey);
-    string? tlsRefusal = ServerTlsPolicy.Validate(
-        trustAnyCertificate,
-        builder.Configuration["Agent:Server:BaseUrl"],
-        builder.Environment.EnvironmentName);
-    if (tlsRefusal is not null)
+    // Validate the configuration ONCE, before anything consumes it (logging, services,
+    // database): everything below reads this validated object, never raw IConfiguration.
+    AgentConfigurationLoadResult load = AgentConfigurationLoader.Load(
+        builder.Configuration, builder.Environment.EnvironmentName);
+    if (load.Configuration is null)
     {
-        throw new InvalidOperationException(tlsRefusal);
+        ReportStartupRefusal(load.Errors);
+        Environment.ExitCode = 1;
+        return;
     }
-    if (trustAnyCertificate)
+    AgentConfiguration agentConfig = load.Configuration;
+
+    // TLS to the GRID: the loader refused TrustAnyCertificate outside Development/localhost.
+    if (agentConfig.Server.TrustAnyCertificate)
     {
         Log.Warning(ServerTlsPolicy.ActiveWarning);
     }
@@ -92,14 +95,10 @@ try
     // Configure Serilog from appsettings.json + programmatic config
     builder.Services.AddSerilog((services, loggerConfig) =>
     {
-        var agentConfig = builder.Configuration
-            .GetSection(AgentConfiguration.SectionName)
-            .Get<AgentConfiguration>();
-
-        string logPath = agentConfig?.Logging?.LogFilePath ?? "logs/agent-.log";
-        logPath = EnvironmentVariableResolver.ResolvePath(logPath);
-        int maxFileSizeMb = agentConfig?.Logging?.MaxFileSizeMB ?? 50;
-        int retainedFiles = agentConfig?.Logging?.RetainedFileCount ?? 30;
+        // Validated object only: the path is absolute, sizes and retention are in range.
+        string logPath = EnvironmentVariableResolver.ResolvePath(agentConfig.Logging.LogFilePath);
+        int maxFileSizeMb = agentConfig.Logging.MaxFileSizeMB;
+        int retainedFiles = agentConfig.Logging.RetainedFileCount;
 
         // The one notion of environment is the .NET host environment (DOTNET_ENVIRONMENT).
         // A Windows service started without it runs as Production, which is what we want.
@@ -160,9 +159,6 @@ try
 
     var host = builder.Build();
 
-    // Fail-fast: validate configuration at startup
-    ValidateConfiguration(host.Services);
-
     // Ensure database directory exists and apply migrations
     EnsureDatabase(host.Services);
 
@@ -171,6 +167,11 @@ try
 catch (Exception ex)
 {
     Log.Fatal(ex, "RansomGuard-CM Agent terminated unexpectedly");
+    // Never exit 0 after a crash: a script reading the exit code would take it for success.
+    if (Environment.ExitCode == 0)
+    {
+        Environment.ExitCode = 1;
+    }
 }
 finally
 {
@@ -216,46 +217,124 @@ static void EnsureDatabase(IServiceProvider services)
 }
 
 /// <summary>
-/// Verifies the audit log hash chain and Ed25519 signatures.
-/// Exit 0 if valid, exit 1 if tampered.
+/// Reports a startup refusal where it is always seen: the console, always; the Windows Event
+/// Log, best effort only. Writing to the Event Log needs a registered source (elevation on
+/// first use); if that fails, the failure must never hide the message that explains why the
+/// agent refuses to start.
 /// </summary>
-static async Task VerifyAuditLogAsync()
+static void ReportStartupRefusal(IReadOnlyList<string> errors)
 {
-    Console.WriteLine("=== Audit Log Verification ===");
+    string message = "RansomGuard-CM Agent refuses to start: its configuration is invalid."
+        + Environment.NewLine
+        + string.Join(Environment.NewLine, errors.Select(e => "  - " + e));
 
-    var builder = Host.CreateApplicationBuilder([]);
+    // The bootstrap logger writes to the console: always seen.
+    Log.Fatal(message);
 
-    var dbConnectionString = builder.Configuration
-        .GetSection("Agent:Database:ConnectionString")
-        .Value ?? "Data Source=agent.db";
-    dbConnectionString = EnvironmentVariableResolver.ResolvePath(dbConnectionString);
+    if (OperatingSystem.IsWindows())
+    {
+        try
+        {
+            System.Diagnostics.EventLog.WriteEntry(
+                "RansomGuard-CM", message, System.Diagnostics.EventLogEntryType.Error);
+        }
+        catch (Exception ex)
+        {
+            // Best effort: the console already carries the message; say why the Event Log did not.
+            Console.Error.WriteLine($"(Windows Event Log not written: {ex.Message})");
+        }
+    }
+}
+
+/// <summary>
+/// CLI: loads the configuration exactly as the service does (validated once), rooted at the
+/// executable's directory -- never the caller's working directory. Exit code 2 when refused.
+/// </summary>
+static AgentConfiguration? LoadCliConfiguration()
+{
+    var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
+    {
+        Args = [],
+        ContentRootPath = AppContext.BaseDirectory,
+    });
+
+    AgentConfigurationLoadResult load = AgentConfigurationLoader.Load(
+        builder.Configuration, builder.Environment.EnvironmentName);
+    if (load.Configuration is null)
+    {
+        ReportStartupRefusal(load.Errors);
+        Environment.ExitCode = CliExitCode.Refused;
+        return null;
+    }
+    return load.Configuration;
+}
+
+/// <summary>
+/// CLI: opens the INSTALLED encrypted database. Refuses (exit code 2, nothing done) when it
+/// does not exist, instead of creating an empty one: a verifier must never create what it
+/// verifies.
+/// </summary>
+static InstalledDatabase? OpenInstalledDatabase(AgentConfiguration config)
+{
+    string connectionString = EnvironmentVariableResolver.ResolvePath(config.Database.ConnectionString);
+    string dbPath = Path.GetFullPath(ConfigurationValueRules.DataSource(connectionString) ?? string.Empty);
+    if (!File.Exists(dbPath))
+    {
+        Console.Error.WriteLine($"REFUSED: the agent database does not exist: {dbPath}");
+        Console.Error.WriteLine("Nothing was done. Is the agent installed and has it started once?");
+        Environment.ExitCode = CliExitCode.Refused;
+        return null;
+    }
 
     SQLitePCL.Batteries_V2.Init();
-
-    string keyDir = EnvironmentVariableResolver.ResolvePath(
-        builder.Configuration.GetSection("Agent:Database:KeyDirectory").Value
-        ?? "%ProgramData%\\RansomGuard-CM\\keys");
+    string keyDir = EnvironmentVariableResolver.ResolvePath(config.Database.KeyDirectory);
     var dbKeyManager = new DatabaseKeyManager(keyDir,
         Microsoft.Extensions.Logging.Abstractions.NullLogger<DatabaseKeyManager>.Instance);
     string dbKey = dbKeyManager.GetOrCreateKey();
 
-    string encryptedConnectionString = dbConnectionString.Contains("Password=")
-        ? dbConnectionString
-        : $"{dbConnectionString};Password={dbKey}";
+    string encryptedConnectionString = connectionString.Contains("Password=")
+        ? connectionString
+        : $"{connectionString};Password={dbKey}";
 
     var options = new DbContextOptionsBuilder<AgentDbContext>()
         .UseSqlite(encryptedConnectionString)
         .Options;
 
-    using var context = new AgentDbContext(options);
-    context.Database.Migrate();
+    return new InstalledDatabase(new AgentDbContext(options), dbPath, keyDir);
+}
 
-    var signer = new AuditLogSigner(keyDir,
+/// <summary>
+/// Verifies the audit log hash chain and Ed25519 signatures of the installed database.
+/// Exit 0 if valid, 1 if the integrity check fails, 2 if refused (nothing was done).
+/// </summary>
+static async Task VerifyAuditLogAsync()
+{
+    Console.WriteLine("=== Audit Log Verification ===");
+
+    AgentConfiguration? config = LoadCliConfiguration();
+    if (config is null) return;
+    InstalledDatabase? db = OpenInstalledDatabase(config);
+    if (db is null) return;
+
+    // No Migrate(): a verifier must not alter what it verifies. A schema older than this
+    // verifier is refused instead of read wrongly (the installed agent upgrades it at start).
+    using AgentDbContext context = db.Context;
+    List<string> pending = context.Database.GetPendingMigrations().ToList();
+    if (pending.Count > 0)
+    {
+        Console.Error.WriteLine($"REFUSED: the database schema of {db.Path} is older than this verifier.");
+        Console.Error.WriteLine($"Pending migrations: {string.Join(", ", pending)}");
+        Console.Error.WriteLine("Nothing was done. Start the agent once so it upgrades its database, then verify.");
+        Environment.ExitCode = CliExitCode.Refused;
+        return;
+    }
+    var signer = new AuditLogSigner(db.KeyDirectory,
         Microsoft.Extensions.Logging.Abstractions.NullLogger<AuditLogSigner>.Instance);
     var repo = new AuditLogRepository(context, signer);
 
     int entryCount = await context.AuditLogs.CountAsync();
-    Console.WriteLine($"Audit log entries: {entryCount}");
+    Console.WriteLine($"Database examined: {db.Path}");
+    Console.WriteLine($"Audit log entries read: {entryCount}");
 
     if (entryCount == 0)
     {
@@ -276,7 +355,7 @@ static async Task VerifyAuditLogAsync()
     else
     {
         Console.WriteLine("RESULT: FAIL — audit log integrity compromised");
-        Environment.ExitCode = 1;
+        Environment.ExitCode = CliExitCode.IntegrityFailure;
     }
 }
 
@@ -287,32 +366,14 @@ static async Task BaselineResetAsync()
 {
     Console.WriteLine("=== Network Baseline Reset ===");
 
-    var builder = Host.CreateApplicationBuilder([]);
+    AgentConfiguration? config = LoadCliConfiguration();
+    if (config is null) return;
+    InstalledDatabase? db = OpenInstalledDatabase(config);
+    if (db is null) return;
 
-    var dbConnectionString = builder.Configuration
-        .GetSection("Agent:Database:ConnectionString")
-        .Value ?? "Data Source=agent.db";
-    dbConnectionString = EnvironmentVariableResolver.ResolvePath(dbConnectionString);
-
-    SQLitePCL.Batteries_V2.Init();
-
-    string keyDir = EnvironmentVariableResolver.ResolvePath(
-        builder.Configuration.GetSection("Agent:Database:KeyDirectory").Value
-        ?? "%ProgramData%\\RansomGuard-CM\\keys");
-    var dbKeyManager = new DatabaseKeyManager(keyDir,
-        Microsoft.Extensions.Logging.Abstractions.NullLogger<DatabaseKeyManager>.Instance);
-    string dbKey = dbKeyManager.GetOrCreateKey();
-
-    string encryptedConnectionString = dbConnectionString.Contains("Password=")
-        ? dbConnectionString
-        : $"{dbConnectionString};Password={dbKey}";
-
-    var options = new DbContextOptionsBuilder<AgentDbContext>()
-        .UseSqlite(encryptedConnectionString)
-        .Options;
-
-    using var context = new AgentDbContext(options);
+    using AgentDbContext context = db.Context;
     context.Database.Migrate();
+    Console.WriteLine($"Database: {db.Path}");
 
     var service = new RansomGuard.Agent.Core.Detection.ExfilWatch.NetworkBaselineService(
         context,
@@ -329,32 +390,14 @@ static async Task BaselineExportAsync()
 {
     Console.WriteLine("=== Network Baseline Export ===");
 
-    var builder = Host.CreateApplicationBuilder([]);
+    AgentConfiguration? config = LoadCliConfiguration();
+    if (config is null) return;
+    InstalledDatabase? db = OpenInstalledDatabase(config);
+    if (db is null) return;
 
-    var dbConnectionString = builder.Configuration
-        .GetSection("Agent:Database:ConnectionString")
-        .Value ?? "Data Source=agent.db";
-    dbConnectionString = EnvironmentVariableResolver.ResolvePath(dbConnectionString);
-
-    SQLitePCL.Batteries_V2.Init();
-
-    string keyDir = EnvironmentVariableResolver.ResolvePath(
-        builder.Configuration.GetSection("Agent:Database:KeyDirectory").Value
-        ?? "%ProgramData%\\RansomGuard-CM\\keys");
-    var dbKeyManager = new DatabaseKeyManager(keyDir,
-        Microsoft.Extensions.Logging.Abstractions.NullLogger<DatabaseKeyManager>.Instance);
-    string dbKey = dbKeyManager.GetOrCreateKey();
-
-    string encryptedConnectionString = dbConnectionString.Contains("Password=")
-        ? dbConnectionString
-        : $"{dbConnectionString};Password={dbKey}";
-
-    var options = new DbContextOptionsBuilder<AgentDbContext>()
-        .UseSqlite(encryptedConnectionString)
-        .Options;
-
-    using var context = new AgentDbContext(options);
+    using AgentDbContext context = db.Context;
     context.Database.Migrate();
+    Console.WriteLine($"Database: {db.Path}");
 
     var baselines = await context.NetworkBaselines.ToListAsync();
     var metrics = await context.NetworkBaselineMetrics.ToListAsync();
@@ -413,21 +456,20 @@ static void CheckThreatIntelUpdates()
 
 /// <summary>
 /// CLI: --apply-threat-intel-update — applies a signed threat intel update.
+/// The installed database is opened BEFORE the update is applied: a missing database used to
+/// leave the update applied with no audit entry -- an untraced change to detection behaviour.
 /// </summary>
 static async Task ApplyThreatIntelUpdateAsync()
 {
     Console.WriteLine("=== Apply Threat Intel Update ===");
 
-    var builder = Host.CreateApplicationBuilder([]);
+    AgentConfiguration? config = LoadCliConfiguration();
+    if (config is null) return;
 
     string updateDir = EnvironmentVariableResolver.ResolvePath(
         "%ProgramData%\\RansomGuard-CM\\updates");
     string dataDir = EnvironmentVariableResolver.ResolvePath(
         "%ProgramData%\\RansomGuard-CM\\threat-intel");
-
-    string keyDir = EnvironmentVariableResolver.ResolvePath(
-        builder.Configuration.GetSection("Agent:Database:KeyDirectory").Value
-        ?? "%ProgramData%\\RansomGuard-CM\\keys");
 
     var validator = new RansomGuard.Agent.Core.Detection.ThreatIntel.ThreatIntelUpdateValidator(
         Microsoft.Extensions.Logging.Abstractions.NullLogger<RansomGuard.Agent.Core.Detection.ThreatIntel.ThreatIntelUpdateValidator>.Instance,
@@ -440,10 +482,15 @@ static async Task ApplyThreatIntelUpdateAsync()
         return;
     }
 
+    // Open the audit trail first; refuse (nothing applied) if the database is missing.
+    InstalledDatabase? db = OpenInstalledDatabase(config);
+    if (db is null) return;
+    using AgentDbContext context = db.Context;
+    context.Database.Migrate();
+
     Console.WriteLine($"Package: {packagePath}");
     Console.WriteLine("Applying update...");
 
-    // Load provider and apply
     var provider = new RansomGuard.Agent.Core.Detection.ThreatIntel.ThreatIntelDataLoader(
         Microsoft.Extensions.Logging.Abstractions.NullLogger<RansomGuard.Agent.Core.Detection.ThreatIntel.ThreatIntelDataLoader>.Instance);
 
@@ -455,26 +502,7 @@ static async Task ApplyThreatIntelUpdateAsync()
         Console.WriteLine($"C2 servers: {provider.C2ServerCount}");
         Console.WriteLine($"LOLBAS binaries: {provider.LolbasBinaryCount}");
 
-        // Log to audit trail
-        var dbConnectionString = builder.Configuration
-            .GetSection("Agent:Database:ConnectionString")
-            .Value ?? "Data Source=agent.db";
-        dbConnectionString = EnvironmentVariableResolver.ResolvePath(dbConnectionString);
-
-        SQLitePCL.Batteries_V2.Init();
-        var dbKeyManager = new DatabaseKeyManager(keyDir,
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<DatabaseKeyManager>.Instance);
-        string dbKey = dbKeyManager.GetOrCreateKey();
-        string encryptedConnectionString = dbConnectionString.Contains("Password=")
-            ? dbConnectionString : $"{dbConnectionString};Password={dbKey}";
-
-        var options = new DbContextOptionsBuilder<AgentDbContext>()
-            .UseSqlite(encryptedConnectionString).Options;
-
-        using var context = new AgentDbContext(options);
-        context.Database.Migrate();
-
-        var signer = new AuditLogSigner(keyDir,
+        var signer = new AuditLogSigner(db.KeyDirectory,
             Microsoft.Extensions.Logging.Abstractions.NullLogger<AuditLogSigner>.Instance);
         var repo = new AuditLogRepository(context, signer);
 
@@ -482,31 +510,24 @@ static async Task ApplyThreatIntelUpdateAsync()
             $"Applied threat intel update v{provider.Version} from {packagePath}",
             "ThreatIntel", Guid.NewGuid(), CancellationToken.None);
 
-        Console.WriteLine("Audit log entry created with Ed25519 signature.");
+        Console.WriteLine($"Audit log entry created with Ed25519 signature in {db.Path}.");
     }
     else
     {
         Console.WriteLine("Update FAILED. Previous data restored from backup.");
-        Environment.ExitCode = 1;
+        Environment.ExitCode = CliExitCode.IntegrityFailure;
     }
 }
 
-/// <summary>
-/// Validates the agent configuration at startup. Throws if invalid (fail-fast principle).
-/// </summary>
-static void ValidateConfiguration(IServiceProvider services)
+/// <summary>The installed agent database, opened by a CLI sub-command.</summary>
+sealed record InstalledDatabase(AgentDbContext Context, string Path, string KeyDirectory);
+
+/// <summary>CLI exit codes.</summary>
+static class CliExitCode
 {
-    var configuration = services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<AgentConfiguration>>();
-    var validator = services.GetRequiredService<IValidator<AgentConfiguration>>();
+    /// <summary>The operation failed (integrity check failed, update failed).</summary>
+    public const int IntegrityFailure = 1;
 
-    AgentConfiguration config = configuration.CurrentValue;
-    FluentValidation.Results.ValidationResult result = validator.Validate(config);
-
-    if (!result.IsValid)
-    {
-        var errors = string.Join(Environment.NewLine, result.Errors.Select(e => $"  - {e.PropertyName}: {e.ErrorMessage}"));
-        throw new InvalidOperationException(
-            $"Agent configuration is invalid. The service cannot start.{Environment.NewLine}{errors}");
-    }
+    /// <summary>Refused: nothing was done (invalid configuration, database missing).</summary>
+    public const int Refused = 2;
 }
-

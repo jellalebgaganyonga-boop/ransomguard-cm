@@ -237,7 +237,9 @@ public sealed class AgentConfigurationValidatorTests
         },
         Database = new DatabaseOptions
         {
-            ConnectionString = "Data Source=agent.db",
+            // Absolute: a relative Data Source is refused (it was never valid; the validator
+            // simply did not run on it before).
+            ConnectionString = @"Data Source=C:\ProgramData\RansomGuard-CM\data\agent.db",
             MaxRetentionDays = 90
         }
     };

@@ -1,4 +1,5 @@
 using FluentValidation;
+using RansomGuard.Agent.Core.Persistence.Entities;
 
 namespace RansomGuard.Agent.Core.Configuration;
 
@@ -22,6 +23,15 @@ public sealed class AgentConfigurationValidator : AbstractValidator<AgentConfigu
         When(x => x.Sentinel is not null, () =>
         {
             RuleFor(x => x.Sentinel!).SetValidator(new SentinelOptionsValidator());
+        });
+
+        When(x => x.UsbGuard is not null, () =>
+        {
+            RuleFor(x => x.UsbGuard!.OperatingMode)
+                .Must(ConfigurationValueRules.IsDefinedEnumName<UsbOperatingMode>)
+                .WithMessage(mode =>
+                    $"'{mode.UsbGuard!.OperatingMode}' is not a valid mode. Allowed values: " +
+                    $"{ConfigurationValueRules.AllowedEnumNames<UsbOperatingMode>()}.");
         });
     }
 }
@@ -96,6 +106,10 @@ public sealed class DetectionOptionsValidator : AbstractValidator<DetectionOptio
 /// </summary>
 public sealed class LoggingOptionsValidator : AbstractValidator<LoggingOptions>
 {
+    internal const string AbsolutePathMessage =
+        "must be an absolute path once environment variables are resolved: a relative path " +
+        "would land in the working directory, which is System32 for a Windows service.";
+
     private static readonly string[] ValidLevels = ["Verbose", "Debug", "Information", "Warning", "Error", "Fatal"];
 
     /// <summary>
@@ -108,7 +122,9 @@ public sealed class LoggingOptionsValidator : AbstractValidator<LoggingOptions>
             .Must(level => ValidLevels.Contains(level))
             .WithMessage($"MinimumLevel must be one of: {string.Join(", ", ValidLevels)}.");
 
-        RuleFor(x => x.LogFilePath).NotEmpty();
+        RuleFor(x => x.LogFilePath)
+            .Must(ConfigurationValueRules.IsAbsoluteAfterExpansion)
+            .WithMessage(AbsolutePathMessage);
         RuleFor(x => x.MaxFileSizeMB).InclusiveBetween(1, 500);
         RuleFor(x => x.RetainedFileCount).InclusiveBetween(1, 365);
     }
@@ -150,7 +166,12 @@ public sealed class DatabaseOptionsValidator : AbstractValidator<DatabaseOptions
     /// </summary>
     public DatabaseOptionsValidator()
     {
-        RuleFor(x => x.ConnectionString).NotEmpty();
+        RuleFor(x => x.ConnectionString)
+            .Must(cs => ConfigurationValueRules.IsAbsoluteAfterExpansion(ConfigurationValueRules.DataSource(cs)))
+            .WithMessage("its Data Source " + LoggingOptionsValidator.AbsolutePathMessage);
+        RuleFor(x => x.KeyDirectory)
+            .Must(ConfigurationValueRules.IsAbsoluteAfterExpansion)
+            .WithMessage(LoggingOptionsValidator.AbsolutePathMessage);
         RuleFor(x => x.MaxRetentionDays).InclusiveBetween(1, 3650);
     }
 }

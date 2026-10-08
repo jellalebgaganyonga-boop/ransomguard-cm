@@ -129,7 +129,9 @@ $settings = Get-Content $settingsPath -Raw | ConvertFrom-Json
 
 # Set OTP for enrollment
 $settings.Agent.Server.EnrollmentOtp = $OTP
-$settings.Agent.Server.BaseUrl = "https://${GridServer}"
+# The shipped appsettings.json carries no server address (an agent without one refuses to
+# start): the property is added here, not merely overwritten.
+$settings.Agent.Server | Add-Member -NotePropertyName BaseUrl -NotePropertyValue "https://${GridServer}" -Force
 
 # Set hostname automatically
 $settings.Agent.Identity.Hostname = $env:COMPUTERNAME
