@@ -39,4 +39,33 @@
     <EmbeddedResource Include="Detection\ThreatIntel\Data\*.json" />
   </ItemGroup>
 
+  <!--
+    SixLabors.ImageSharp 2.1.x: five advisories, fixed only in 4.1.2 (no 2.x backport).
+    None is reachable from this agent:
+      - JpgCanaryGenerator only builds an image in memory and encodes it as JPEG.
+      - No production code decodes an image (no Image.Load / Identify, no TIFF).
+      - No code calls HistogramEqualization.
+      - No code reads image metadata or an ICC profile (no IccProfile access).
+      - PdfCanaryGenerator (PdfSharpCore, which also depends on ImageSharp) only
+        draws text: no XImage, no image is read from disk.
+    Each advisory is suppressed by its exact URL; the audit and TreatWarningsAsErrors
+    stay on for everything else. Never suppress globally or by severity: a new
+    advisory gets the same analysis (GHSA id, affected component, file:line proof
+    that it is unreachable) before it is added here. Remove this block as soon as
+    a compatible fixed version exists or the dependency is gone (debt AGT-DEP-001
+    in agent/README.md).
+  -->
+  <ItemGroup>
+    <!-- HistogramEqualization: unvalidated luminance used as histogram index (high) -->
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-j3p4-wp97-rph4" />
+    <!-- TIFF CCITT T4 encoder: write past compressed output buffer (high) -->
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-j9gm-c75j-xc9q" />
+    <!-- TIFF CCITT T6 encoder: write beyond undersized output buffer (high) -->
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-jjfr-hcj7-qf5w" />
+    <!-- BigTIFF decoder: IFD count can cause a non-progressing loop (moderate) -->
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-wmxv-xphr-5c9g" />
+    <!-- ICC CLUT parsing: allocation from unvalidated dimensions (moderate) -->
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-gwg2-r3hj-4w44" />
+  </ItemGroup>
+
 </Project>
