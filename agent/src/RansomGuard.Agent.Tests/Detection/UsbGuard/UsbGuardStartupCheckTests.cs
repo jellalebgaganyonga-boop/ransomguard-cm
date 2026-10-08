@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Moq;
 using RansomGuard.Agent.Core.Detection.UsbGuard;
+using RansomGuard.Agent.Core.Diagnostics;
 using RansomGuard.Agent.Core.Persistence.Entities;
 using Shouldly;
 
@@ -64,6 +65,27 @@ public sealed class UsbGuardStartupCheckTests
         warned.ShouldBeFalse();
         VerifyWarnings(Times.Never());
         _whitelist.Verify(w => w.ListActiveAsync(It.IsAny<CancellationToken>()), Times.Never());
+    }
+
+    [Fact]
+    public void Strict_runs_degraded_because_blocking_is_not_implemented()
+    {
+        var (state, reason) = UsbGuardStartupCheck.RunningPosture(UsbOperatingMode.Strict);
+
+        state.ShouldBe(ModuleState.Degraded);
+        reason.ShouldBe(ModuleReasonCode.ActionsNotImplemented);
+        reason.ShouldBe("actions_not_implemented");
+    }
+
+    [Theory]
+    [InlineData(UsbOperatingMode.Permissive)]
+    [InlineData(UsbOperatingMode.Audit)]
+    public void Modes_not_asked_to_block_run_active(UsbOperatingMode mode)
+    {
+        var (state, reason) = UsbGuardStartupCheck.RunningPosture(mode);
+
+        state.ShouldBe(ModuleState.Active);
+        reason.ShouldBeNull();
     }
 
     private void VerifyWarnings(Times times) =>

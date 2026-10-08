@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using RansomGuard.Agent.Core.Diagnostics;
 using RansomGuard.Agent.Core.Persistence.Entities;
 
 namespace RansomGuard.Agent.Core.Detection.UsbGuard;
@@ -23,6 +24,17 @@ public static class UsbGuardStartupCheck
         "USB GUARD could not read the whitelist at startup. While it stays unreadable, every USB " +
         "device connection fails before the scan: the device is LET THROUGH, neither scanned nor " +
         "blocked, in every mode including Strict (see docs/modules/usb-guard.md)";
+
+    /// <summary>
+    /// Posture USB GUARD reports once running. Strict is asked to block, and the blocking
+    /// actions are not implemented (only the IronClad cut is real): it detects without being
+    /// able to block, so it is Degraded/actions_not_implemented. Permissive and Audit are not
+    /// asked to block: Active.
+    /// </summary>
+    public static (ModuleState State, string? ReasonCode) RunningPosture(UsbOperatingMode mode) =>
+        mode == UsbOperatingMode.Strict
+            ? (ModuleState.Degraded, ModuleReasonCode.ActionsNotImplemented)
+            : (ModuleState.Active, null);
 
     /// <summary>
     /// In Strict mode, reads the whitelist and logs a warning when it holds no active entry or

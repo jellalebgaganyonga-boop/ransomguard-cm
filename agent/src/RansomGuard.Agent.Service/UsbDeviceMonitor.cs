@@ -117,7 +117,8 @@ public sealed class UsbDeviceMonitor : BackgroundService, IUsbDeviceMonitor
         Task consumerTask = ConsumeEventsAsync(stoppingToken);
 
         _logger.LogInformation("USB GUARD monitor active (mode: {Mode})", startupMode);
-        _moduleState.Publish(ModuleCode.UsbGuard, ModuleState.Active);
+        var (postureState, postureReason) = UsbGuardStartupCheck.RunningPosture(startupMode);
+        _moduleState.Publish(ModuleCode.UsbGuard, postureState, postureReason);
         reachedActive = true;
 
         // Heartbeat
@@ -377,7 +378,10 @@ public sealed class UsbDeviceMonitor : BackgroundService, IUsbDeviceMonitor
             Title = $"USB GUARD: {severity} — {device.ProductDescription}",
             Description = description,
             Severity = severity.ToString(),
-            ActionTaken = actionResult.ActionType.ToString()
+            // Never claim an action that did not happen (forwarded to the GRID as action_taken).
+            ActionTaken = actionResult.Success
+                ? actionResult.ActionType.ToString()
+                : $"{actionResult.ActionType} ({actionResult.ReasonCode ?? "failed"})"
         };
 
         dbContext.UsbAlerts.Add(alert);

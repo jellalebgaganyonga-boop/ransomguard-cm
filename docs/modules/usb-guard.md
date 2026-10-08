@@ -1,7 +1,14 @@
 # USB GUARD Module — Removable Media Control
 
 **Module:** USB GUARD
-**Status:** Operational (Permissive by default; Strict is opt-in, see below)
+**Status:** Detection operational. Blocking not implemented (see below).
+
+> **Ne pas activer Strict en production tant que la gestion de la whitelist
+> depuis la console n'existe pas et que le blocage n'est pas implémenté.**
+>
+> *Do not enable Strict in production until whitelist management from the
+> console exists and blocking is implemented.* (debts AGT-USB-001,
+> AGT-USB-003)
 
 ## What USB GUARD Does
 
@@ -35,14 +42,26 @@ takes; what each action actually does today is below.
 |---|---|---|
 | Alert | every mode | Alert persisted, logged and forwarded. **Real.** |
 | IRONCLAD physical port cut | Strict + Critical, IRONCLAD available, drive mapped to a port | Command sent to IRONCLAD. **Real**, but IRONCLAD defaults to the mock server (see below). |
-| `ReadOnlyUsb` (key set read-only) | Permissive + Critical | **Not implemented**: the intent is logged, nothing is changed on the device. |
-| `QuarantineFile` | Permissive + High | **Not implemented** in the action engine: the intent is logged, no file is moved. |
-| `EjectUsb` | Strict + High/Medium | **Not implemented**: the intent is logged (`CM_Request_Device_Eject` not called), the device stays mounted. |
-| `BlockAndEject` (software) | Strict + Critical without IRONCLAD cut | **Not implemented**: logs "added to blacklist" then the eject intent; there is no blacklist and no ejection. |
+| `ReadOnlyUsb` (key set read-only) | Permissive + Critical | **Not implemented**: nothing is changed on the device. |
+| `QuarantineFile` | Permissive + High | **Not implemented** in the action engine: no file is moved. |
+| `EjectUsb` | Strict + High/Medium | **Not implemented**: `CM_Request_Device_Eject` is not called, the device stays mounted. |
+| `BlockAndEject` (software) | Strict + Critical without IRONCLAD cut | **Not implemented**: no blacklist, no ejection. |
 
-All four stubs report `Success = true` in the action result. Until they are
-implemented (debt AGT-USB-001 in `agent/README.md`), **the only action that
-changes anything on the workstation is the IRONCLAD cut.**
+These four actions report what really happened: `Success = false` with the
+reason code `not_implemented`. The alert carries it in `action_taken` (for
+example `EjectUsb (not_implemented)`), and the **signed audit log** records
+every USB action outcome as it is (`UsbAction` entry,
+`outcome=executed | not_implemented`). Neither ever claims an action that did
+not happen. Until they are implemented (debt AGT-USB-001 in
+`agent/README.md`), **the only action that changes anything on the workstation
+is the IRONCLAD cut.**
+
+### Module posture
+
+| Mode | Posture reported in the heartbeat | Why |
+|---|---|---|
+| Audit, Permissive | `active` | Not asked to block. |
+| Strict | `degraded`, reason `actions_not_implemented` (FR « Blocage non implémenté », EN « Blocking not implemented ») | Asked to block, detects without being able to. |
 
 ### What Strict does exactly
 
@@ -90,8 +109,9 @@ practical workaround either: the database is encrypted (SQLCipher) and the
 stored value is a salted hash computed by the agent.
 
 Consequence: the whitelist is always empty today, and the startup warning
-below fires on every Strict start. An enrolment path (agent CLI and GRID
-command, audited) is debt AGT-USB-001.
+below fires on every Strict start. An approval screen in the console, where
+the hospital admin approves a device, with audit, is debt AGT-USB-003 — a
+prerequisite of Strict in production.
 
 ### What happens when the whitelist cannot be read
 
@@ -101,14 +121,16 @@ unreadable), connection handling stops on the error: **the device is let
 through, neither scanned nor blocked, in every mode including Strict** — a
 bootable key included. The error is logged as `USB GUARD: Connection handling
 failed`. In Strict, the startup check also reads the whitelist and writes this
-consequence to the log if it cannot.
+consequence to the log if it cannot. Fixing this (a read failure never
+short-circuits the scan; in Strict the device is treated as not approved;
+an alert is raised) is debt AGT-USB-002.
 
 ## Is a Strict Block Reversible Without Restarting?
 
 | Situation | Without restarting the agent? |
 |---|---|
 | Key ejected (`EjectUsb`) | Nothing is ejected today (not implemented). Once implemented: replugging the key re-scans it and ejects it again; with no whitelist enrolment path, there is no way to let it through. |
-| Port cut by IRONCLAD | **No, and a restart does not restore it either.** `RestoreUsbPortAsync` exists but no command calls it. At agent start, `IronCladStateReconciliationService` restores cut ports only when `FailSafeRestoreOnDisconnect` is on (default `true`) **and** the stored state disagrees with the device — the crash case. A port cut normally, and recorded as cut, stays cut across restarts. |
+| Port cut by IRONCLAD | **No, and a restart does not restore it either** (debt AGT-IRC-001). `RestoreUsbPortAsync` exists but no command calls it. At agent start, `IronCladStateReconciliationService` restores cut ports only when `FailSafeRestoreOnDisconnect` is on (default `true`) **and** the stored state disagrees with the device — the crash case. A port cut normally, and recorded as cut, stays cut across restarts. |
 | Leaving Strict (back to Permissive) | **No.** The configuration is read once, when the USB monitor is built: change `Agent:UsbGuard:OperatingMode` and restart the agent service. |
 
 The development configuration runs Strict. On a development machine, the

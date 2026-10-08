@@ -71,6 +71,12 @@ public static class ModuleReasonCode
 
     /// <summary>Running but its output is not dependable.</summary>
     public const string AttributionUnreliable = "attribution_unreliable";
+
+    /// <summary>
+    /// Detects but cannot carry out the blocking actions its mode requires (USB GUARD in
+    /// Strict). Console labels: FR « Blocage non implémenté », EN « Blocking not implemented ».
+    /// </summary>
+    public const string ActionsNotImplemented = "actions_not_implemented";
 }
 
 /// <summary>One module's current state.</summary>
