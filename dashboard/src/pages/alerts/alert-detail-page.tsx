@@ -119,10 +119,14 @@ export function AlertDetailPage() {
             <Link
               to={`/agents/${alert.agent_id}`}
               className="font-mono font-semibold text-primary hover:underline"
+              title={alert.agent_id}
             >
-              {alert.agent_id}
+              {alert.agent_hostname ?? alert.agent_id}
             </Link>
           </p>
+          {alert.agent_hostname && (
+            <p className="mt-0.5 font-mono text-[10px] text-text-secondary">{alert.agent_id}</p>
+          )}
         </div>
         <div>
           <span className="text-[10px] font-semibold uppercase text-text-secondary">

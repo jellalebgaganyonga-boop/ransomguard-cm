@@ -28,6 +28,9 @@ class AlertItem(BaseModel):
     detected_at: datetime
     ingested_at: datetime
     summary: str
+    # Joined from agents on agent_id AND tenant_id; None when the agent is not in the
+    # caller's tenant (or no longer exists) -- never another hospital's machine name.
+    agent_hostname: str | None = None
 
 
 class PaginatedAlertResponse(PaginatedResponse):

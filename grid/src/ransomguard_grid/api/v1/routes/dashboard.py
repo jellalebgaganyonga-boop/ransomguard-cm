@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select
+from sqlalchemy import ColumnElement, and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -112,6 +112,27 @@ async def get_me(
 # --- ALERTS ---
 
 
+def _agent_join_condition() -> ColumnElement[bool]:
+    """Join alerts to agents on agent_id AND tenant_id, never agent_id alone.
+
+    On a SaaS server every hospital shares the tables: if an alert ever pointed at an agent
+    of another tenant, a join on the id alone would show another hospital's machine name.
+    The tenant filter protects the main query; this condition protects the join.
+    """
+    return and_(Agent.id == Alert.agent_id, Agent.tenant_id == Alert.tenant_id)
+
+
+def _alert_item(alert: Alert, agent_hostname: str | None) -> AlertItem:
+    return AlertItem.model_validate(alert).model_copy(update={"agent_hostname": agent_hostname})
+
+
+async def _hostname_for(db: AsyncSession, alert: Alert) -> str | None:
+    result = await db.execute(
+        select(Agent.hostname).where(Agent.id == alert.agent_id, Agent.tenant_id == alert.tenant_id)
+    )
+    return result.scalar_one_or_none()
+
+
 @router.get("/alerts", response_model=PaginatedAlertResponse)
 async def list_alerts(
     severity: Severity | None = None,
@@ -126,7 +147,11 @@ async def list_alerts(
     db: AsyncSession = Depends(get_db),
 ) -> PaginatedAlertResponse:
     """List alerts with filters. Tenant from JWT."""
-    stmt = select(Alert).where(Alert.tenant_id == user.tenant_id)
+    stmt = (
+        select(Alert, Agent.hostname)
+        .outerjoin(Agent, _agent_join_condition())
+        .where(Alert.tenant_id == user.tenant_id)
+    )
     count_stmt = select(func.count()).select_from(Alert).where(Alert.tenant_id == user.tenant_id)
 
     if severity:
@@ -150,7 +175,7 @@ async def list_alerts(
 
     total = (await db.execute(count_stmt)).scalar_one()
     items_result = await db.execute(stmt.order_by(Alert.detected_at.desc()).offset(offset).limit(limit))
-    items = [AlertItem.model_validate(a) for a in items_result.scalars().all()]
+    items = [_alert_item(alert, hostname) for alert, hostname in items_result.all()]
 
     return PaginatedAlertResponse(items=items, total=total, offset=offset, limit=limit)
 
@@ -166,7 +191,7 @@ async def get_alert(
     alert = await repo.get_by_id(alert_id)
     if not alert:
         raise HTTPException(404, "Alert not found")
-    return AlertItem.model_validate(alert)
+    return _alert_item(alert, await _hostname_for(db, alert))
 
 
 @router.post("/alerts/{alert_id}/status", response_model=AlertItem)
@@ -197,7 +222,7 @@ async def update_alert_status(
         details={"old_status": str(old_status.value), "new_status": str(body.new_status.value)},
     )
     await db.flush()
-    return AlertItem.model_validate(alert)
+    return _alert_item(alert, await _hostname_for(db, alert))
 
 
 # --- AGENTS ---

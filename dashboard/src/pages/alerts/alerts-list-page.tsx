@@ -55,9 +55,9 @@ export function AlertsListPage() {
 
   const exportCsv = () => {
     if (!items.length) return;
-    const headers = ['ID', 'Detected', 'Severity', 'Status', 'Agent', 'Type', 'Summary'];
+    const headers = ['ID', 'Detected', 'Severity', 'Status', 'Host', 'Agent ID', 'Type', 'Summary'];
     const rows = items.map((a) => [
-      a.id, a.detected_at, a.severity, a.status, a.agent_id, a.alert_type, a.summary,
+      a.id, a.detected_at, a.severity, a.status, a.agent_hostname ?? '', a.agent_id, a.alert_type, a.summary,
     ]);
     const csv = [headers, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -227,8 +227,9 @@ export function AlertsListPage() {
                     <td className="px-3 py-2.5 text-text-secondary">
                       {t(`status.${alert.status.toLowerCase()}`, alert.status)}
                     </td>
-                    <td className="px-3 py-2.5 font-mono text-xs text-text-primary">
-                      {alert.agent_id.slice(0, 12)}
+                    {/* HOST: the machine name a hospital IT team knows; the agent UUID on hover. */}
+                    <td className="px-3 py-2.5 font-mono text-xs text-text-primary" title={alert.agent_id}>
+                      {alert.agent_hostname ?? alert.agent_id.slice(0, 12)}
                     </td>
                     <td className="px-3 py-2.5 text-xs uppercase text-text-secondary">
                       {alert.alert_type}

@@ -25,6 +25,13 @@ docker exec grid-nginx wget -qO- http://grid-api:8000/api/v1/health
 # Expected: {"status":"ok","version":"0.8.0"}
 ```
 
+**Docker Desktop on Windows: port 443 may already be taken.** Docker Desktop's
+`wslrelay` process can hold `localhost:443`, and nginx then fails to publish it.
+Development workaround, no product code involved: set `NGINX_HTTPS_PORT=9443` in
+`deployment/grid/.env`, and point a local agent at it with
+`Agent:Server:BaseUrl = https://localhost:9443` (still a local server, so the
+development-only `TrustAnyCertificate` remains allowed).
+
 For local Python development without Docker:
 
 ```powershell

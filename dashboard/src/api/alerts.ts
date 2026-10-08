@@ -7,7 +7,8 @@
  *   - AlertSeverity: PascalCase, no "Info" variant
  *   - Pagination: offset/limit, not page/page_size
  *   - Status update: { new_status, justification(min=5) }, not { status, note }
- *   - AlertItem: no agent_hostname, no priority_score, no module; has alert_type/detected_at/ingested_at
+ *   - AlertItem: agent_hostname (joined on agent_id AND tenant_id, null when unknown); no priority_score;
+ *     has alert_type/detected_at/ingested_at
  *   - AlertDetail: confidence_score, artifacts, status_history are optional (not yet in backend)
  */
 
@@ -48,6 +49,7 @@ export const AlertListItemSchema = z.object({
   severity: AlertSeveritySchema,
   status: AlertStatusSchema,
   agent_id: z.string(),
+  agent_hostname: z.string().nullable().optional(),
   alert_type: z.string(),
   mitre_technique_id: z.string().nullable(),
   summary: z.string(),
@@ -118,6 +120,7 @@ export const AlertDetailSchema = z.object({
   severity: AlertSeveritySchema,
   status: AlertStatusSchema,
   agent_id: z.string(),
+  agent_hostname: z.string().nullable().optional(),
   alert_type: z.string(),
   mitre_technique_id: z.string().nullable(),
   summary: z.string(),
