@@ -92,9 +92,12 @@ aiomysql is the one and only MySQL driver. asyncmy is removed from
 
 ### Consequences
 
-- asyncmy's speed advantage (Cython) is given up. At the 50–200 agents per
-  hospital this ADR targets, the database driver is not the bottleneck; if
-  measurements ever show otherwise, a driver change is a new ADR, not a second
-  driver kept "just in case".
+- asyncmy's speed advantage (Cython) is given up. The load to size against is
+  the central SaaS GRID, not a single hospital: about 4,000 agents, i.e. about
+  67 heartbeats per second at the production interval of 60 s
+  (`appsettings.Production.json`). This figure is an estimate, **to be verified
+  by the server load test**. At that load the database driver is not expected
+  to be the bottleneck; if the load test shows otherwise, a driver change is a
+  new ADR, not a second driver kept "just in case".
 - Any environment with an `mysql+asyncmy://` URL must switch to
   `mysql+aiomysql://`. No tracked deployment file uses asyncmy.
