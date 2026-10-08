@@ -67,7 +67,7 @@ uvicorn ransomguard_grid.main:app --reload
 | ORM | SQLAlchemy (async) | 2.0+ |
 | Migrations | Alembic | 1.14+ |
 | Database | MySQL | 8.4 |
-| MySQL Driver | aiomysql / asyncmy | dual compat |
+| MySQL Driver | aiomysql | 0.2+ |
 | Cache/Rate Limit | Redis | 7 |
 | Logging | structlog | 24+ |
 | JWT | python-jose | 3.3+ |
@@ -126,7 +126,6 @@ pytest --cov=src --cov-report=term -v
 
 ## Known Issues / Sprint 6.5 Debt
 
-- **asyncmy/aiomysql dual install**: Python 3.14 dev machine needs aiomysql (pure Python); Docker 3.12 can use either
 - **Azure IP ranges source**: Not implemented (URL changes weekly, requires manual download)
 - **docker-compose version key**: `version: "3.9"` triggers deprecation warning (cosmetic)
 - **Worker lifespan tests**: Not added as separate test file (worker tested via service tests)

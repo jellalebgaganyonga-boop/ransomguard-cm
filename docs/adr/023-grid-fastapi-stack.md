@@ -1,6 +1,6 @@
 # ADR-023: GRID Server Tech Stack — FastAPI Python
 
-**Status:** Accepted
+**Status:** Accepted — amended 2026-10-01 (see Amendment 1: single MySQL driver)
 **Date:** 2026-05-29
 **Sprint:** 6
 
@@ -51,3 +51,50 @@ Candidates considered: FastAPI Python, ASP.NET Core 8, Go Gin, Node.js Express.
 - Dev machine Python 3.14 uses aiomysql + bcrypt direct as workarounds
 - requirements.txt includes both aiomysql and asyncmy for dual compatibility
 - Dockerfile uses multi-stage build with non-root user (uid 1000)
+
+## Amendment 1 — 2026-10-01: a single MySQL driver, aiomysql
+
+**Supersedes:** the "aiomysql+asyncmy" driver choice in *Decision*, and the
+first three bullets of *Implementation Notes* (asyncmy in production Docker,
+aiomysql as a dev-only workaround, both drivers kept "for dual compatibility").
+
+### What actually happened
+
+This ADR named asyncmy as the production driver and aiomysql as a workaround
+for the Python 3.14 development machine, where asyncmy's C extension does not
+build. The record shows otherwise: the production `docker-compose.yml` has
+selected `mysql+aiomysql://` since its first commit (e503f1f, 2026-05-29). The
+only place `mysql+asyncmy://` ever appeared was `grid/.env.example`. The
+development workaround was, in fact, the production driver from day one — it
+runs the Docker stack and carried the Sprint 8 LOT 1 live alert chain.
+
+asyncmy was therefore installed everywhere and exercised nowhere.
+
+### Decision
+
+aiomysql is the one and only MySQL driver. asyncmy is removed from
+`requirements.txt` and from the `[mysql]` extra in `pyproject.toml`;
+`.env.example` now shows the `mysql+aiomysql://` URL the stack really uses.
+
+### Why only one
+
+- **One tested path.** Two async drivers differ in type conversion, error
+  classes and connection handling. Keeping both meant shipping a code path no
+  test, no environment and no customer ever ran.
+- **No configuration trap.** The template advertised asyncmy while the stack
+  ran aiomysql; `pip install ".[mysql]"` installed a driver the production URL
+  does not load. One driver removes that class of mismatch.
+- **Smaller dependency surface.** One less package (with a native extension)
+  to build, audit and patch.
+- **Same driver on every machine.** aiomysql is pure Python, so the Python
+  3.14 development machine and the Python 3.12 Docker image run identical
+  database code.
+
+### Consequences
+
+- asyncmy's speed advantage (Cython) is given up. At the 50–200 agents per
+  hospital this ADR targets, the database driver is not the bottleneck; if
+  measurements ever show otherwise, a driver change is a new ADR, not a second
+  driver kept "just in case".
+- Any environment with an `mysql+asyncmy://` URL must switch to
+  `mysql+aiomysql://`. No tracked deployment file uses asyncmy.
