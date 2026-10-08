@@ -56,3 +56,30 @@ async def test_main_disposes_the_engine_when_the_seed_refuses(monkeypatch: pytes
         await seed_module.main()
 
     assert fake_engine.disposed == 1
+
+
+async def test_seed_refuses_without_an_admin_email_and_creates_nothing(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    seed_module = _load_seed_module()
+    monkeypatch.delenv("GRID_SEED_ADMIN_EMAIL", raising=False)
+
+    def no_database(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("the seed opened the database although it must refuse first")
+
+    monkeypatch.setattr(seed_module, "AsyncSessionLocal", no_database)
+
+    with pytest.raises(SystemExit) as exit_info:
+        await seed_module.seed()
+
+    assert exit_info.value.code == 1
+    assert "GRID_SEED_ADMIN_EMAIL is required" in capsys.readouterr().err
+
+
+async def test_seed_refuses_a_blank_admin_email(monkeypatch: pytest.MonkeyPatch) -> None:
+    seed_module = _load_seed_module()
+    monkeypatch.setenv("GRID_SEED_ADMIN_EMAIL", "   ")
+    monkeypatch.setattr(seed_module, "AsyncSessionLocal", lambda *a, **k: (_ for _ in ()).throw(AssertionError()))
+
+    with pytest.raises(SystemExit):
+        await seed_module.seed()

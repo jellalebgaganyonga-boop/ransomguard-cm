@@ -8,8 +8,9 @@ development password:
 
     GRID_SEED_TENANT_NAME     (default: "Default Tenant")
     GRID_SEED_TENANT_CODE     (default: "default")      -- used at login
-    GRID_SEED_TENANT_EMAIL    (default: "admin@example.local")
-    GRID_SEED_ADMIN_EMAIL     (default: "admin@example.local")
+    GRID_SEED_TENANT_EMAIL    (default: the administrator's address)
+    GRID_SEED_ADMIN_EMAIL     (REQUIRED, no default: the seed never invents an
+                               administrator account; it refuses without it)
     GRID_SEED_ADMIN_NAME      (default: "Default Administrator")
     GRID_SEED_ADMIN_PASSWORD  (default: "ChangeMe123!" -- refused when
                                GRID_ENVIRONMENT=production)
@@ -53,8 +54,18 @@ async def seed() -> None:
     """Insert default tenant, roles, and admin user when they do not exist."""
     tenant_name = os.getenv("GRID_SEED_TENANT_NAME", "Default Tenant")
     tenant_code = os.getenv("GRID_SEED_TENANT_CODE", "default")
-    tenant_email = os.getenv("GRID_SEED_TENANT_EMAIL", "admin@example.local")
-    admin_email = os.getenv("GRID_SEED_ADMIN_EMAIL", "admin@example.local")
+    # No silent default for an identity: without an administrator address the seed
+    # refuses and says so -- it used to create admin@example.local on its own.
+    admin_email = os.getenv("GRID_SEED_ADMIN_EMAIL", "").strip()
+    if not admin_email:
+        print(
+            "[FAIL] GRID_SEED_ADMIN_EMAIL is required: the seed never invents an "
+            "administrator account. Set it to the address of the hospital's first "
+            "administrator. Nothing was created.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    tenant_email = os.getenv("GRID_SEED_TENANT_EMAIL", "").strip() or admin_email
     admin_name = os.getenv("GRID_SEED_ADMIN_NAME", "Default Administrator")
     admin_password = os.getenv("GRID_SEED_ADMIN_PASSWORD", DEV_PASSWORD)
 
