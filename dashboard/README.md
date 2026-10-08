@@ -112,6 +112,22 @@ dashboard/
   client-side UX convenience ONLY — every API endpoint enforces RBAC
   server-side independently (STRIDE WT4.2, WT4.5).
 
+### Dev servers stay on localhost
+
+Several open advisories on the dev toolchain (Vite, Vitest) are only
+exploitable through a dev server reachable by someone else. Until the
+frontend toolchain upgrade (see `docs/security/dependency-risk-register.md`):
+
+- **Never** run Vite with `--host`, and never set `server.host` in
+  `vite.config.ts`. Vite then listens on `localhost` only (the current state:
+  `vite.config.ts` and the Playwright `webServer` pass no host).
+- **Never** run `vitest --ui` or `vitest --api`. `@vitest/ui` is deliberately
+  not installed: the critical Vitest advisory (GHSA-5xrq-8626-4rwp) is only
+  reachable through the UI/API server.
+- **Storybook is the exception that proves the rule:** without `--host` it
+  listens on *all* network interfaces. `npm run storybook` therefore passes
+  `--host localhost`. Do not remove it.
+
 ---
 
 ## Testing

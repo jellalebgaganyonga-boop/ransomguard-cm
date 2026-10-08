@@ -18,7 +18,7 @@
     "test:e2e:ui": "playwright test --ui",
     "test:a11y": "playwright test --grep @a11y",
     "tokens:build": "node design-tokens/build.cjs",
-    "storybook": "storybook dev -p 6006",
+    "storybook": "storybook dev -p 6006 --host localhost",
     "build-storybook": "storybook build"
   },
   "dependencies": {
@@ -77,7 +77,6 @@
     "prettier": "^3.3.3",
     "prettier-plugin-tailwindcss": "^0.6.8",
     "vitest": "^2.1.1",
-    "@vitest/ui": "^2.1.1",
     "jsdom": "^25.0.1",
     "@testing-library/react": "^16.0.1",
     "@testing-library/jest-dom": "^6.5.0",
