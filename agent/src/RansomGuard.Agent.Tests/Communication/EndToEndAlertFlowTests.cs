@@ -1,6 +1,7 @@
 using System.Net;
 using System.Reflection;
 using System.Text.Json;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -32,6 +33,7 @@ public sealed class EndToEndAlertFlowTests : IDisposable
     };
 
     private readonly ServiceProvider _serviceProvider;
+    private readonly SqliteConnection _keepAliveConnection;
     private readonly CaptureHandler _captureHandler;
     private readonly AlertForwardingService _service;
 
@@ -56,9 +58,17 @@ public sealed class EndToEndAlertFlowTests : IDisposable
         var gridClient = new GridApiClient(httpClientFactory, configOptions, NullLogger<GridApiClient>.Instance);
         gridClient.RestoreEnrollment("agent-001", "tenant-001");
 
-        // Build DI for SQLite
-        var services = new ServiceCollection();
+        // Build DI for SQLite. A shared-cache in-memory database lives only as
+        // long as at least one connection to it is open; keep one open for the
+        // whole test (same fix as AlertForwardingIntegrationTests). Without it,
+        // whether later scopes see the schema depends on connection pooling:
+        // in CI they sometimes got an empty database ("no such table:
+        // PendingAlertUploads").
         var dbName = $"file:e2e_{Guid.NewGuid()}?mode=memory&cache=shared";
+        _keepAliveConnection = new SqliteConnection($"Data Source={dbName}");
+        _keepAliveConnection.Open();
+
+        var services = new ServiceCollection();
         services.AddDbContext<AgentDbContext>(opt => opt.UseSqlite($"Data Source={dbName}"));
         _serviceProvider = services.BuildServiceProvider();
 
@@ -75,7 +85,11 @@ public sealed class EndToEndAlertFlowTests : IDisposable
             NullLogger<AlertForwardingService>.Instance);
     }
 
-    public void Dispose() => _serviceProvider.Dispose();
+    public void Dispose()
+    {
+        _serviceProvider.Dispose();
+        _keepAliveConnection.Dispose();
+    }
 
     // ===== THE critical E2E test: CanaryAlert → real HTTP POST to GRID =====
     [Fact]
