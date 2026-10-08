@@ -21,6 +21,9 @@ dependencies = [
     "structlog>=24.4.0",
     "httpx>=0.28.0",
     "tenacity>=9.0.0",
+    # Required, not optional: the alert ingest route imports the notification
+    # queue (Redis Stream), so the app cannot even be imported without it.
+    "redis>=5.2.0",
 ]
 
 [project.optional-dependencies]
@@ -32,10 +35,7 @@ dev = [
     "mypy>=1.14.0",
 ]
 mysql = [
-    "asyncmy>=0.2.10",
-]
-redis = [
-    "redis>=5.2.0",
+    "aiomysql>=0.2.0",
 ]
 
 [tool.setuptools.packages.find]
