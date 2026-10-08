@@ -6,8 +6,9 @@
 name: CI
 
 on:
+  # Every commit is pushed, so every push is tested, whatever the branch name.
   push:
-    branches: [main, 'feat/**', 'fix/**', 'chore/**']
+    branches: ['**']
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -111,6 +112,10 @@ jobs:
     name: Dashboard E2E (Playwright)
     runs-on: ubuntu-latest
     needs: dashboard
+    # ~6 min, more than twice the next slowest job: run it where it gates a
+    # merge (main, pull requests) or on demand, not on every push of a work
+    # branch. The CI gate treats a skipped job as a pass.
+    if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     defaults:
       run:
         working-directory: dashboard
