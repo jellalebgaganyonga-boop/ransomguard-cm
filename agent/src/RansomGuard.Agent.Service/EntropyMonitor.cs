@@ -2,6 +2,7 @@ using System.Threading.Channels;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using RansomGuard.Agent.Core.Configuration;
+using RansomGuard.Agent.Core.Diagnostics;
 using RansomGuard.Agent.Core.Detection;
 using RansomGuard.Agent.Core.Detection.Entropy;
 using RansomGuard.Agent.Core.Persistence;
@@ -34,6 +35,7 @@ public sealed class EntropyMonitor : BackgroundService
     private readonly IOperationRateLimiter? _rateLimiter;
     private readonly IDetectionEventBus? _eventBus;
     private readonly IAlertForwardingQueue? _alertQueue;
+    private readonly IModuleStateRegistry _moduleState;
 
     /// <summary>
     /// Initializes the entropy monitor.
@@ -44,6 +46,7 @@ public sealed class EntropyMonitor : BackgroundService
         IServiceScopeFactory scopeFactory,
         IFileEventDeduplicator deduplicator,
         IEntropyCalculator calculator,
+        IModuleStateRegistry moduleState,
         RateLimiterFactory? rateLimiterFactory = null,
         IDetectionEventBus? eventBus = null,
         IAlertForwardingQueue? alertQueue = null)
@@ -53,6 +56,7 @@ public sealed class EntropyMonitor : BackgroundService
         _scopeFactory = scopeFactory;
         _deduplicator = deduplicator;
         _calculator = calculator;
+        _moduleState = moduleState;
         _rateLimiter = rateLimiterFactory?.GetLimiter(RateLimiterFactory.EntropyComputation);
         _eventBus = eventBus;
         _alertQueue = alertQueue;
@@ -67,10 +71,14 @@ public sealed class EntropyMonitor : BackgroundService
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        bool reachedActive = false;
+        try
+        {
         EntropyOptions? entropy = _config.Entropy;
         if (entropy is null || !entropy.Enabled)
         {
             _logger.LogInformation("ENTROPY module is disabled");
+            _moduleState.Publish(ModuleCode.Entropy, ModuleState.DisabledByConfig, ModuleReasonCode.DisabledByConfig);
             return;
         }
 
@@ -108,6 +116,8 @@ public sealed class EntropyMonitor : BackgroundService
         }
 
         _logger.LogInformation("ENTROPY monitor active on {DirCount} directories", _watchers.Count);
+        _moduleState.Publish(ModuleCode.Entropy, ModuleState.Active);
+        reachedActive = true;
 
         // Keep alive
         try { await Task.Delay(Timeout.Infinite, stoppingToken); }
@@ -117,6 +127,19 @@ public sealed class EntropyMonitor : BackgroundService
         await consumerTask;
 
         foreach (var w in _watchers) { w.EnableRaisingEvents = false; w.Dispose(); }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Normal shutdown.
+        }
+        catch (Exception ex)
+        {
+            // Publish the real state and do NOT rethrow: one module crashing must
+            // not take the host — and all other protection — down with it.
+            _moduleState.Publish(ModuleCode.Entropy, ModuleState.Inactive,
+                reachedActive ? ModuleReasonCode.StoppedUnexpectedly : ModuleReasonCode.InitFailed);
+            _logger.LogError(ex, "ENTROPY monitor stopped unexpectedly");
+        }
     }
 
     private async Task BuildBaselinesAsync(CancellationToken ct)

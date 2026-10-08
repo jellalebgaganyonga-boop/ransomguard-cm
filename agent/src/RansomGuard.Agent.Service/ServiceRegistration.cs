@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using RansomGuard.Agent.Core.Configuration;
+using RansomGuard.Agent.Core.Diagnostics;
 using RansomGuard.Agent.Core.Detection;
 using RansomGuard.Agent.Core.Detection.Entropy;
 using RansomGuard.Agent.Core.Detection.Genealogy;
@@ -98,6 +99,10 @@ public static class ServiceRegistration
 
         // Rate limiting
         services.AddSingleton<RateLimiterFactory>();
+
+        // Runtime module-state registry: each module publishes its real state here
+        // and the heartbeat reads it, instead of deriving status from config.
+        services.AddSingleton<IModuleStateRegistry, InMemoryModuleStateRegistry>();
 
         // Cross-module event bus
         services.AddSingleton<IDetectionEventBus, InMemoryDetectionEventBus>();

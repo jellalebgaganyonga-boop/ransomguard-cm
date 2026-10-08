@@ -5,6 +5,7 @@ using System.Threading.Channels;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using RansomGuard.Agent.Core.Configuration;
+using RansomGuard.Agent.Core.Diagnostics;
 using RansomGuard.Agent.Core.Detection;
 using RansomGuard.Agent.Core.Detection.Genealogy;
 using RansomGuard.Agent.Core.Detection.UsbGuard;
@@ -41,6 +42,7 @@ public sealed class UsbDeviceMonitor : BackgroundService, IUsbDeviceMonitor
     private readonly ConcurrentDictionary<string, UsbDevice> _connectedDevices = new();
     private readonly IOperationRateLimiter? _scanRateLimiter;
     private readonly IAlertForwardingQueue? _alertQueue;
+    private readonly IModuleStateRegistry _moduleState;
     private long _totalEventsProcessed;
 
     /// <summary>Number of currently connected USB devices.</summary>
@@ -57,6 +59,7 @@ public sealed class UsbDeviceMonitor : BackgroundService, IUsbDeviceMonitor
         BootableUsbDetector bootableDetector,
         IServiceScopeFactory scopeFactory,
         IOptionsMonitor<AgentConfiguration> config,
+        IModuleStateRegistry moduleState,
         RateLimiterFactory? rateLimiterFactory = null,
         IAlertForwardingQueue? alertQueue = null)
     {
@@ -66,6 +69,7 @@ public sealed class UsbDeviceMonitor : BackgroundService, IUsbDeviceMonitor
         _bootableDetector = bootableDetector;
         _scopeFactory = scopeFactory;
         _config = config.CurrentValue;
+        _moduleState = moduleState;
         _scanRateLimiter = rateLimiterFactory?.GetLimiter("usb-scan");
         _alertQueue = alertQueue;
         _eventChannel = Channel.CreateBounded<UsbConnectionEvent>(
@@ -79,9 +83,13 @@ public sealed class UsbDeviceMonitor : BackgroundService, IUsbDeviceMonitor
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        bool reachedActive = false;
+        try
+        {
         if (_config.UsbGuard is null || !_config.UsbGuard.Enabled)
         {
             _logger.LogInformation("USB GUARD module is disabled");
+            _moduleState.Publish(ModuleCode.UsbGuard, ModuleState.DisabledByConfig, ModuleReasonCode.DisabledByConfig);
             return;
         }
 
@@ -92,6 +100,8 @@ public sealed class UsbDeviceMonitor : BackgroundService, IUsbDeviceMonitor
         Task consumerTask = ConsumeEventsAsync(stoppingToken);
 
         _logger.LogInformation("USB GUARD monitor active");
+        _moduleState.Publish(ModuleCode.UsbGuard, ModuleState.Active);
+        reachedActive = true;
 
         // Heartbeat
         using var heartbeat = new PeriodicTimer(TimeSpan.FromSeconds(60));
@@ -109,6 +119,19 @@ public sealed class UsbDeviceMonitor : BackgroundService, IUsbDeviceMonitor
         _eventChannel.Writer.TryComplete();
         await consumerTask;
         await _wmiSubscriber.StopAsync();
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Normal shutdown.
+        }
+        catch (Exception ex)
+        {
+            // Publish the real state and do NOT rethrow: one module crashing must
+            // not take the host — and all other protection — down with it.
+            _moduleState.Publish(ModuleCode.UsbGuard, ModuleState.Inactive,
+                reachedActive ? ModuleReasonCode.StoppedUnexpectedly : ModuleReasonCode.InitFailed);
+            _logger.LogError(ex, "USB GUARD monitor stopped unexpectedly");
+        }
     }
 
     private async Task ConsumeEventsAsync(CancellationToken ct)

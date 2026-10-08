@@ -46,14 +46,83 @@ public sealed record EnrollmentResponse
 
 public sealed record HeartbeatRequest
 {
+    /// <summary>Payload version. Absent/1 = the legacy 3-field heartbeat; 2 = this one.</summary>
+    [JsonPropertyName("schema_version")]
+    public int SchemaVersion { get; init; } = 2;
+
     [JsonPropertyName("agent_uptime_seconds")]
     public required int AgentUptimeSeconds { get; init; }
+
+    [JsonPropertyName("agent_version")]
+    public string? AgentVersion { get; init; }
+
+    [JsonPropertyName("os_version")]
+    public string? OsVersion { get; init; }
 
     [JsonPropertyName("threat_intel_version")]
     public string? ThreatIntelVersion { get; init; }
 
-    [JsonPropertyName("modules_status")]
-    public Dictionary<string, string> ModulesStatus { get; init; } = new();
+    /// <summary>Last local detection, UTC. Null if none since start.</summary>
+    [JsonPropertyName("last_detection_at")]
+    public DateTime? LastDetectionAt { get; init; }
+
+    [JsonPropertyName("disk")]
+    public DiskInfo? Disk { get; init; }
+
+    [JsonPropertyName("transmission")]
+    public TransmissionInfo? Transmission { get; init; }
+
+    /// <summary>Runtime state of every protection module (includes anti-tampering).</summary>
+    [JsonPropertyName("modules")]
+    public List<ModuleStatusInfo> Modules { get; init; } = [];
+}
+
+/// <summary>Free space on the volumes that matter, in bytes.</summary>
+public sealed record DiskInfo
+{
+    /// <summary>Free bytes on the system volume.</summary>
+    [JsonPropertyName("system_free_bytes")]
+    public long SystemFreeBytes { get; init; }
+
+    /// <summary>Free bytes on the volume holding the agent database (matters for Sprint 10 backups).</summary>
+    [JsonPropertyName("db_volume_free_bytes")]
+    public long DbVolumeFreeBytes { get; init; }
+}
+
+/// <summary>Alert transmission health. Answers "did everything it detected reach the GRID?".</summary>
+public sealed record TransmissionInfo
+{
+    /// <summary>Alerts waiting in the local upload queue.</summary>
+    [JsonPropertyName("pending_alerts")]
+    public int PendingAlerts { get; init; }
+
+    /// <summary>Last successful upload, UTC. Null if none yet.</summary>
+    [JsonPropertyName("last_upload_ok_at")]
+    public DateTime? LastUploadOkAt { get; init; }
+
+    /// <summary>Stable code of the last upload failure (never an exception message). Null if none.</summary>
+    [JsonPropertyName("last_upload_error_code")]
+    public string? LastUploadErrorCode { get; init; }
+}
+
+/// <summary>One module's runtime state.</summary>
+public sealed record ModuleStatusInfo
+{
+    /// <summary>Stable module code (SENTINEL, ENTROPY, ...).</summary>
+    [JsonPropertyName("code")]
+    public required string Code { get; init; }
+
+    /// <summary>active | inactive | disabled_by_config | degraded.</summary>
+    [JsonPropertyName("state")]
+    public required string State { get; init; }
+
+    /// <summary>Stable reason code, or null when active.</summary>
+    [JsonPropertyName("reason_code")]
+    public string? ReasonCode { get; init; }
+
+    /// <summary>When the state last changed, UTC.</summary>
+    [JsonPropertyName("changed_at")]
+    public DateTime ChangedAt { get; init; }
 }
 
 public sealed record HeartbeatResponse

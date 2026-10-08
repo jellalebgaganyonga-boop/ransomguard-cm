@@ -44,6 +44,39 @@ public sealed class AlertForwardingService : BackgroundService, IAlertForwarding
     public long TotalFailedValidation => _totalFailedValidation;
     private long _totalFailedValidation;
 
+    private long _lastUploadOkTicks; // 0 = never; UTC ticks otherwise
+    private long _lastDetectionTicks; // 0 = never; UTC ticks otherwise
+    private volatile string? _lastUploadErrorCode;
+
+    /// <summary>
+    /// When the agent last detected something locally (an alert entered the queue),
+    /// UTC. Null if nothing has been detected since startup.
+    /// </summary>
+    public DateTime? LastDetectionAtUtc
+    {
+        get
+        {
+            long ticks = Interlocked.Read(ref _lastDetectionTicks);
+            return ticks == 0 ? null : new DateTime(ticks, DateTimeKind.Utc);
+        }
+    }
+
+    /// <summary>When the last upload succeeded, UTC. Null if none since startup.</summary>
+    public DateTime? LastUploadOkAtUtc
+    {
+        get
+        {
+            long ticks = Interlocked.Read(ref _lastUploadOkTicks);
+            return ticks == 0 ? null : new DateTime(ticks, DateTimeKind.Utc);
+        }
+    }
+
+    /// <summary>
+    /// Stable code of the last upload failure (e.g. HTTP_422, NETWORK_UNREACHABLE,
+    /// TIMEOUT). Never a raw exception message. Null if the last upload succeeded.
+    /// </summary>
+    public string? LastUploadErrorCode => _lastUploadErrorCode;
+
     public AlertForwardingService(
         IGridApiClient gridClient,
         EnrollmentService enrollmentService,
@@ -65,6 +98,10 @@ public sealed class AlertForwardingService : BackgroundService, IAlertForwarding
     /// <inheritdoc />
     public bool TryEnqueue(AlertIngestRequest request)
     {
+        // An alert entering the queue is a local detection, whether or not it
+        // later reaches the GRID. Record the moment for the heartbeat.
+        Interlocked.Exchange(ref _lastDetectionTicks, DateTime.UtcNow.Ticks);
+
         if (_channel.Writer.TryWrite(request))
             return true;
 
@@ -137,12 +174,14 @@ public sealed class AlertForwardingService : BackgroundService, IAlertForwarding
 
             var response = await _gridClient.SendAlertAsync(request, timeoutCts.Token).ConfigureAwait(false);
             Interlocked.Increment(ref _totalForwarded);
+            MarkUploadOk();
             _logger.LogInformation("Alert forwarded to GRID: {AlertId} status={Status} clientMsgId={ClientId}",
                 response.AlertId, response.Status, request.ClientMessageId);
         }
         catch (HttpRequestException ex) when (IsValidationError(ex))
         {
             Interlocked.Increment(ref _totalFailedValidation);
+            MarkUploadError(ex);
             _logger.LogCritical("Alert rejected by GRID (validation error, will NOT retry): {Error} clientMsgId={ClientId}",
                 ex.Message, request.ClientMessageId);
             await PersistFailedAsync(request, PendingUploadStatus.FailedValidation, ex.Message, ct).ConfigureAwait(false);
@@ -151,6 +190,7 @@ public sealed class AlertForwardingService : BackgroundService, IAlertForwarding
         {
             if (ct.IsCancellationRequested) return;
 
+            MarkUploadError(ex);
             _logger.LogWarning("Alert send failed (will retry): {Error} clientMsgId={ClientId}",
                 ex.Message, request.ClientMessageId);
             await PersistFailedAsync(request, PendingUploadStatus.Pending, ex.Message, ct).ConfigureAwait(false);
@@ -158,6 +198,7 @@ public sealed class AlertForwardingService : BackgroundService, IAlertForwarding
         catch (Exception ex)
         {
             if (ct.IsCancellationRequested) return;
+            MarkUploadError(ex);
             _logger.LogError(ex, "Unexpected error forwarding alert clientMsgId={ClientId}", request.ClientMessageId);
             await PersistFailedAsync(request, PendingUploadStatus.Pending, ex.Message, ct).ConfigureAwait(false);
         }
@@ -230,6 +271,7 @@ public sealed class AlertForwardingService : BackgroundService, IAlertForwarding
                 pending.Status = PendingUploadStatus.Uploaded;
                 await db.SaveChangesAsync(ct).ConfigureAwait(false);
                 Interlocked.Increment(ref _totalForwarded);
+                MarkUploadOk();
 
                 _logger.LogInformation("Retry succeeded: {AlertId} status={Status} attempt={Attempt}",
                     response.AlertId, response.Status, pending.AttemptCount);
@@ -240,6 +282,7 @@ public sealed class AlertForwardingService : BackgroundService, IAlertForwarding
                 pending.LastErrorMessage = ex.Message.Length > 2000 ? ex.Message[..2000] : ex.Message;
                 await db.SaveChangesAsync(ct).ConfigureAwait(false);
                 Interlocked.Increment(ref _totalFailedValidation);
+                MarkUploadError(ex);
 
                 _logger.LogCritical("Retry rejected (validation, stopping): {Error}", ex.Message);
             }
@@ -253,12 +296,33 @@ public sealed class AlertForwardingService : BackgroundService, IAlertForwarding
                 pending.Status = PendingUploadStatus.Pending;
                 pending.LastErrorMessage = ex.Message.Length > 2000 ? ex.Message[..2000] : ex.Message;
                 await db.SaveChangesAsync(ct).ConfigureAwait(false);
+                MarkUploadError(ex);
 
                 _logger.LogWarning("Retry failed (attempt {Attempt}, next in {Backoff}s): {Error}",
                     pending.AttemptCount, backoffSeconds, ex.Message);
             }
         }
     }
+
+    private void MarkUploadOk()
+    {
+        Interlocked.Exchange(ref _lastUploadOkTicks, DateTime.UtcNow.Ticks);
+        _lastUploadErrorCode = null;
+    }
+
+    private void MarkUploadError(Exception ex) => _lastUploadErrorCode = ClassifyUploadError(ex);
+
+    /// <summary>
+    /// Maps an upload exception to a stable, non-sensitive code for the heartbeat.
+    /// Never returns the raw message (it can leak paths, hostnames or tokens).
+    /// </summary>
+    private static string ClassifyUploadError(Exception ex) => ex switch
+    {
+        HttpRequestException { StatusCode: { } code } => $"HTTP_{(int)code}",
+        HttpRequestException => "NETWORK_UNREACHABLE",
+        TaskCanceledException or OperationCanceledException => "TIMEOUT",
+        _ => "UNKNOWN",
+    };
 
     private static bool IsValidationError(HttpRequestException ex)
     {
