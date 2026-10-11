@@ -13,10 +13,14 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# A new push to the same branch makes the previous run pointless.
+# Every commit pushed to a branch runs its CI to the end: one group per
+# commit, nothing cancelled. A concurrency group keeps a single pending run and
+# cancels the older pending ones even without cancel-in-progress, so a group
+# per branch would still drop commits pushed in quick succession. Only a pull
+# request shares one group, where a new push supersedes the previous run.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.ref }}-${{ github.event_name == 'pull_request' && 'pr' || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
