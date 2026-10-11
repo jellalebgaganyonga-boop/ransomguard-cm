@@ -199,3 +199,57 @@ async def test_an_alert_type_over_50_characters_is_refused_before_any_log(
 
     assert response.status_code == 422
     assert await _unmapped_logs(db_session) == []
+
+
+# ── Cap per tenant and hour, all unknown types together ──
+
+async def _second_tenant(db: AsyncSession) -> str:
+    from ransomguard_grid.db.models.enums import TenantStatus
+    from ransomguard_grid.db.models.tenant_user import Tenant
+
+    tenant = Tenant(id=str(uuid4()), name="T2", code=f"mod2-{uuid4().hex[:6]}", contact_email="t2@t.local",
+                    status=TenantStatus.active)
+    db.add(tenant)
+    await db.flush()
+    return tenant.id
+
+
+@pytest.mark.asyncio
+async def test_at_most_20_unknown_type_entries_per_tenant_and_hour_then_one_cap_entry(
+    db_session: AsyncSession, test_cert_serial: str,
+) -> None:
+    tenant, agent = await _setup_agent_with_cert(db_session, test_cert_serial, f"mod-{uuid4().hex[:6]}")
+    nine = datetime(2026, 10, 11, 9, 5, tzinfo=UTC)
+
+    for i in range(25):  # an agent inventing a new type at every alert
+        await record_unmapped_alert_type(db_session, tenant.id, agent.id, f"Invented{i}", str(uuid4()), nine)
+    await record_unmapped_alert_type(db_session, tenant.id, agent.id, "Invented3", str(uuid4()), nine)  # already open
+    await db_session.flush()
+
+    logs = await _unmapped_logs(db_session)
+    regular = [log for log in logs if not (log.context_json or {}).get("cap_reached")]
+    [cap] = [log for log in logs if (log.context_json or {}).get("cap_reached")]
+    assert len(regular) == 20
+    assert (cap.context_json or {})["count"] == 5
+    assert (cap.context_json or {})["last_key"] == "Invented24"
+    assert "cap reached" in cap.message
+    # An entry opened before the cap keeps counting its own type.
+    [invented3] = [log for log in regular if (log.context_json or {})["alert_type"] == "Invented3"]
+    assert (invented3.context_json or {})["count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_the_cap_is_per_tenant_and_per_hour(db_session: AsyncSession, test_cert_serial: str) -> None:
+    tenant, agent = await _setup_agent_with_cert(db_session, test_cert_serial, f"mod-{uuid4().hex[:6]}")
+    other_tenant = await _second_tenant(db_session)
+    nine = datetime(2026, 10, 11, 9, 5, tzinfo=UTC)
+
+    for i in range(21):
+        await record_unmapped_alert_type(db_session, tenant.id, agent.id, f"Invented{i}", str(uuid4()), nine)
+    await record_unmapped_alert_type(db_session, other_tenant, agent.id, "OtherTenantType", str(uuid4()), nine)
+    await record_unmapped_alert_type(db_session, tenant.id, agent.id, "NextHourType", str(uuid4()), nine + timedelta(hours=1))
+    await db_session.flush()
+
+    logs = await _unmapped_logs(db_session)
+    assert [log.tenant_id for log in logs if (log.context_json or {}).get("alert_type") == "OtherTenantType"] == [other_tenant]
+    assert [log for log in logs if (log.context_json or {}).get("alert_type") == "NextHourType"] != []
