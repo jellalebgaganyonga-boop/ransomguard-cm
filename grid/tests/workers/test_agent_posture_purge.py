@@ -62,3 +62,17 @@ async def test_the_purge_runs_at_most_once_per_24_hours() -> None:
 
     assert await worker.purge_posture_history(NOW + timedelta(hours=24)) == 1
     assert await _remaining([old]) == set()
+
+
+@pytest.mark.asyncio
+async def test_the_purge_covers_agent_restart_rows() -> None:
+    [change] = await _changes_aged(timedelta(days=91))
+    async with _test_session_factory() as session:
+        row = await session.get(AgentPostureChange, change)
+        assert row is not None
+        row.module_code, row.old_state, row.new_state, row.new_reason_code = "AGENT", None, "restarted", None
+        await session.commit()
+
+    await AgentDisconnectWorker(_test_session_factory).purge_posture_history(NOW)
+
+    assert await _remaining([change]) == set()

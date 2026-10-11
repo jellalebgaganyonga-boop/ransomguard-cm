@@ -8,16 +8,24 @@ from collections.abc import Sequence
 from datetime import datetime
 from uuid import uuid4
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ransomguard_grid.api.v1.schemas.agent import HeartbeatRequest
 from ransomguard_grid.core.hourly_system_log import record_hourly
 from ransomguard_grid.db.models.agent import Agent, AgentModuleStatus, AgentPosture, AgentPostureChange
-from ransomguard_grid.services.agent_posture import MODULE_CODES, ModuleStatus, PostureSnapshot
+from ransomguard_grid.services.agent_posture import (
+    MODULE_CODES,
+    RESTART_LOOP_WINDOW,
+    ModuleStatus,
+    PostureSnapshot,
+    is_restart,
+)
 
 _HEARTBEAT_COMPONENT = "heartbeat"
 NOT_REPORTED = "not_reported"
+AGENT_MODULE = "AGENT"  # agent_posture_changes rows about the agent itself, not a module
+RESTARTED = "restarted"
 
 
 async def record_heartbeat(db: AsyncSession, agent: Agent, body: HeartbeatRequest, now: datetime) -> None:
@@ -30,6 +38,10 @@ async def record_heartbeat(db: AsyncSession, agent: Agent, body: HeartbeatReques
     if posture is None:
         posture = AgentPosture(agent_id=agent.id, tenant_id=agent.tenant_id)
         db.add(posture)
+    elif is_restart(posture.agent_uptime_seconds, posture.received_at, body.agent_uptime_seconds, now):
+        # The uptime starts again from 0 at every restart: an agent crashing (or killed) in a loop
+        # would otherwise look "starting" forever. Each restart is one transition row.
+        _transition(db, agent, AGENT_MODULE, None, None, RESTARTED, None, now)
 
     posture.schema_version = body.schema_version
     posture.agent_uptime_seconds = body.agent_uptime_seconds
@@ -170,6 +182,26 @@ async def load_postures(
         if module.agent_id in by_agent:
             by_agent[module.agent_id][1].append(module)
     return by_agent
+
+
+async def count_recent_restarts(
+    db: AsyncSession, tenant_id: str, agent_ids: Sequence[str], now: datetime
+) -> dict[str, int]:
+    """Restarts recorded within RESTART_LOOP_WINDOW before now, per agent (server times)."""
+    if not agent_ids:
+        return {}
+    rows = await db.execute(
+        select(AgentPostureChange.agent_id, func.count())
+        .where(
+            AgentPostureChange.tenant_id == tenant_id,
+            AgentPostureChange.agent_id.in_(agent_ids),
+            AgentPostureChange.module_code == AGENT_MODULE,
+            AgentPostureChange.new_state == RESTARTED,
+            AgentPostureChange.created_at >= now - RESTART_LOOP_WINDOW,
+        )
+        .group_by(AgentPostureChange.agent_id)
+    )
+    return {agent_id: int(count) for agent_id, count in rows.all()}
 
 
 def snapshot(posture: AgentPosture, modules: Sequence[AgentModuleStatus]) -> PostureSnapshot:

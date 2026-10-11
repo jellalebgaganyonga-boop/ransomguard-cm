@@ -25,6 +25,10 @@ unknown         grey    v1 agent: no posture reported
 unknown         grey    a detector starting, agent up for less than 300 s
 ==============  ======  ================================================================
 
+A restart loop (3 restarts within the last 60 min) removes the start-up grace: an agent killed
+and relaunched every two minutes reports uptime < 300 s forever, and would otherwise stay grey
+"starting" indefinitely. Its starting detectors count as start failures, plus ``restart_loop``.
+
 Several rows can hold at once; the worst wins and every contributing reason is reported.
 """
 
@@ -68,6 +72,11 @@ DETECTION_MODULES: tuple[str, ...] = ("SENTINEL", "ENTROPY", "USB_GUARD", "EXFIL
 SIGNAL_FRESH_FOR = timedelta(minutes=5)
 SIGNAL_RED_AFTER = timedelta(minutes=60)
 STARTING_GRACE_SECONDS = 300
+RESTART_LOOP_COUNT = 3
+RESTART_LOOP_WINDOW = timedelta(minutes=60)
+# A received uptime below the previous one projected to now, by more than this, is a restart.
+# Below it, it is jitter (send delays, rounding), never a restart.
+RESTART_UPTIME_MARGIN_SECONDS = 60
 UPLOAD_STALE_AFTER = timedelta(minutes=5)
 PENDING_ALERTS_GUARD = 100
 
@@ -88,6 +97,7 @@ STARTING = "starting"
 NO_DETECTOR_ACTIVE = "no_detector_active"
 TRANSMISSION_BLOCKED = "transmission_blocked"
 TRANSMISSION_UNKNOWN = "transmission_unknown"
+RESTART_LOOP = "restart_loop"
 ALERTS_REJECTED = "alerts_rejected"
 
 
@@ -131,8 +141,13 @@ def compute_protection_state(
     last_heartbeat_at: datetime | None,
     posture: PostureSnapshot | None,
     now: datetime,
+    restarts_last_hour: int = 0,
 ) -> ProtectionVerdict:
-    """Decide whether an endpoint is protected right now. Pure: no I/O, no clock."""
+    """Decide whether an endpoint is protected right now. Pure: no I/O, no clock.
+
+    ``restarts_last_hour`` is the number of agent restarts the server recorded within
+    ``RESTART_LOOP_WINDOW`` before ``now`` (read by the caller).
+    """
     if last_heartbeat_at is None:
         return ProtectionVerdict(UNKNOWN, [NEVER_CONNECTED], None)
 
@@ -156,13 +171,24 @@ def compute_protection_state(
     # an endpoint look better than what it last reported.
     received_at = _as_utc(posture.received_at)
     uptime_now = posture.agent_uptime_seconds + max(0, int((now - received_at).total_seconds()))
-    findings.extend(_detector_findings(posture.modules, uptime_now))
+    restart_loop = restarts_last_hour >= RESTART_LOOP_COUNT
+    if restart_loop:
+        findings.append((PARTIAL, RESTART_LOOP))
+    findings.extend(_detector_findings(posture.modules, uptime_now, restart_loop))
     findings.extend(_transmission_findings(posture, uptime_now, now))
 
     return _verdict(findings, age_seconds)
 
 
-def _detector_findings(modules: Mapping[str, ModuleStatus], uptime_now: int) -> list[tuple[str, str]]:
+def is_restart(previous_uptime: int, previous_received_at: datetime, uptime: int, now: datetime) -> bool:
+    """An uptime below the previous one projected to now, beyond the jitter margin."""
+    projected = previous_uptime + max(0, int((_as_utc(now) - _as_utc(previous_received_at)).total_seconds()))
+    return uptime < projected - RESTART_UPTIME_MARGIN_SECONDS
+
+
+def _detector_findings(
+    modules: Mapping[str, ModuleStatus], uptime_now: int, restart_loop: bool
+) -> list[tuple[str, str]]:
     findings: list[tuple[str, str]] = []
     active = starting = 0
     for code in DETECTION_MODULES:
@@ -175,7 +201,8 @@ def _detector_findings(modules: Mapping[str, ModuleStatus], uptime_now: int) -> 
 
         if state == "inactive" and reason == STARTING:
             # "Starting" is grey strictly below 300 s; at 300 s exactly it is no longer start-up.
-            if uptime_now < STARTING_GRACE_SECONDS:
+            # In a restart loop there is no grace: the uptime restarts from 0 every time.
+            if uptime_now < STARTING_GRACE_SECONDS and not restart_loop:
                 starting += 1
                 findings.append((UNKNOWN, f"{code}:{STARTING}"))
                 continue

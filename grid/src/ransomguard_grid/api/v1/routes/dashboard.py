@@ -49,7 +49,7 @@ from ransomguard_grid.db.repositories.role_repository import UserRoleRepository
 from ransomguard_grid.db.session import get_db
 from ransomguard_grid.schemas.dashboard.me import MeResponse, TenantContext, UserPreferences
 from ransomguard_grid.services.agent_posture import compute_protection_state, last_upload_age_seconds
-from ransomguard_grid.services.posture_store import load_postures, snapshot
+from ransomguard_grid.services.posture_store import count_recent_restarts, load_postures, snapshot
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -243,11 +243,12 @@ async def _agent_items(db: AsyncSession, tenant_id: str, agents: list[Agent]) ->
     """Agents with their verdict and posture -- postures read within the caller's tenant only."""
     now = datetime.now(UTC)
     postures = await load_postures(db, tenant_id, [a.id for a in agents])
+    restarts = await count_recent_restarts(db, tenant_id, [a.id for a in agents], now)
     items: list[AgentDetailItem] = []
     for agent in agents:
         posture, modules = postures.get(agent.id, (None, []))
         state = snapshot(posture, modules) if posture else None
-        verdict = compute_protection_state(agent.last_heartbeat_at, state, now)
+        verdict = compute_protection_state(agent.last_heartbeat_at, state, now, restarts.get(agent.id, 0))
         posture_item = None
         if posture is not None:
             ordered = sorted(

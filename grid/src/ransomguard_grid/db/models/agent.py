@@ -116,7 +116,9 @@ class AgentModuleStatus(Base):
     module_code: Mapped[str] = mapped_column(String(32), nullable=False)
     state: Mapped[str] = mapped_column(String(32), nullable=False)
     reason_code: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)  # agent clock
+    # Agent clock, as reported: displayed, never used for a threshold (the verdict uses server
+    # times and the agent's own durations only).
+    changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)  # server clock
 
     def __repr__(self) -> str:
@@ -124,7 +126,11 @@ class AgentModuleStatus(Base):
 
 
 class AgentPostureChange(Base):
-    """A module transition, written only when the state or reason changes. Purged after 90 days."""
+    """A module transition, written only when the state or reason changes. Purged after 90 days.
+
+    Agent restarts are recorded here too, with module_code ``AGENT`` and new_state ``restarted``:
+    the verdict counts those of the last hour to detect a restart loop.
+    """
 
     __tablename__ = "agent_posture_changes"
 

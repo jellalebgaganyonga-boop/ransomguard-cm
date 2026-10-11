@@ -13,6 +13,7 @@ from ransomguard_grid.services.agent_posture import (
     PostureSnapshot,
     ProtectionVerdict,
     compute_protection_state,
+    is_restart,
     last_upload_age_seconds,
 )
 
@@ -319,3 +320,40 @@ def test_every_contributing_reason_is_reported_worst_first() -> None:
 def test_age_is_measured_on_the_server_clock_even_for_a_naive_timestamp() -> None:
     naive = (NOW - timedelta(minutes=10)).replace(tzinfo=None)  # SQLite round-trip
     assert compute_protection_state(naive, _posture(), NOW).reason_codes == ["signal_lost"]
+
+
+# ── Restart loop (R7 review): the start-up grace never lasts forever ──
+
+def _sentinel_starting_at_100_s() -> PostureSnapshot:
+    return _posture(_modules(SENTINEL=STARTING), uptime=100, received_ago=timedelta(0))
+
+
+def test_three_restarts_in_the_hour_with_sentinel_starting_is_red_with_restart_loop() -> None:
+    verdict = compute_protection_state(NOW - timedelta(seconds=5), _sentinel_starting_at_100_s(), NOW, restarts_last_hour=3)
+    assert verdict.state == UNPROTECTED
+    assert verdict.reason_codes == ["SENTINEL:inactive:init_failed", "restart_loop"]
+
+
+def test_two_restarts_in_the_hour_keep_the_start_up_grace() -> None:
+    verdict = compute_protection_state(NOW - timedelta(seconds=5), _sentinel_starting_at_100_s(), NOW, restarts_last_hour=2)
+    assert (verdict.state, verdict.reason_codes) == (UNKNOWN, ["SENTINEL:starting", "starting"])
+
+
+def test_a_restart_loop_alone_is_partial() -> None:
+    verdict = compute_protection_state(NOW - timedelta(seconds=5), _posture(), NOW, restarts_last_hour=4)
+    assert (verdict.state, verdict.reason_codes) == (PARTIAL, ["restart_loop"])
+
+
+@pytest.mark.parametrize(
+    ("previous", "received_ago", "uptime", "restart"),
+    [
+        (1000, timedelta(0), 950, False),  # jitter: 50 s back
+        (1000, timedelta(0), 940, False),  # exactly the 60 s margin
+        (1000, timedelta(0), 939, True),
+        (1000, timedelta(minutes=2), 1060, False),  # projected 1120, 60 s back
+        (1000, timedelta(minutes=2), 100, True),
+        (3600, timedelta(hours=3), 30, True),  # down for hours, then back
+    ],
+)
+def test_restart_detection(previous: int, received_ago: timedelta, uptime: int, restart: bool) -> None:
+    assert is_restart(previous, NOW - received_ago, uptime, NOW) is restart

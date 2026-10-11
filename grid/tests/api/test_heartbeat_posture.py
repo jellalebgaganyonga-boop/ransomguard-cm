@@ -325,3 +325,61 @@ async def test_the_verdict_ages_without_any_new_heartbeat(
     detail = (await client.get(f"/api/v1/dashboard/agents/{agent.id}", headers=headers)).json()
 
     assert (detail["protection_state"], detail["reason_codes"]) == ("partial", ["signal_lost"])
+
+
+# ── Restart loop ──
+
+async def _agent_rows(db: AsyncSession, agent_id: str) -> list[AgentPostureChange]:
+    return [c for c in await _rows(db, AgentPostureChange, agent_id) if c.module_code == "AGENT"]
+
+
+@pytest.mark.asyncio
+async def test_a_restart_is_recorded_jitter_is_not(
+    client: AsyncClient, db_session: AsyncSession, test_cert_serial: str, test_cert_pem: str,
+) -> None:
+    _, agent = await _setup(db_session, test_cert_serial)
+
+    await _beat(client, agent, test_cert_pem, _v2(agent_uptime_seconds=1000))
+    await _beat(client, agent, test_cert_pem, _v2(agent_uptime_seconds=950))  # 50 s back: jitter
+    assert await _agent_rows(db_session, agent.id) == []
+
+    await _beat(client, agent, test_cert_pem, _v2(agent_uptime_seconds=100))  # restarted
+    [restart] = await _agent_rows(db_session, agent.id)
+    assert (restart.old_state, restart.new_state) == (None, "restarted")
+
+
+async def _plant_restarts(db: AsyncSession, agent: Agent, *ages: timedelta) -> None:
+    for age in ages:
+        db.add(AgentPostureChange(
+            id=str(uuid4()), tenant_id=agent.tenant_id, agent_id=agent.id, module_code="AGENT",
+            old_state=None, new_state="restarted", created_at=datetime.now(UTC) - age,
+        ))
+    await db.commit()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("ages", "state", "reasons"),
+    [
+        # 3 restarts in 60 min, SENTINEL starting at 100 s: red, restart_loop.
+        ((timedelta(minutes=5), timedelta(minutes=20), timedelta(minutes=40)),
+         "unprotected", ["SENTINEL:inactive:init_failed", "restart_loop"]),
+        # 2 restarts: still the start-up grace.
+        ((timedelta(minutes=5), timedelta(minutes=20)), "unknown", ["SENTINEL:starting", "starting"]),
+        # 3 restarts, one of them 61 min old: 2 in the hour, grey.
+        ((timedelta(minutes=5), timedelta(minutes=20), timedelta(minutes=61)),
+         "unknown", ["SENTINEL:starting", "starting"]),
+    ],
+)
+async def test_restarts_of_the_last_hour_decide_whether_starting_keeps_its_grace(
+    client: AsyncClient, db_session: AsyncSession, test_cert_serial: str, test_cert_pem: str,
+    ages: tuple[timedelta, ...], state: str, reasons: list[str],
+) -> None:
+    tenant, agent = await _setup(db_session, test_cert_serial)
+    await _beat(client, agent, test_cert_pem, _v2(agent_uptime_seconds=100, states={"SENTINEL": ("inactive", "starting")}))
+    await _plant_restarts(db_session, agent, *ages)
+    headers = await _admin_headers(client, db_session, tenant)
+
+    detail = (await client.get(f"/api/v1/dashboard/agents/{agent.id}", headers=headers)).json()
+
+    assert (detail["protection_state"], detail["reason_codes"]) == (state, reasons)
