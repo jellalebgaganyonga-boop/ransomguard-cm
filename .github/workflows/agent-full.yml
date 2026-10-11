@@ -1,0 +1,168 @@
+# RansomGuard-CM — the full agent validation, independent of any developer machine.
+#
+# The CI gates every push with the agent suite minus the Stress category. This workflow
+# runs what the CI leaves out, on a clean Windows runner:
+#   * every test category, Stress included, with the TRX results as an artifact;
+#   * the agent installed as a real Windows service (LocalSystem, started by the Service
+#     Control Manager from C:\Windows\System32): it must start, read its configuration from
+#     its own directory (AGT-SVC-001), deploy its canaries, write its signed audit chain on a
+#     canary modification, and pass --verify-audit-log once stopped. Then it is uninstalled.
+#
+# A developer machine with a third-party antivirus (R12) can no longer block a validation.
+name: Agent full
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_VERSION: '8.0.x'
+
+jobs:
+  all-tests:
+    name: Agent — all test categories (Stress included)
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: agent/src
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Build
+        run: dotnet build RansomGuard.Agent.sln -c Release
+
+      - name: All tests, no filter
+        run: dotnet test RansomGuard.Agent.sln -c Release --no-build --logger "trx;LogFileName=agent-all.trx"
+
+      - name: Count
+        if: always()
+        shell: pwsh
+        run: |
+          $trx = Get-ChildItem -Recurse -Filter 'agent-all.trx' -Path . | Select-Object -First 1
+          if (-not $trx) { Write-Host '::error::no trx file'; exit 1 }
+          [xml]$doc = Get-Content $trx.FullName
+          $c = $doc.TestRun.ResultSummary.Counters
+          $line = "total=$($c.total) executed=$($c.executed) passed=$($c.passed) failed=$($c.failed) notExecuted=$($c.notExecuted)"
+          Write-Host "::notice title=Agent tests (all categories)::$line"
+          "### Agent tests, all categories`n`n$line" >> $env:GITHUB_STEP_SUMMARY
+          $ns = @{t='http://microsoft.com/schemas/VisualStudio/TeamTest/2010'}
+          foreach ($f in (Select-Xml -Xml $doc -Namespace $ns -XPath "//t:UnitTestResult[@outcome='Failed']")) {
+            Write-Host "::error title=$($f.Node.testName)::$(($f.Node.Output.ErrorInfo.Message -replace "`r?`n", ' '))"
+          }
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agent-all-tests
+          path: agent/src/**/TestResults/*.trx
+          retention-days: 14
+
+  service:
+    name: Agent — installed as a real Windows service
+    runs-on: windows-latest
+    env:
+      INSTALL_DIR: C:\RGAgentCI
+      WATCH_DIR: C:\rg-ci-watch
+      SERVICE_NAME: RansomGuardAgentCI
+      DATA_ROOT: C:\ProgramData\RansomGuard-CM
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Publish the service (Release)
+        working-directory: agent/src
+        run: dotnet publish RansomGuard.Agent.Service/RansomGuard.Agent.Service.csproj -c Release -o ${{ env.INSTALL_DIR }}
+
+      - name: Installed configuration
+        shell: pwsh
+        run: |
+          # What install.ps1 writes on a real machine (the GRID address), plus a watch directory
+          # that exists for LocalSystem. Unreachable GRID on purpose: the agent must run without it.
+          New-Item -ItemType Directory -Force -Path $env:WATCH_DIR | Out-Null
+          $path = Join-Path $env:INSTALL_DIR 'appsettings.json'
+          $cfg = Get-Content $path -Raw | ConvertFrom-Json
+          $cfg.Agent.Server | Add-Member -NotePropertyName BaseUrl -NotePropertyValue 'https://grid.ci.invalid' -Force
+          $cfg.Agent.Detection.WatchPaths = @($env:WATCH_DIR)
+          $cfg.Agent.Sentinel.WatchDirectories = @($env:WATCH_DIR)
+          $cfg | ConvertTo-Json -Depth 32 | Set-Content -Path $path -Encoding utf8
+          Get-Content $path | Select-String -Pattern 'BaseUrl|rg-ci-watch|TrustAny'
+
+      - name: Install and start as LocalSystem
+        shell: pwsh
+        run: |
+          $exe = Join-Path $env:INSTALL_DIR 'RansomGuard.Agent.Service.exe'
+          sc.exe create $env:SERVICE_NAME binPath= "`"$exe`"" start= demand obj= LocalSystem
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          sc.exe start $env:SERVICE_NAME
+          $deadline = (Get-Date).AddSeconds(60)
+          do { Start-Sleep 2; $svc = Get-Service $env:SERVICE_NAME } while ($svc.Status -ne 'Running' -and (Get-Date) -lt $deadline)
+          Write-Host "Service status: $($svc.Status)"
+          if ($svc.Status -ne 'Running') { Write-Host '::error::the service did not reach Running'; exit 1 }
+
+      - name: It read its configuration (canaries deployed in the configured directory)
+        shell: pwsh
+        run: |
+          $deadline = (Get-Date).AddSeconds(120)
+          do {
+            Start-Sleep 3
+            if ((Get-Service $env:SERVICE_NAME).Status -ne 'Running') { Write-Host '::error::the service stopped'; exit 1 }
+            $canaries = @(Get-ChildItem $env:WATCH_DIR -File -Filter '0001_*' -ErrorAction SilentlyContinue)
+          } while ($canaries.Count -eq 0 -and (Get-Date) -lt $deadline)
+          $canaries | Format-Table Name, Length -AutoSize | Out-String | Write-Host
+          if ($canaries.Count -eq 0) { Write-Host '::error::no canary in the configured directory'; exit 1 }
+
+      - name: A canary modification writes the signed audit chain
+        shell: pwsh
+        run: |
+          $canary = Get-ChildItem $env:WATCH_DIR -File -Filter '0001_*' | Select-Object -First 1
+          Add-Content -Path $canary.FullName -Value 'modified by the CI service check'
+          Start-Sleep 20
+          Stop-Service $env:SERVICE_NAME -Force
+          $exe = Join-Path $env:INSTALL_DIR 'RansomGuard.Agent.Service.exe'
+          # Run from System32 too: the CLI must also read the configuration of its own directory.
+          Push-Location C:\Windows\System32
+          $out = & $exe --verify-audit-log 2>&1 | Out-String
+          $code = $LASTEXITCODE
+          Pop-Location
+          Write-Host $out
+          Write-Host "exit code: $code"
+          if ($code -ne 0 -or $out -notmatch 'RESULT: PASS' -or $out -notmatch 'Audit log entries read: [1-9]') {
+            Write-Host '::error::the audit chain was not written or does not verify'; exit 1
+          }
+          "### Agent installed as a service`n`n$($out -split "`n" | Select-String 'Database examined|entries read|RESULT')" >> $env:GITHUB_STEP_SUMMARY
+
+      - name: Diagnostics
+        if: always()
+        shell: pwsh
+        run: |
+          Get-Service $env:SERVICE_NAME -ErrorAction SilentlyContinue | Format-List Name, Status, StartType | Out-String | Write-Host
+          Get-EventLog -LogName Application -Newest 30 -ErrorAction SilentlyContinue |
+            Where-Object { $_.Source -match 'RansomGuard|\.NET Runtime|Application Error' } |
+            Format-List TimeGenerated, Source, EntryType, Message | Out-String | Write-Host
+          New-Item -ItemType Directory -Force -Path diag | Out-Null
+          Copy-Item "$env:DATA_ROOT\logs\*" diag -ErrorAction SilentlyContinue
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agent-service-logs
+          path: diag
+          retention-days: 14
+
+      - name: Uninstall
+        if: always()
+        shell: pwsh
+        run: |
+          Stop-Service $env:SERVICE_NAME -Force -ErrorAction SilentlyContinue
+          sc.exe delete $env:SERVICE_NAME
