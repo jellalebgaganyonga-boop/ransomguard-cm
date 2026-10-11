@@ -43,6 +43,31 @@ if (-not $OTP) {
     exit 1
 }
 
+# The service runs these executables as LocalSystem: their folder must not be writable by users.
+# Under %ProgramFiles% it inherits an ACL where BUILTIN\Users can only read and execute; elsewhere
+# (C:\RGAgent, say) it would inherit C:\, where authenticated users can create and modify files --
+# anyone could replace the agent's binaries and run code as LocalSystem (AGT-INST-001).
+# A strict subfolder only: this script deletes $InstallPath before extracting into it.
+$programFiles = [IO.Path]::GetFullPath([Environment]::GetFolderPath('ProgramFiles')).TrimEnd('\')
+$installFull = [IO.Path]::GetFullPath($InstallPath).TrimEnd('\')
+$driveRoot = [IO.Path]::GetPathRoot($installFull).TrimEnd('\')
+$underProgramFiles = $installFull.StartsWith("$programFiles\", [StringComparison]::OrdinalIgnoreCase)
+if ($installFull -ieq $driveRoot -or $installFull -ieq $programFiles) {
+    Write-Host "ERROR: -InstallPath '$InstallPath' is a drive root or %ProgramFiles% itself; this script deletes the" -ForegroundColor Red
+    Write-Host "  installation folder before extracting. Use a folder of its own, e.g. '$programFiles\RansomGuard-CM'." -ForegroundColor Red
+    exit 1
+}
+if (-not $underProgramFiles) {
+    if ($env:DOTNET_ENVIRONMENT -eq 'Development') {
+        Write-Host "WARNING: -InstallPath '$InstallPath' is outside $programFiles -- allowed in Development only." -ForegroundColor Yellow
+    } else {
+        Write-Host "ERROR: -InstallPath '$InstallPath' is outside $programFiles." -ForegroundColor Red
+        Write-Host "  The agent runs as LocalSystem; its folder must inherit the Program Files ACL, where users" -ForegroundColor Red
+        Write-Host "  cannot modify files. Install under '$programFiles\RansomGuard-CM' (the default)." -ForegroundColor Red
+        exit 1
+    }
+}
+
 $ErrorActionPreference = "Stop"
 $AgentVersion = "0.3.0"
 $ServiceName = "RansomGuardAgent"

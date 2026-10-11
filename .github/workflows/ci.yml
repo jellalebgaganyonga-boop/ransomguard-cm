@@ -178,6 +178,17 @@ jobs:
         # they run in the nightly workflow instead.
         run: dotnet test RansomGuard.Agent.sln -c Release --no-build --filter "Category!=Stress" --logger "trx;LogFileName=agent-tests.trx"
 
+      # install.ps1 needs an elevated session: the runner has one, a developer machine may not.
+      - name: Installer guard (Pester)
+        shell: pwsh
+        working-directory: agent
+        run: |
+          if (-not (Get-Module -ListAvailable Pester | Where-Object Version -ge '5.0.0')) {
+            Install-Module Pester -MinimumVersion 5.5.0 -Force -Scope CurrentUser -SkipPublisherCheck
+          }
+          Import-Module Pester -MinimumVersion 5.0.0
+          Invoke-Pester -Path tests -CI -Output Detailed
+
       # `dotnet test` writes failures only to the job log, which needs admin
       # rights to read. Surfacing them as annotations makes a red run
       # diagnosable from the run page (and from the API) by anyone.
