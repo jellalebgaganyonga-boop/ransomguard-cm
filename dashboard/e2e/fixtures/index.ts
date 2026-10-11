@@ -92,7 +92,8 @@ export const MOCK_ALERTS_LIST = {
   limit: 50,
 };
 
-export const MOCK_AGENT = {
+// The verdict the GRID computes (R7): scenario 2 of LOT 2, EXFIL WATCH without administrator rights.
+const MOCK_AGENT_ITEM = {
   id: 'agent-e2e-aaa',
   hostname: 'ws-cardio-01',
   fqdn: 'ws-cardio-01.hopital-yde.cm',
@@ -100,10 +101,42 @@ export const MOCK_AGENT = {
   agent_version: '0.9.0',
   status: 'active',
   last_heartbeat_at: '2026-06-21T11:55:00+00:00',
+  protection_state: 'partial',
+  reason_codes: ['EXFIL_WATCH:inactive:admin_rights_missing'],
+  signal_age_seconds: 30,
+};
+
+const MOCK_MODULE_CHANGED_AT = '2026-06-21T08:00:00+00:00';
+
+/** The agent page (GET /dashboard/agents/{id}): the list item plus its posture. */
+export const MOCK_AGENT = {
+  ...MOCK_AGENT_ITEM,
+  posture: {
+    schema_version: 2,
+    received_at: '2026-06-21T11:55:00+00:00',
+    agent_uptime_seconds: 86_400,
+    threat_intel_version: '2026-06-21-001',
+    last_detection_at: null,
+    system_free_bytes: 64_424_509_440,
+    db_volume_free_bytes: 64_424_509_440,
+    pending_alerts: 0,
+    last_upload_ok_at: '2026-06-21T11:54:00+00:00',
+    last_upload_age_seconds: 60,
+    last_upload_error_code: null,
+    rejected_alerts: null,
+    modules: [
+      { code: 'SENTINEL', state: 'active', reason_code: null, changed_at: MOCK_MODULE_CHANGED_AT },
+      { code: 'ENTROPY', state: 'active', reason_code: null, changed_at: MOCK_MODULE_CHANGED_AT },
+      { code: 'GENEALOGY', state: 'degraded', reason_code: 'attribution_unreliable', changed_at: MOCK_MODULE_CHANGED_AT },
+      { code: 'USB_GUARD', state: 'active', reason_code: null, changed_at: MOCK_MODULE_CHANGED_AT },
+      { code: 'EXFIL_WATCH', state: 'inactive', reason_code: 'admin_rights_missing', changed_at: MOCK_MODULE_CHANGED_AT },
+      { code: 'ANTI_TAMPERING', state: 'inactive', reason_code: 'not_implemented', changed_at: MOCK_MODULE_CHANGED_AT },
+    ],
+  },
 };
 
 export const MOCK_AGENTS_LIST = {
-  items: [MOCK_AGENT],
+  items: [MOCK_AGENT_ITEM],
   total: 1,
   offset: 0,
   limit: 50,

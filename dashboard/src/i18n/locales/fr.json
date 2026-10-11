@@ -400,5 +400,115 @@
     "USB_GUARD": "USB GUARD — supports amovibles",
     "EXFIL_WATCH": "EXFIL WATCH — fuite de données",
     "UNKNOWN": "Module inconnu"
+  },
+  "posture": {
+    "verdict": {
+      "protected": "Protégé",
+      "partial": "Protection partielle",
+      "unprotected": "Non protégé",
+      "unknown": "État inconnu"
+    },
+    "verdictShort": {
+      "protected": "Protégé",
+      "partial": "Partielle",
+      "unprotected": "Non protégé",
+      "unknown": "Inconnu"
+    },
+    "stateLabel": {
+      "active": "Actif",
+      "inactive": "Inactif",
+      "disabled_by_config": "Désactivé (configuration)",
+      "degraded": "Dégradé"
+    },
+    "stateInSentence": {
+      "active": "actif",
+      "inactive": "inactif",
+      "disabled_by_config": "désactivé par la configuration",
+      "degraded": "dégradé",
+      "starting": "en démarrage"
+    },
+    "reason": {
+      "admin_rights_missing": "droits administrateur manquants",
+      "disabled_by_config": "désactivé par la configuration",
+      "init_failed": "échec au démarrage",
+      "stopped_unexpectedly": "arrêt inattendu",
+      "not_implemented": "non implémenté",
+      "attribution_unreliable": "attribution non fiable",
+      "actions_not_implemented": "blocage non implémenté",
+      "starting": "démarrage en cours",
+      "no_watch_directory": "aucun dossier surveillé",
+      "integrity_check_failing": "vérification d'intégrité en échec",
+      "not_reported": "non transmis par l'agent"
+    },
+    "verdictReason": {
+      "never_connected": "Jamais connecté",
+      "agent_update_required": "Agent à mettre à jour — posture non transmise",
+      "starting": "Démarrage en cours",
+      "no_detector_active": "aucun détecteur actif",
+      "transmission_blocked": "transmission des alertes bloquée",
+      "transmission_unknown": "État de la transmission inconnu",
+      "restart_loop": "Redémarrages répétés de l'agent"
+    },
+    "sentence": {
+      "verdictWithReason": "{verdict} — {reason}",
+      "module": "{module} {state}",
+      "moduleWithReason": "{module} {state} : {reason}",
+      "signalLost": "Signal perdu depuis {minutes} min",
+      "noSignalFor": "aucun signal depuis {duration}",
+      "alertsRejected": "alertes rejetées par le serveur",
+      "alertsRejectedCount": "{count, plural, one {# alerte rejetée} other {# alertes rejetées}} par le serveur"
+    },
+    "uploadError": {
+      "NETWORK_UNREACHABLE": "Serveur injoignable",
+      "TIMEOUT": "Délai dépassé",
+      "auth": "Authentification refusée",
+      "http4xx": "Rejeté par le serveur",
+      "http5xx": "Erreur du serveur",
+      "UNKNOWN": "Erreur inconnue"
+    },
+    "duration": {
+      "minutes": "{minutes} min",
+      "hours": "{hours} h {minutes}",
+      "days": "{days} j {hours} h"
+    },
+    "bytes": {
+      "gib": "{value} Go",
+      "mib": "{value} Mo"
+    },
+    "unavailable": "indisponible",
+    "none": "aucune",
+    "noneSinceStart": "aucune depuis le démarrage de l'agent",
+    "section": {
+      "verdict": "Protection",
+      "otherFindings": "Autres constats",
+      "modules": "Modules",
+      "transmission": "Transmission des alertes",
+      "endpoint": "Poste",
+      "noPosture": "Ce poste n'a transmis aucune posture.",
+      "lastPosture": "Dernière posture reçue {when}"
+    },
+    "field": {
+      "module": "Module",
+      "state": "État",
+      "reason": "Raison",
+      "since": "Depuis",
+      "pendingAlerts": "Alertes non transmises",
+      "lastUpload": "Dernière transmission réussie",
+      "lastUploadError": "Dernière erreur",
+      "rejectedAlerts": "Alertes rejetées par le serveur (24 h)",
+      "agentVersion": "Version de l'agent",
+      "osVersion": "Version de Windows",
+      "systemFree": "Espace libre — volume système",
+      "dbFree": "Espace libre — volume de la base",
+      "lastDetection": "Dernière détection",
+      "threatIntel": "Renseignement sur les menaces",
+      "ago": "il y a {duration}",
+      "rawCode": "Code : {code}"
+    },
+    "list": {
+      "protection": "Protection",
+      "signalLostCount": "{count, plural, one {# poste sans signal depuis plus d'1 heure} other {# postes sans signal depuis plus d'1 heure}}"
+    },
+    "locale": "fr-FR"
   }
 }

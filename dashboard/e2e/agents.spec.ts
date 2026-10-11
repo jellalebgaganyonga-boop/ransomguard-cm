@@ -105,6 +105,54 @@ test.describe('Agent detail — tenant_admin isolate command', () => {
   });
 });
 
+test.describe('Agent detail — posture (R8)', () => {
+  test('the banner composes the whole sentence; product names, six entries', async ({ page }) => {
+    await setupMocks(page, 'security_analyst');
+    await loginAs(page, 'security_analyst');
+    await navigateTo(page, '/agents/agent-e2e-aaa');
+
+    await expect(
+      page.getByRole('heading', {
+        name: 'Protection partielle — EXFIL WATCH inactif : droits administrateur manquants',
+      }),
+    ).toBeVisible();
+    for (const name of ['SENTINEL', 'ENTROPY', 'GENEALOGY', 'USB GUARD', 'EXFIL WATCH', 'ANTI-TAMPERING']) {
+      await expect(page.getByRole('cell', { name, exact: true })).toBeVisible();
+    }
+    await expect(page.getByText('Alertes non transmises')).toBeVisible();
+  });
+
+  // WCAG 2.2 AA contrast of every banner colour, not only the orange one of MOCK_AGENT.
+  for (const [state, reasons] of [
+    ['unprotected', ['SENTINEL:inactive:stopped_unexpectedly', 'restart_loop']],
+    ['unknown', ['never_connected']],
+    ['protected', []],
+  ] as const) {
+    test(`@a11y accessibility: agent detail, ${state} banner`, async ({ page }) => {
+      await setupMocks(page, 'tenant_admin');
+      await page.route('**/api/v1/dashboard/agents/agent-e2e-aaa', (r) =>
+        r.fulfill({ status: 200, json: { ...MOCK_AGENT, protection_state: state, reason_codes: reasons } }));
+      await loginAs(page, 'tenant_admin');
+      await navigateTo(page, '/agents/agent-e2e-aaa');
+      await expect(page.getByTestId('posture-banner')).toHaveAttribute('data-state', state);
+
+      const results = await new AxeBuilder({ page }).analyze();
+      const critical = results.violations.filter(
+        (v) => v.impact === 'critical' || v.impact === 'serious',
+      );
+      expect(critical, `Critical/serious a11y violations: ${JSON.stringify(critical, null, 2)}`).toEqual([]);
+    });
+  }
+
+  test('the list shows the verdict', async ({ page }) => {
+    await setupMocks(page, 'tenant_admin');
+    await loginAs(page, 'tenant_admin');
+    await navigateTo(page, '/agents');
+
+    await expect(page.getByText('Partielle', { exact: true })).toBeVisible();
+  });
+});
+
 test.describe('Agent detail — security_analyst RBAC (AC4.1.3)', () => {
   test('NO isolate command button visible for analyst', async ({ page }) => {
     await setupMocks(page, 'security_analyst');

@@ -20,12 +20,8 @@ import { useMe, resolvePrimaryRole } from '@/hooks/use-me';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { CommandModal } from '@/components/agents/command-modal';
-import {
-  agentStatusVariant,
-  heartbeatColor,
-  HEARTBEAT_COLOR_CLASS,
-  isAgentStale,
-} from '@/lib/agent-status';
+import { agentStatusVariant, isSignalLostRed, protectionVariant } from '@/lib/agent-status';
+import { verdictSentence } from '@/lib/agent-posture';
 import { formatDistanceToNow } from '@/lib/format-date';
 import type { AgentStatus, AgentItem } from '@/api/agents';
 
@@ -89,13 +85,15 @@ export function AgentsListPage() {
   const totalPages = Math.ceil(total / PAGE_SIZE);
   const currentPage = Math.floor(offset / PAGE_SIZE) + 1;
 
-  const staleCount = agents.filter((a) => isAgentStale(a.last_heartbeat_at)).length;
+  // The server's "no signal for more than 60 min" (unprotected, signal_lost): no console threshold.
+  const staleCount = agents.filter(isSignalLostRed).length;
 
   const exportCsv = () => {
     if (!agents.length) return;
-    const headers = ['Hostname', 'FQDN', 'OS', 'Version', 'Status', 'Last Heartbeat'];
+    const headers = ['Hostname', 'FQDN', 'OS', 'Version', 'Status', 'Last Heartbeat', 'Protection', 'Protection detail'];
     const rows = agents.map((a) => [
       a.hostname, a.fqdn, a.os_version, a.agent_version, a.status, a.last_heartbeat_at ?? '',
+      a.protection_state, verdictSentence(t, a),
     ]);
     const csv = [headers, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -141,7 +139,7 @@ export function AgentsListPage() {
         <div className="mb-4 flex items-start gap-2 rounded-lg border border-severity-medium-border bg-severity-medium-subtle px-4 py-3 text-sm text-text-primary">
           <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden="true" />
           <span>
-            {t('dashboard.ops.staleWarning', { count: staleCount })}
+            {t('posture.list.signalLostCount', { count: staleCount })}
           </span>
         </div>
       )}
@@ -189,6 +187,7 @@ export function AgentsListPage() {
                   <th className="px-4 py-3">{t('agents.hostname', 'Hôte')}</th>
                   <th className="px-4 py-3">{t('agents.os', 'OS')}</th>
                   <th className="px-4 py-3">{t('agents.list.version', 'Version')}</th>
+                  <th className="px-4 py-3">{t('posture.list.protection')}</th>
                   <th className="px-4 py-3">{t('agents.heartbeat', 'Heartbeat')}</th>
                   <th className="px-4 py-3">{t('agents.status', 'Statut')}</th>
                   <th className="px-4 py-3 text-right">{t('alerts.list.col.actions', 'Actions')}</th>
@@ -196,7 +195,6 @@ export function AgentsListPage() {
               </thead>
               <tbody className="divide-y divide-border-subtle">
                 {agents.map((agent) => {
-                  const hbColor = heartbeatColor(agent.last_heartbeat_at);
                   return (
                     <tr key={agent.id} className="hover:bg-surface-subtle">
                       <td className="px-4 py-3">
@@ -210,8 +208,16 @@ export function AgentsListPage() {
                         {agent.agent_version}
                       </td>
                       <td className="px-4 py-3">
+                        {/* Protection: the server's verdict, coloured; the sentence on hover. */}
+                        <span title={verdictSentence(t, agent)}>
+                          <Badge variant={protectionVariant(agent.protection_state)}>
+                            {t(`posture.verdictShort.${agent.protection_state}`)}
+                          </Badge>
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
                         {agent.last_heartbeat_at ? (
-                          <span className={HEARTBEAT_COLOR_CLASS[hbColor]}>
+                          <span className="text-text-primary">
                             {formatDistanceToNow(agent.last_heartbeat_at)}
                           </span>
                         ) : (

@@ -12,6 +12,9 @@
  *   NO "justification" field — reason goes in parameters.reason.
  *
  *   AgentItem does NOT expose enrolled_at (model has it, schema omits it — GAP-01).
+ *
+ *   Since R7 every agent carries protection_state / reason_codes / signal_age_seconds, and the
+ *   agent page (GET /dashboard/agents/{id}) its posture.
  */
 
 import { z } from 'zod';
@@ -27,6 +30,15 @@ export const AgentStatusSchema = z.enum([
 ]);
 export type AgentStatus = z.infer<typeof AgentStatusSchema>;
 
+// ── Protection verdict (computed by the GRID at read time) ──
+//
+// The rule lives in one place, the server (grid services/agent_posture.py): the console only
+// translates and colours. reason_codes, worst first, read either a verdict-level code
+// ("signal_lost", "transmission_blocked", ...) or "<MODULE>:<state>[:<reason_code>]".
+
+export const ProtectionStateSchema = z.enum(['protected', 'partial', 'unprotected', 'unknown']);
+export type ProtectionState = z.infer<typeof ProtectionStateSchema>;
+
 // ── AgentItem ───────────────────────────────────────────────
 
 export const AgentItemSchema = z.object({
@@ -37,8 +49,44 @@ export const AgentItemSchema = z.object({
   agent_version: z.string(),
   status: AgentStatusSchema,
   last_heartbeat_at: z.string().nullable(),
+  protection_state: ProtectionStateSchema.default('unknown'),
+  reason_codes: z.array(z.string()).default([]),
+  signal_age_seconds: z.number().int().nonnegative().nullable().default(null),
 });
 export type AgentItem = z.infer<typeof AgentItemSchema>;
+
+// ── Posture (agent page only) ───────────────────────────────
+// Null numbers mean "unavailable" (the agent could not measure them), never 0.
+
+export const ModuleStatusSchema = z.object({
+  code: z.string(),
+  state: z.string(),
+  reason_code: z.string().nullable(),
+  changed_at: z.string(),
+});
+export type ModuleStatus = z.infer<typeof ModuleStatusSchema>;
+
+export const AgentPostureSchema = z.object({
+  schema_version: z.number().int(),
+  received_at: z.string(),
+  agent_uptime_seconds: z.number().int().nonnegative(),
+  threat_intel_version: z.string().nullable(),
+  last_detection_at: z.string().nullable(),
+  system_free_bytes: z.number().int().nonnegative().nullable(),
+  db_volume_free_bytes: z.number().int().nonnegative().nullable(),
+  pending_alerts: z.number().int().nonnegative().nullable(),
+  last_upload_ok_at: z.string().nullable(),
+  last_upload_age_seconds: z.number().int().nonnegative().nullable(),
+  last_upload_error_code: z.string().nullable(),
+  rejected_alerts: z.number().int().nonnegative().nullable(),
+  modules: z.array(ModuleStatusSchema),
+});
+export type AgentPosture = z.infer<typeof AgentPostureSchema>;
+
+export const AgentDetailSchema = AgentItemSchema.extend({
+  posture: AgentPostureSchema.nullable().default(null),
+});
+export type AgentDetail = z.infer<typeof AgentDetailSchema>;
 
 export const PaginatedAgentResponseSchema = z.object({
   items: z.array(AgentItemSchema),
@@ -65,9 +113,9 @@ export async function fetchAgentList(
 
 // ── Detail ──────────────────────────────────────────────────
 
-export async function fetchAgentDetail(id: string): Promise<AgentItem> {
+export async function fetchAgentDetail(id: string): Promise<AgentDetail> {
   const res = await apiClient.get(`/dashboard/agents/${id}`);
-  return AgentItemSchema.parse(res.data);
+  return AgentDetailSchema.parse(res.data);
 }
 
 // ── CommandStatus — PascalCase matching backend enum ────────

@@ -21,6 +21,15 @@ function useTenantId(): string | undefined {
   return me?.tenant.id;
 }
 
+/**
+ * Every 30 s, and only while the tab is visible: in SaaS every console left open and forgotten
+ * would otherwise keep hitting the server (LOT2_DECISIONS_ET_CORRECTIFS.md, point 9).
+ */
+export const AGENT_REFRESH = {
+  refetchInterval: 30_000,
+  refetchIntervalInBackground: false,
+} as const;
+
 // ── Agent list (US4.1, AC4.4.2: 30s polling) ───────────────
 
 export function useAgentList(params: AgentListParams = {}) {
@@ -29,7 +38,7 @@ export function useAgentList(params: AgentListParams = {}) {
     queryKey: ['agents', 'list', tenantId, params],
     queryFn: () => fetchAgentList(params),
     enabled: !!tenantId,
-    refetchInterval: 30_000,
+    ...AGENT_REFRESH,
     staleTime: 25_000,
   });
 }
@@ -42,7 +51,8 @@ export function useAgentDetail(id: string | undefined) {
     queryKey: ['agents', 'detail', tenantId, id],
     queryFn: () => fetchAgentDetail(id!),
     enabled: !!tenantId && !!id,
-    staleTime: 30_000,
+    ...AGENT_REFRESH,
+    staleTime: 25_000,
     retry: (count, err) => {
       const status = (err as { response?: { status?: number } })?.response?.status;
       if (status === 404) return false;

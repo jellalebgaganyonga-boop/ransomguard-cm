@@ -400,5 +400,115 @@
     "USB_GUARD": "USB GUARD — removable media",
     "EXFIL_WATCH": "EXFIL WATCH — data exfiltration",
     "UNKNOWN": "Unknown module"
+  },
+  "posture": {
+    "verdict": {
+      "protected": "Protected",
+      "partial": "Partial protection",
+      "unprotected": "Not protected",
+      "unknown": "Unknown status"
+    },
+    "verdictShort": {
+      "protected": "Protected",
+      "partial": "Partial",
+      "unprotected": "Not protected",
+      "unknown": "Unknown"
+    },
+    "stateLabel": {
+      "active": "Active",
+      "inactive": "Inactive",
+      "disabled_by_config": "Disabled (configuration)",
+      "degraded": "Degraded"
+    },
+    "stateInSentence": {
+      "active": "active",
+      "inactive": "inactive",
+      "disabled_by_config": "disabled by configuration",
+      "degraded": "degraded",
+      "starting": "starting"
+    },
+    "reason": {
+      "admin_rights_missing": "administrator rights missing",
+      "disabled_by_config": "disabled by configuration",
+      "init_failed": "failed to start",
+      "stopped_unexpectedly": "stopped unexpectedly",
+      "not_implemented": "not implemented",
+      "attribution_unreliable": "attribution unreliable",
+      "actions_not_implemented": "blocking not implemented",
+      "starting": "starting",
+      "no_watch_directory": "no folder being watched",
+      "integrity_check_failing": "integrity check failing",
+      "not_reported": "not reported by the agent"
+    },
+    "verdictReason": {
+      "never_connected": "Never connected",
+      "agent_update_required": "Agent update required — no posture reported",
+      "starting": "Starting",
+      "no_detector_active": "no detector active",
+      "transmission_blocked": "alert transmission blocked",
+      "transmission_unknown": "Transmission status unknown",
+      "restart_loop": "Agent restarting repeatedly"
+    },
+    "sentence": {
+      "verdictWithReason": "{verdict} — {reason}",
+      "module": "{module} {state}",
+      "moduleWithReason": "{module} {state}: {reason}",
+      "signalLost": "Signal lost {minutes} min ago",
+      "noSignalFor": "no signal for {duration}",
+      "alertsRejected": "alerts rejected by the server",
+      "alertsRejectedCount": "{count, plural, one {# alert} other {# alerts}} rejected by the server"
+    },
+    "uploadError": {
+      "NETWORK_UNREACHABLE": "Server unreachable",
+      "TIMEOUT": "Timed out",
+      "auth": "Authentication refused",
+      "http4xx": "Rejected by the server",
+      "http5xx": "Server error",
+      "UNKNOWN": "Unknown error"
+    },
+    "duration": {
+      "minutes": "{minutes} min",
+      "hours": "{hours} h {minutes}",
+      "days": "{days} d {hours} h"
+    },
+    "bytes": {
+      "gib": "{value} GB",
+      "mib": "{value} MB"
+    },
+    "unavailable": "unavailable",
+    "none": "none",
+    "noneSinceStart": "none since the agent started",
+    "section": {
+      "verdict": "Protection",
+      "otherFindings": "Other findings",
+      "modules": "Modules",
+      "transmission": "Alert transmission",
+      "endpoint": "Endpoint",
+      "noPosture": "This endpoint has not reported any posture.",
+      "lastPosture": "Last posture received {when}"
+    },
+    "field": {
+      "module": "Module",
+      "state": "State",
+      "reason": "Reason",
+      "since": "Since",
+      "pendingAlerts": "Alerts not transmitted",
+      "lastUpload": "Last successful transmission",
+      "lastUploadError": "Last error",
+      "rejectedAlerts": "Alerts rejected by the server (24 h)",
+      "agentVersion": "Agent version",
+      "osVersion": "Windows version",
+      "systemFree": "Free space — system volume",
+      "dbFree": "Free space — database volume",
+      "lastDetection": "Last detection",
+      "threatIntel": "Threat intelligence",
+      "ago": "{duration} ago",
+      "rawCode": "Code: {code}"
+    },
+    "list": {
+      "protection": "Protection",
+      "signalLostCount": "{count, plural, one {# endpoint without a signal for over 1 hour} other {# endpoints without a signal for over 1 hour}}"
+    },
+    "locale": "en-GB"
   }
 }

@@ -1,27 +1,21 @@
 /**
- * Agent status utilities — pure functions, no React.
+ * Agent status utilities — colours only, pure functions, no React.
  *
- * AgentStatus is lowercase (provisioned/active/disconnected/decommissioned).
- * Heartbeat freshness is separate from DB status: an agent can be "active"
- * in DB but have a stale heartbeat if the connection dropped recently.
+ * AgentStatus is lowercase (provisioned/active/disconnected/decommissioned): the enrolment
+ * lifecycle, not protection.
  *
- * AC4.4.1: heartbeat freshness thresholds
- *   < 5 min  → green (fresh)
- *   5–60 min → yellow (warning)
- *   > 60 min → red (stale)
- *   null     → gray (never reported)
+ * Protection is decided by the GRID at read time (protection_state + reason_codes, grid
+ * services/agent_posture.py), with the one definition of the 5 and 60 min thresholds. The
+ * console used to recompute heartbeat freshness here with its own thresholds -- and disagreed
+ * with the server at 5 min exactly. It now only colours what the server says
+ * (LOT2_CONTRAT_V2_VERDICT.md, arbitrage 2: "agent-status.ts ne garde que la couleur").
  */
 
-import type { AgentStatus } from '@/api/agents';
+import type { AgentItem, AgentStatus, ProtectionState } from '@/api/agents';
 
-/** Append Z if no tz indicator — FastAPI returns naive UTC datetimes. */
-function parseUtc(s: string): Date {
-  return new Date(
-    s.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(s) ? s : s + 'Z'
-  );
-}
+type BadgeVariant = 'critical' | 'high' | 'medium' | 'low' | 'info' | 'neutral';
 
-// ── Status badge variant ────────────────────────────────────
+// ── Enrolment status badge ──────────────────────────────────
 
 /** Maps AgentStatus to Badge component variant. */
 export function agentStatusVariant(
@@ -35,29 +29,30 @@ export function agentStatusVariant(
   }
 }
 
-// ── Heartbeat freshness ─────────────────────────────────────
+// ── Protection verdict colour ───────────────────────────────
 
-export type HeartbeatColor = 'success' | 'warning' | 'error' | 'neutral';
-
-/** Returns a Tailwind text color class based on heartbeat age (AC4.4.1). */
-export function heartbeatColor(lastHeartbeatAt: string | null): HeartbeatColor {
-  if (!lastHeartbeatAt) return 'neutral';
-  const ageMs = Date.now() - parseUtc(lastHeartbeatAt).getTime();
-  const ageMins = ageMs / 60_000;
-  if (ageMins < 5)  return 'success';
-  if (ageMins < 60) return 'warning';
-  return 'error';
+/** protected green, partial orange, unprotected red, unknown grey (decision 1 of LOT 2). */
+export function protectionVariant(state: ProtectionState): BadgeVariant {
+  switch (state) {
+    case 'protected':   return 'low';
+    case 'partial':     return 'high';
+    case 'unprotected': return 'critical';
+    case 'unknown':     return 'neutral';
+  }
 }
 
-export const HEARTBEAT_COLOR_CLASS: Record<HeartbeatColor, string> = {
-  success: 'text-success',
-  warning: 'text-warning',
-  error:   'text-error',
-  neutral: 'text-text-tertiary',
+/** Banner background and border, per verdict (contrast checked by the axe scans of the E2E suite). */
+export const PROTECTION_BANNER_CLASS: Record<ProtectionState, string> = {
+  protected:   'border-severity-low-border bg-severity-low-subtle',
+  partial:     'border-severity-high-border bg-severity-high-subtle',
+  unprotected: 'border-severity-critical-border bg-severity-critical-subtle',
+  unknown:     'border-border-default bg-surface-subtle',
 };
 
-/** True if agent has not sent a heartbeat in over 60 minutes (AC4.4.3). */
-export function isAgentStale(lastHeartbeatAt: string | null): boolean {
-  if (!lastHeartbeatAt) return true;
-  return Date.now() - parseUtc(lastHeartbeatAt).getTime() > 60 * 60 * 1000;
+/**
+ * Endpoints the server reports silent for more than 60 min (verdict unprotected because of
+ * signal_lost). Replaces the console's own heartbeat threshold.
+ */
+export function isSignalLostRed(agent: Pick<AgentItem, 'protection_state' | 'reason_codes'>): boolean {
+  return agent.protection_state === 'unprotected' && agent.reason_codes.includes('signal_lost');
 }

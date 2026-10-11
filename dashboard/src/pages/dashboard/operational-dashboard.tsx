@@ -9,7 +9,7 @@
 // AC4.4.3: stale agent warning banner (>= 1 agent offline > 60min)
 //
 // BUG-01 fix: offline_agents/stale_agents don't exist in MetricsSummary.
-//   Stale count derived from agentList via isAgentStale() (last 10 agents).
+//   Stale count: agents the GRID reports silent for > 60 min (isSignalLostRed, last 10 agents).
 // BUG-02 fix: AlertSummary/AgentSummary from dashboard.ts removed.
 //   Using AlertListItem from alerts.ts and AgentItem from agents.ts.
 //   agent_hostname → alert_type, module_name → alert_type, os_info → os_version.
@@ -24,7 +24,7 @@ import { AlertTriangle, ExternalLink } from 'lucide-react';
 import { SeverityBadge } from '@/components/ui/severity-badge';
 import { Button } from '@/components/ui/button';
 import { useMetricsSummary, useLiveAlerts, useAgents } from '@/hooks/use-dashboard';
-import { isAgentStale } from '@/lib/agent-status';
+import { isSignalLostRed } from '@/lib/agent-status';
 import { formatDistanceToNow } from '@/lib/format-date';
 import type { AlertListParams } from '@/api/alerts';
 import type { AgentItem } from '@/api/agents';
@@ -105,9 +105,10 @@ export function OperationalDashboard() {
   const agentList = agents.data?.items ?? [];
   const alertList = liveAlerts.data?.items ?? [];
 
-  // AC4.4.3: stale warning — derived from agentList (top 10), isAgentStale checks >60 min
+  // AC4.4.3: stale warning — derived from agentList (top 10): the server's verdict (unprotected,
+  // signal_lost after 60 min), never a console threshold.
   // BUG-01 fix: offline_agents/stale_agents don't exist in MetricsSummary
-  const staleAgents = agentList.filter((a) => isAgentStale(a.last_heartbeat_at));
+  const staleAgents = agentList.filter(isSignalLostRed);
   const hasStaleAgents = staleAgents.length > 0;
   const staleCount = staleAgents.length;
   // total_agents - active_agents gives the "not active" count (disconnected + decommissioned + provisioned)

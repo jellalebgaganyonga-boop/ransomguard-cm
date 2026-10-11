@@ -10,7 +10,9 @@
  * AC4.3.1: Isolate button (tenant_admin only), CommandModal
  * AC4.3.2: no Isolate button for analyst / auditor
  * AC4.3.4: last issued command status displayed (local state — no GET /commands endpoint)
- * AC4.4.1: heartbeat freshness chip (colored by age)
+ * R8: the posture section (verdict banner, modules, transmission, endpoint), refreshed every
+ *     30 s while the tab is visible. The heartbeat age is shown as is: its colour is the
+ *     server's verdict, never a console threshold.
  */
 
 import { useState } from 'react';
@@ -24,11 +26,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { SeverityBadge } from '@/components/ui/severity-badge';
 import { CommandModal } from '@/components/agents/command-modal';
-import {
-  agentStatusVariant,
-  heartbeatColor,
-  HEARTBEAT_COLOR_CLASS,
-} from '@/lib/agent-status';
+import { AgentPostureSection } from '@/components/agents/agent-posture-section';
+import { agentStatusVariant } from '@/lib/agent-status';
 import { formatDistanceToNow, formatDateTime } from '@/lib/format-date';
 import type { CommandItem } from '@/api/agents';
 
@@ -88,8 +87,6 @@ export function AgentDetailPage() {
   if (is404 || !agent) {
     return <AgentNotFound />;
   }
-
-  const hbColor = heartbeatColor(agent.last_heartbeat_at);
 
   const TABS: Array<{ id: Tab; label: string }> = [
     { id: 'overview', label: t('agents.detail.tabOverview', 'Vue d\'ensemble') },
@@ -154,7 +151,7 @@ export function AgentDetailPage() {
             <span className="text-[10px] font-semibold uppercase text-text-secondary">
               {t('agents.heartbeat', 'Heartbeat')}
             </span>
-            <p className={`mt-0.5 text-sm font-semibold ${HEARTBEAT_COLOR_CLASS[hbColor]}`}>
+            <p className="mt-0.5 text-sm font-semibold text-text-primary">
               {agent.last_heartbeat_at
                 ? formatDistanceToNow(agent.last_heartbeat_at)
                 : t('agents.detail.neverReported', 'Jamais')}
@@ -179,6 +176,11 @@ export function AgentDetailPage() {
             </span>
           </div>
         )}
+      </div>
+
+      {/* R8: is this endpoint protected, why not, did everything arrive? */}
+      <div className="mb-6">
+        <AgentPostureSection agent={agent} />
       </div>
 
       {/* Tabs */}
