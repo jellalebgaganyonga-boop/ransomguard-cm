@@ -19,6 +19,7 @@ using RansomGuard.Agent.Service;
 using Serilog;
 using Serilog.Events;
 using Serilog.Formatting.Compact;
+using SecurityIdentifier = System.Security.Principal.SecurityIdentifier;
 
 // Bootstrap logger for startup errors before host is built
 Log.Logger = new LoggerConfiguration()
@@ -86,6 +87,14 @@ try
     if (agentConfig.Server.TrustAnyCertificate)
     {
         Log.Warning(ServerTlsPolicy.ActiveWarning);
+    }
+
+    // AGT-KEY-001: close the data directories (database, keys, logs) to SYSTEM and Administrators
+    // before anything opens or creates a file there; a protection left open refuses the start.
+    if (!ProtectAgentData(agentConfig, builder.Environment.EnvironmentName))
+    {
+        Environment.ExitCode = 1;
+        return;
     }
 
     // Enable running as a Windows Service
@@ -224,9 +233,9 @@ static void EnsureDatabase(IServiceProvider services)
 /// first use); if that fails, the failure must never hide the message that explains why the
 /// agent refuses to start.
 /// </summary>
-static void ReportStartupRefusal(IReadOnlyList<string> errors)
+static void ReportStartupRefusal(IReadOnlyList<string> errors, string reason = "its configuration is invalid")
 {
-    string message = "RansomGuard-CM Agent refuses to start: its configuration is invalid."
+    string message = $"RansomGuard-CM Agent refuses to start: {reason}."
         + Environment.NewLine
         + string.Join(Environment.NewLine, errors.Select(e => "  - " + e));
 
@@ -246,6 +255,42 @@ static void ReportStartupRefusal(IReadOnlyList<string> errors)
             Console.Error.WriteLine($"(Windows Event Log not written: {ex.Message})");
         }
     }
+}
+
+/// <summary>
+/// AGT-KEY-001: closes the agent's data directories and verifies them. A directory that is still
+/// open after the attempt is a refusal: a security agent never runs with its keys readable by
+/// every local account. In Development only, the account running the agent keeps access, with a
+/// Warning at every start.
+/// </summary>
+static bool ProtectAgentData(AgentConfiguration config, string environmentName)
+{
+    using var loggerFactory = new Serilog.Extensions.Logging.SerilogLoggerFactory(Log.Logger);
+    SecurityIdentifier account = System.Security.Principal.WindowsIdentity.GetCurrent().User
+        ?? throw new InvalidOperationException("The account running the agent has no SID.");
+    DataProtectionPolicy policy = DataProtectionPolicy.For(environmentName, account);
+
+    DataProtectionResult result = AgentDataProtection.Protect(
+        config, policy, new DaclEnforcer(loggerFactory.CreateLogger<DaclEnforcer>()));
+    if (result.Errors.Count > 0)
+    {
+        // One line per entry can mean hundreds of log files: the first 20, then the count.
+        const int shown = 20;
+        IReadOnlyList<string> lines = result.Errors.Count <= shown
+            ? result.Errors
+            : [.. result.Errors.Take(shown), $"... and {result.Errors.Count - shown} more"];
+        ReportStartupRefusal(lines, "its data directories cannot be closed to SYSTEM and Administrators");
+        return false;
+    }
+
+    if (policy.AddsDevelopmentAccount)
+    {
+        Log.Warning("Development: the account {Account} has full control of the agent's data directories {Roots}. "
+            + "Never in Production, where only SYSTEM and Administrators do.",
+            account.Translate(typeof(System.Security.Principal.NTAccount)).Value, result.Roots);
+    }
+
+    return true;
 }
 
 /// <summary>

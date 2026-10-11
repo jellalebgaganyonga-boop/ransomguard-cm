@@ -17,6 +17,15 @@ directory (`AgentHost`): a Windows service starts in `C:\Windows\System32`. A mi
 `appsettings.json` there is a refusal, naming the path it looked at — the agent never starts
 on default values or on environment variables alone.
 
+At every start, before anything opens a file there, the agent **closes its data directories**
+(`AgentDataProtection`, AGT-KEY-001): the whole `%ProgramData%\RansomGuard-CM` tree (database,
+keys, logs), plus any configured data directory outside it, gets a protected DACL granting
+SYSTEM and Administrators only, inheritance cut, an allowed owner, no reparse point followed.
+The result is verified; a tree it cannot close is a refusal to start (exit code 1), never a
+protection left open. A configured data directory that is a drive root or a shared system
+folder is refused. In `Development` only, the account running the agent keeps full control,
+with a Warning at every start; the agent must otherwise run elevated or as LocalSystem.
+
 - **`Agent:Server:BaseUrl` has no default** in the shipped `appsettings.json`: an agent
   without it refuses to start and names the missing setting. The installer
   (`install.ps1`) writes it on the installed machine.

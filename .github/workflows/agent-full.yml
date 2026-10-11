@@ -16,6 +16,9 @@ on:
   workflow_dispatch:
   pull_request:
     branches: [main]
+  # A review branch is validated in full before sprint8/recovery fast-forwards onto it.
+  push:
+    branches: ['review/**']
 
 permissions:
   contents: read
@@ -115,6 +118,17 @@ jobs:
           $cfg | ConvertTo-Json -Depth 32 | Set-Content -Path $path -Encoding utf8
           Get-Content $path | Select-String -Pattern 'BaseUrl|rg-ci-watch|TrustAny'
 
+      - name: An existing installation, left open (AGT-KEY-001, before)
+        shell: pwsh
+        run: |
+          # What every installation had before AGT-KEY-001: the data root inheriting
+          # BUILTIN\Users read from C:\ProgramData, with a key file in it.
+          New-Item -ItemType Directory -Force -Path "$env:DATA_ROOT\keys" | Out-Null
+          Set-Content -Path "$env:DATA_ROOT\keys\legacy.key" -Value 'legacy key material'
+          icacls $env:DATA_ROOT
+          icacls "$env:DATA_ROOT\keys"
+          icacls "$env:DATA_ROOT\keys\legacy.key"
+
       - name: Install and start as LocalSystem
         shell: pwsh
         run: |
@@ -126,6 +140,30 @@ jobs:
           do { Start-Sleep 2; $svc = Get-Service $env:SERVICE_NAME } while ($svc.Status -ne 'Running' -and (Get-Date) -lt $deadline)
           Write-Host "Service status: $($svc.Status)"
           if ($svc.Status -ne 'Running') { Write-Host '::error::the service did not reach Running'; exit 1 }
+
+      - name: Its data directories are closed to SYSTEM and Administrators (AGT-KEY-001, after)
+        shell: pwsh
+        run: |
+          icacls $env:DATA_ROOT
+          foreach ($sub in 'keys', 'data', 'logs') { if (Test-Path "$env:DATA_ROOT\$sub") { icacls "$env:DATA_ROOT\$sub" } }
+          icacls "$env:DATA_ROOT\keys\legacy.key"
+
+          # Production: nobody but SYSTEM (S-1-5-18) and Administrators (S-1-5-32-544), on every entry.
+          $allowed = 'S-1-5-18', 'S-1-5-32-544'
+          $bad = @()
+          if (-not (Get-Acl $env:DATA_ROOT).AreAccessRulesProtected) { $bad += "$env:DATA_ROOT still inherits from C:\ProgramData" }
+          foreach ($item in @(Get-Item $env:DATA_ROOT -Force) + @(Get-ChildItem $env:DATA_ROOT -Recurse -Force)) {
+            $acl = Get-Acl $item.FullName
+            foreach ($rule in $acl.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])) {
+              if ($rule.AccessControlType -eq 'Allow' -and $allowed -notcontains $rule.IdentityReference.Value) {
+                $bad += "$($item.FullName): grants $($rule.IdentityReference.Value) $($rule.FileSystemRights)"
+              }
+            }
+            $owner = $acl.GetOwner([System.Security.Principal.SecurityIdentifier]).Value
+            if ($allowed -notcontains $owner) { $bad += "$($item.FullName): owned by $owner" }
+          }
+          if ($bad.Count -gt 0) { $bad | ForEach-Object { Write-Host "::error::$_" }; exit 1 }
+          Write-Host "Closed: every entry under $env:DATA_ROOT grants SYSTEM and Administrators only."
 
       - name: It read its configuration (canaries deployed in the configured directory)
         shell: pwsh
