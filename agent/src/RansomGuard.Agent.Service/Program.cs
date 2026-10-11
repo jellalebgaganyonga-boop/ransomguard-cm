@@ -65,13 +65,15 @@ try
 
     Log.Information("RansomGuard-CM Agent starting up");
 
-    var builder = Host.CreateApplicationBuilder(args);
-    Log.Information("Host environment: {Environment}", builder.Environment.EnvironmentName);
+    // Rooted at the executable's directory: a Windows service starts in System32 (AGT-SVC-001).
+    var builder = AgentHost.CreateBuilder(args);
+    Log.Information("Host environment: {Environment}, content root: {ContentRoot}",
+        builder.Environment.EnvironmentName, builder.Environment.ContentRootPath);
 
     // Validate the configuration ONCE, before anything consumes it (logging, services,
     // database): everything below reads this validated object, never raw IConfiguration.
-    AgentConfigurationLoadResult load = AgentConfigurationLoader.Load(
-        builder.Configuration, builder.Environment.EnvironmentName);
+    // A missing appsettings.json is a refusal, never a start on default values.
+    AgentConfigurationLoadResult load = AgentHost.LoadConfiguration(builder);
     if (load.Configuration is null)
     {
         ReportStartupRefusal(load.Errors);
@@ -252,14 +254,9 @@ static void ReportStartupRefusal(IReadOnlyList<string> errors)
 /// </summary>
 static AgentConfiguration? LoadCliConfiguration()
 {
-    var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
-    {
-        Args = [],
-        ContentRootPath = AppContext.BaseDirectory,
-    });
+    var builder = AgentHost.CreateBuilder([]);
 
-    AgentConfigurationLoadResult load = AgentConfigurationLoader.Load(
-        builder.Configuration, builder.Environment.EnvironmentName);
+    AgentConfigurationLoadResult load = AgentHost.LoadConfiguration(builder);
     if (load.Configuration is null)
     {
         ReportStartupRefusal(load.Errors);
