@@ -1,9 +1,11 @@
 """Alert ingestion endpoints — mTLS required."""
 
 from datetime import UTC, datetime
-from uuid import uuid4
+from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ransomguard_grid.api.v1.dependencies.auth import get_authenticated_agent
@@ -28,6 +30,78 @@ from ransomguard_grid.services.notification_queue import NotificationQueue, job_
 
 logger = get_logger("alerts")
 router = APIRouter(prefix="/agents/{agent_id}", tags=["alerts"])
+
+_UNMAPPED_COMPONENT = "alert-ingest"
+
+
+def unmapped_alert_type_log_id(tenant_id: str, alert_type: str, window_start: datetime) -> str:
+    """Id of THE SystemLog entry for (tenant, alert_type, hour): one entry, whatever the rate."""
+    return str(uuid5(NAMESPACE_URL, f"rg:{_UNMAPPED_COMPONENT}:{tenant_id}:{alert_type}:{window_start.isoformat()}"))
+
+
+def _unmapped_message(alert_type: str, count: int, window_start: datetime) -> str:
+    # repr(): an agent-supplied value never puts a raw newline or control character in the log.
+    return (
+        f"alert_type {alert_type!r} maps to no module: shown as UNKNOWN "
+        f"({count} alert(s) since {window_start:%Y-%m-%d %H:%M} UTC)"
+    )
+
+
+async def record_unmapped_alert_type(
+    db: AsyncSession, tenant_id: str, agent_id: str, alert_type: str, alert_id: str, now: datetime,
+) -> None:
+    """An alert_type with no module gets in (UNKNOWN), never silently -- and never one log per alert.
+
+    One SystemLog entry per (tenant, alert_type) and per UTC hour, carrying the count: a defective
+    agent sending the same unknown type in a burst updates one row instead of filling the table.
+    The entry has a deterministic id, so concurrent ingests meet on the same row: the row is
+    locked while its count is incremented, and a concurrent first insert is caught in a savepoint
+    -- the alert itself is never lost to the log.
+    """
+    window_start = now.replace(minute=0, second=0, microsecond=0)
+    log_id = unmapped_alert_type_log_id(tenant_id, alert_type, window_start)
+
+    # The alert first: an error on the alert itself must never be taken for a log conflict below.
+    await db.flush()
+
+    for _ in range(2):
+        entry = (
+            await db.execute(select(SystemLog).where(SystemLog.id == log_id).with_for_update())
+        ).scalar_one_or_none()
+        if entry is not None:
+            context = dict(entry.context_json or {})
+            count = int(context.get("count", 1)) + 1
+            context.update(count=count, last_alert_id=alert_id, last_agent_id=agent_id)
+            entry.context_json = context  # reassigned, so the JSON change is persisted
+            entry.message = _unmapped_message(alert_type, count, window_start)
+            return
+
+        try:
+            async with db.begin_nested():
+                db.add(SystemLog(
+                    id=log_id,
+                    tenant_id=tenant_id,
+                    level=LogLevel.Warning,
+                    component=_UNMAPPED_COMPONENT,
+                    message=_unmapped_message(alert_type, 1, window_start),
+                    context_json={
+                        "alert_type": alert_type,
+                        "count": 1,
+                        "window_start": window_start.isoformat(),
+                        "first_alert_id": alert_id,
+                        "last_alert_id": alert_id,
+                        "last_agent_id": agent_id,
+                    },
+                    created_at=now,
+                ))
+            # Application log: once per (tenant, alert_type, hour) too, not once per alert.
+            logger.warning("alert_type_without_module", alert_type=alert_type, alert_id=alert_id, tenant_id=tenant_id)
+            return
+        except IntegrityError:
+            continue  # another ingest created the entry first: increment it
+
+    # Not reached in practice (the second pass finds the entry); never drop the signal silently.
+    logger.error("alert_type_without_module_not_recorded", alert_type=alert_type, alert_id=alert_id, tenant_id=tenant_id)
 
 
 async def _ingest_single_alert(
@@ -66,16 +140,7 @@ async def _ingest_single_alert(
 
     # An alert_type with no module still gets in (UNKNOWN), but never silently.
     if module_for(body.alert_type) == UNKNOWN:
-        logger.warning("alert_type_without_module", alert_type=body.alert_type, alert_id=alert_id)
-        db.add(SystemLog(
-            id=str(uuid4()),
-            tenant_id=agent.tenant_id,
-            level=LogLevel.Warning,
-            component="alert-ingest",
-            message=f"alert_type '{body.alert_type}' maps to no module: shown as UNKNOWN",
-            context_json={"alert_type": body.alert_type, "alert_id": alert_id, "agent_id": agent.id},
-            created_at=now,
-        ))
+        await record_unmapped_alert_type(db, agent.tenant_id, agent.id, body.alert_type, alert_id, now)
 
     for detail in body.details:
         db.add(AlertDetail(
