@@ -2,7 +2,8 @@
 #
 # The CI gates every push with the agent suite minus the Stress category. This workflow
 # runs what the CI leaves out, on a clean Windows runner:
-#   * every test category, Stress included, with the TRX results as an artifact;
+#   * every test category: the main suite, then the Stress category on its own (it measures
+#     process-wide handle counts and durations), with the TRX results as an artifact;
 #   * the agent installed as a real Windows service (LocalSystem, started by the Service
 #     Control Manager from C:\Windows\System32): it must start, read its configuration from
 #     its own directory (AGT-SVC-001), deploy its canaries, write its signed audit chain on a
@@ -39,24 +40,40 @@ jobs:
       - name: Build
         run: dotnet build RansomGuard.Agent.sln -c Release
 
-      - name: All tests, no filter
-        run: dotnet test RansomGuard.Agent.sln -c Release --no-build --logger "trx;LogFileName=agent-all.trx"
+      - name: Main suite (what the CI runs)
+        run: dotnet test RansomGuard.Agent.sln -c Release --no-build --filter "Category!=Stress" --logger "trx;LogFileName=agent-main.trx"
+
+      # The Stress tests measure process-wide quantities (handle counts, durations): run them
+      # on their own, never next to 670 tests executing in parallel in the same process.
+      - name: Stress category, alone
+        if: always()
+        run: dotnet test RansomGuard.Agent.sln -c Release --no-build --filter "Category=Stress" --logger "trx;LogFileName=agent-stress.trx"
 
       - name: Count
         if: always()
         shell: pwsh
         run: |
-          $trx = Get-ChildItem -Recurse -Filter 'agent-all.trx' -Path . | Select-Object -First 1
-          if (-not $trx) { Write-Host '::error::no trx file'; exit 1 }
-          [xml]$doc = Get-Content $trx.FullName
-          $c = $doc.TestRun.ResultSummary.Counters
-          $line = "total=$($c.total) executed=$($c.executed) passed=$($c.passed) failed=$($c.failed) notExecuted=$($c.notExecuted)"
-          Write-Host "::notice title=Agent tests (all categories)::$line"
-          "### Agent tests, all categories`n`n$line" >> $env:GITHUB_STEP_SUMMARY
           $ns = @{t='http://microsoft.com/schemas/VisualStudio/TeamTest/2010'}
-          foreach ($f in (Select-Xml -Xml $doc -Namespace $ns -XPath "//t:UnitTestResult[@outcome='Failed']")) {
-            Write-Host "::error title=$($f.Node.testName)::$(($f.Node.Output.ErrorInfo.Message -replace "`r?`n", ' '))"
+          $summary = "### Agent tests, all categories`n"
+          $total = 0; $passed = 0; $failed = 0
+          foreach ($name in 'agent-main.trx', 'agent-stress.trx') {
+            $trx = Get-ChildItem -Recurse -Filter $name -Path . | Select-Object -First 1
+            if (-not $trx) { Write-Host "::error::$name missing"; $failed++; continue }
+            [xml]$doc = Get-Content $trx.FullName
+            $c = $doc.TestRun.ResultSummary.Counters
+            $line = "${name}: total=$($c.total) passed=$($c.passed) failed=$($c.failed) notExecuted=$($c.notExecuted)"
+            Write-Host "::notice title=Agent tests::$line"
+            $summary += "`n- $line"
+            $total += [int]$c.total; $passed += [int]$c.passed; $failed += [int]$c.failed
+            foreach ($f in (Select-Xml -Xml $doc -Namespace $ns -XPath "//t:UnitTestResult[@outcome='Failed']")) {
+              Write-Host "::error title=$($f.Node.testName)::$(($f.Node.Output.ErrorInfo.Message -replace "`r?`n", ' '))"
+            }
           }
+          $all = "all categories: total=$total passed=$passed failed=$failed"
+          Write-Host "::notice title=Agent tests (all categories)::$all"
+          $summary += "`n- **$all**"
+          $summary >> $env:GITHUB_STEP_SUMMARY
+          if ($failed -gt 0) { exit 1 }
 
       - uses: actions/upload-artifact@v4
         if: always()
