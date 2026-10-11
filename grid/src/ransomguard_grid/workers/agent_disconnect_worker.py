@@ -1,14 +1,15 @@
-"""Background worker that marks agents as 'disconnected' when heartbeat times out."""
+"""Background worker: marks agents 'disconnected' when their heartbeat times out, and purges
+module transitions older than the retention window once a day."""
 
 import asyncio
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import update
+from sqlalchemy import delete, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from ransomguard_grid.core.config import get_settings
 from ransomguard_grid.core.logging import get_logger
-from ransomguard_grid.db.models.agent import Agent
+from ransomguard_grid.db.models.agent import Agent, AgentPostureChange
 from ransomguard_grid.db.models.enums import AgentStatus
 
 logger = get_logger("agent_disconnect_worker")
@@ -26,6 +27,9 @@ class AgentDisconnectWorker:
         self._check_interval = check_interval_seconds
         self._task: asyncio.Task | None = None
         self._settings = get_settings()
+        # In memory: after a restart the purge runs again on the first pass. Harmless, the
+        # DELETE is idempotent.
+        self._last_purge_at: datetime | None = None
 
     async def start(self) -> None:
         if self._task is not None:
@@ -52,6 +56,10 @@ class AgentDisconnectWorker:
                 await self._check_disconnected()
             except Exception:
                 logger.error("Agent disconnect check failed", exc_info=True)
+            try:
+                await self.purge_posture_history()
+            except Exception:
+                logger.error("Agent posture history purge failed", exc_info=True)
             await asyncio.sleep(self._check_interval)
 
     async def _check_disconnected(self) -> None:
@@ -79,3 +87,24 @@ class AgentDisconnectWorker:
                     count=result.rowcount,
                     timeout_minutes=self._settings.agent_disconnect_timeout_minutes,
                 )
+
+    async def purge_posture_history(self, now: datetime | None = None) -> int:
+        """Delete module transitions older than the retention window; at most once per 24 h."""
+        now = now or datetime.now(UTC)
+        if self._last_purge_at is not None and now - self._last_purge_at < timedelta(hours=24):
+            return 0
+        cutoff = now - timedelta(days=self._settings.agent_posture_history_retention_days)
+
+        async with self._session_factory() as session:
+            result = await session.execute(
+                delete(AgentPostureChange)
+                .where(AgentPostureChange.created_at < cutoff)
+                .execution_options(synchronize_session=False)
+            )
+            await session.commit()
+
+        self._last_purge_at = now
+        purged: int = result.rowcount or 0  # type: ignore[attr-defined]
+        if purged:
+            logger.info("Agent posture history purged", count=purged, cutoff=cutoff.isoformat())
+        return purged

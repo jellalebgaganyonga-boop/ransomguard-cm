@@ -66,6 +66,10 @@ class Settings(BaseSettings):
     # Agent auto-disconnect timeout (minutes since last heartbeat)
     agent_disconnect_timeout_minutes: int = Field(default=5, ge=1, le=60)
 
+    # Module transitions (agent_posture_changes) are kept this long, then purged once a day by
+    # the disconnect worker: enough to answer "EXFIL WATCH was inactive from 2 pm to 4 pm".
+    agent_posture_history_retention_days: int = Field(default=90, ge=1, le=3650)
+
     # Repeats of the same alert type for the same recipient are collapsed inside
     # this window. A ransomware run fires dozens of identical alerts in seconds;
     # one email each would bury the recipient and exhaust the relay quota.

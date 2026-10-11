@@ -10,13 +10,16 @@ from sqlalchemy.orm import selectinload
 
 from ransomguard_grid.api.v1.dependencies.jwt_auth import get_current_user, require_roles
 from ransomguard_grid.api.v1.schemas.dashboard import (
+    AgentDetailItem,
     AgentItem,
+    AgentPostureItem,
     AlertItem,
     AuditLogItem,
     CommandItem,
     CreateUserRequest,
     IssueCommandRequest,
     MetricsSummary,
+    ModuleStatusItem,
     NotificationPreferenceItem,
     PaginatedAgentResponse,
     PaginatedAlertResponse,
@@ -45,6 +48,8 @@ from ransomguard_grid.db.repositories.alert_repository import AlertRepository
 from ransomguard_grid.db.repositories.role_repository import UserRoleRepository
 from ransomguard_grid.db.session import get_db
 from ransomguard_grid.schemas.dashboard.me import MeResponse, TenantContext, UserPreferences
+from ransomguard_grid.services.agent_posture import compute_protection_state, last_upload_age_seconds
+from ransomguard_grid.services.posture_store import load_postures, snapshot
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -230,6 +235,51 @@ async def update_alert_status(
 
 # --- AGENTS ---
 
+# Display order of the six entries (the agent's ModuleCode.All).
+_MODULE_ORDER = ("SENTINEL", "ENTROPY", "GENEALOGY", "USB_GUARD", "EXFIL_WATCH", "ANTI_TAMPERING")
+
+
+async def _agent_items(db: AsyncSession, tenant_id: str, agents: list[Agent]) -> list[AgentDetailItem]:
+    """Agents with their verdict and posture -- postures read within the caller's tenant only."""
+    now = datetime.now(UTC)
+    postures = await load_postures(db, tenant_id, [a.id for a in agents])
+    items: list[AgentDetailItem] = []
+    for agent in agents:
+        posture, modules = postures.get(agent.id, (None, []))
+        state = snapshot(posture, modules) if posture else None
+        verdict = compute_protection_state(agent.last_heartbeat_at, state, now)
+        posture_item = None
+        if posture is not None:
+            ordered = sorted(
+                modules,
+                key=lambda m: _MODULE_ORDER.index(m.module_code) if m.module_code in _MODULE_ORDER else len(_MODULE_ORDER),
+            )
+            posture_item = AgentPostureItem(
+                schema_version=posture.schema_version,
+                received_at=posture.received_at,
+                agent_uptime_seconds=posture.agent_uptime_seconds,
+                threat_intel_version=posture.threat_intel_version,
+                last_detection_at=posture.last_detection_at,
+                system_free_bytes=posture.system_free_bytes,
+                db_volume_free_bytes=posture.db_volume_free_bytes,
+                pending_alerts=posture.pending_alerts,
+                last_upload_ok_at=posture.last_upload_ok_at,
+                last_upload_age_seconds=last_upload_age_seconds(state, now) if state else None,
+                last_upload_error_code=posture.last_upload_error_code,
+                rejected_alerts=posture.rejected_alerts,
+                modules=[
+                    ModuleStatusItem(code=m.module_code, state=m.state, reason_code=m.reason_code, changed_at=m.changed_at)
+                    for m in ordered
+                ],
+            )
+        items.append(AgentDetailItem.model_validate(agent).model_copy(update={
+            "protection_state": verdict.state,
+            "reason_codes": verdict.reason_codes,
+            "signal_age_seconds": verdict.signal_age_seconds,
+            "posture": posture_item,
+        }))
+    return items
+
 
 @router.get("/agents", response_model=PaginatedAgentResponse)
 async def list_agents(
@@ -249,24 +299,27 @@ async def list_agents(
 
     total = (await db.execute(count_stmt)).scalar_one()
     items_result = await db.execute(stmt.offset(offset).limit(limit))
-    items = [AgentItem.model_validate(a) for a in items_result.scalars().all()]
+    details = await _agent_items(db, user.tenant_id, list(items_result.scalars().all()))
+    # The list carries the verdict, not the full posture (the agent page reads that).
+    items = [AgentItem.model_validate(d.model_dump(exclude={"posture"})) for d in details]
     return PaginatedAgentResponse(items=items, total=total, offset=offset, limit=limit)
 
 
-@router.get("/agents/{agent_id}", response_model=AgentItem)
+@router.get("/agents/{agent_id}", response_model=AgentDetailItem)
 async def get_agent(
     agent_id: str,
     user: User = Depends(require_roles("tenant_admin", "security_analyst", "read_only_auditor")),
     db: AsyncSession = Depends(get_db),
-) -> AgentItem:
-    """Get agent by ID. 404 on cross-tenant."""
+) -> AgentDetailItem:
+    """Agent page: identity, verdict and posture. 404 on cross-tenant."""
     from ransomguard_grid.db.repositories.agent_repository import AgentRepository
 
     repo = AgentRepository(db, tenant_id=user.tenant_id)
     agent = await repo.get_by_id(agent_id)
     if not agent:
         raise HTTPException(404, "Agent not found")
-    return AgentItem.model_validate(agent)
+    [item] = await _agent_items(db, user.tenant_id, [agent])
+    return item
 
 
 # --- METRICS ---
@@ -680,7 +733,8 @@ async def decommission_agent(
         details={"hostname": agent.hostname},
     )
 
-    return AgentItem.model_validate(agent)
+    [item] = await _agent_items(db, user.tenant_id, [agent])
+    return AgentItem.model_validate(item.model_dump(exclude={"posture"}))
 
 
 # --- USERS WITH ROLES (fix for GAP-08) ---

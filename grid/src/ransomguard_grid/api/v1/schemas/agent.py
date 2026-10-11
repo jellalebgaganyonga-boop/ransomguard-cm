@@ -1,8 +1,11 @@
 """Pydantic schemas for agent enrollment and heartbeat."""
 
 from datetime import datetime
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+
+from ransomguard_grid.services.agent_posture import MAX_UPLOAD_AGE_SECONDS
 
 
 class EnrollmentRequest(BaseModel):
@@ -23,12 +26,72 @@ class EnrollmentResponse(BaseModel):
     ed25519_private_key_pem: str | None = None
 
 
-class HeartbeatRequest(BaseModel):
+_ShortKey = Annotated[str, StringConstraints(max_length=64)]
+
+
+class HeartbeatDisk(BaseModel):
+    """Free bytes; null = the agent could not measure it, never 0."""
+
     model_config = ConfigDict(extra="forbid")
 
+    system_free_bytes: int | None = Field(default=None, ge=0)
+    db_volume_free_bytes: int | None = Field(default=None, ge=0)
+
+
+class HeartbeatTransmission(BaseModel):
+    """Alert transmission health. Null = not reported / unavailable, never 0."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    pending_alerts: int | None = Field(default=None, ge=0)
+    last_upload_ok_at: datetime | None = None
+    # Age of the last successful upload on the agent's own clock, at send time. When present the
+    # GRID uses it and ignores last_upload_ok_at, which is only as good as the clock skew.
+    last_upload_ok_age_seconds: int | None = Field(default=None, ge=0, le=MAX_UPLOAD_AGE_SECONDS)
+    # A stable code (NETWORK_UNREACHABLE, HTTP_422...), never an exception text.
+    last_upload_error_code: str | None = Field(default=None, max_length=50, pattern=r"^[A-Za-z0-9_]+$")
+    # Alerts the GRID refused (400/422), over the agent's last 24 h.
+    rejected_alerts: int | None = Field(default=None, ge=0)
+
+
+class HeartbeatModule(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # Checked against the closed list by the server: an unknown code is logged, never stored.
+    code: str = Field(min_length=1, max_length=64)
+    state: Literal["active", "inactive", "disabled_by_config", "degraded"]
+    reason_code: str | None = Field(default=None, max_length=50, pattern=r"^[a-z0-9_]+$")
+    changed_at: datetime
+
+
+class HeartbeatRequest(BaseModel):
+    """Agent heartbeat. schema_version absent = v1, the legacy 3-field heartbeat, still accepted:
+    the agents of a hospital are not all updated the same day.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal[1, 2] = 1
     agent_uptime_seconds: int = Field(ge=0)
     threat_intel_version: str | None = Field(max_length=50, default=None)
-    modules_status: dict[str, str] = Field(default_factory=dict)
+
+    # v1 only: free-form, bounded, ignored (no posture, no log).
+    modules_status: dict[_ShortKey, _ShortKey] | None = Field(default=None, max_length=32)
+
+    # v2
+    agent_version: str | None = Field(default=None, max_length=50)
+    os_version: str | None = Field(default=None, max_length=100)
+    last_detection_at: datetime | None = None
+    disk: HeartbeatDisk | None = None
+    transmission: HeartbeatTransmission | None = None
+    modules: list[HeartbeatModule] = Field(default_factory=list, max_length=16)
+
+    @model_validator(mode="after")
+    def _one_entry_per_module(self) -> "HeartbeatRequest":
+        codes = [m.code for m in self.modules]
+        if len(codes) != len(set(codes)):
+            raise ValueError("modules: each code may appear only once")
+        return self
 
 
 class HeartbeatResponse(BaseModel):

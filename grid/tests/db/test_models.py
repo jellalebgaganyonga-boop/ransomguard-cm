@@ -11,7 +11,9 @@ from ransomguard_grid.db.models import (
     Agent,
     AgentCertificate,
     AgentConfiguration,
-    AgentHeartbeat,
+    AgentModuleStatus,
+    AgentPosture,
+    AgentPostureChange,
     AgentThreatIntelVersion,
     Alert,
     AlertArtifact,
@@ -33,16 +35,16 @@ from ransomguard_grid.db.models import (
 from ransomguard_grid.db.models.enums import Severity, TenantStatus
 
 
-def test_all_21_models_import_successfully() -> None:
-    """All 21 model classes should be importable."""
+def test_all_23_models_import_successfully() -> None:
+    """All 23 model classes should be importable (agent_heartbeats replaced by the 3 posture tables)."""
     models = [
         Tenant, User, Role, UserRole, Session,
-        Agent, AgentCertificate, AgentConfiguration, AgentHeartbeat,
+        Agent, AgentCertificate, AgentConfiguration, AgentPosture, AgentModuleStatus, AgentPostureChange,
         Alert, AlertDetail, AlertArtifact, AuditLog, AlertCorrelation, AlertStatusChange,
         ThreatIntelVersion, ThreatIntelPackage, AgentThreatIntelVersion,
         CommandQueue, CommandResponse, SystemLog,
     ]
-    assert len(models) == 21
+    assert len(models) == 23
     for m in models:
         assert hasattr(m, "__tablename__")
 

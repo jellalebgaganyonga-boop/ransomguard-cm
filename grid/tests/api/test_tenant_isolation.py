@@ -250,3 +250,54 @@ async def test_alert_carries_its_module_code(client: AsyncClient) -> None:
     item = next(a for a in listed.json()["items"] if a["id"] == setup["alert_a_id"])
     assert item["alert_type"] == "USB"  # test data, not an agent type
     assert item["module"] == "UNKNOWN"
+
+
+async def _store_posture(agent_id: str, tenant_id: str, module_state: str) -> None:
+    """A posture as a heartbeat stores it, written directly (tenant_id chosen by the test)."""
+    from ransomguard_grid.db.models.agent import AgentModuleStatus, AgentPosture
+
+    now = datetime.now(UTC)
+    async with _test_session_factory() as session:
+        session.add(AgentPosture(
+            agent_id=agent_id, tenant_id=tenant_id, schema_version=2, agent_uptime_seconds=3600,
+            pending_alerts=0, received_at=now,
+        ))
+        session.add(AgentModuleStatus(
+            id=str(uuid4()), tenant_id=tenant_id, agent_id=agent_id, module_code="SENTINEL",
+            state=module_state, reason_code=None, changed_at=now, updated_at=now,
+        ))
+        agent = await session.get(Agent, agent_id)
+        assert agent is not None
+        agent.last_heartbeat_at = now
+        await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_user_a_cannot_read_tenant_b_agent_posture(client: AsyncClient) -> None:
+    """POSTURE: the posture of tenant B's agent is never readable from tenant A."""
+    setup = await _create_two_tenants()
+    await _store_posture(setup["agent_b_id"], setup["tenant_b_id"], "active")
+    token_a = await _login(client, setup["tenant_a_code"], setup["user_a_email"])
+    headers = {"Authorization": f"Bearer {token_a}"}
+
+    detail = await client.get(f"/api/v1/dashboard/agents/{setup['agent_b_id']}", headers=headers)
+    assert detail.status_code == 404
+
+    listed = await client.get("/api/v1/dashboard/agents", headers=headers)
+    assert setup["agent_b_id"] not in {a["id"] for a in listed.json()["items"]}
+
+
+@pytest.mark.asyncio
+async def test_a_posture_row_of_another_tenant_never_reaches_the_agent_page(client: AsyncClient) -> None:
+    """POSTURE: postures are read on agent_id AND tenant_id. A posture row carrying tenant B
+    attached to A's agent must not be shown to A (defence in depth, as for HOST)."""
+    setup = await _create_two_tenants()
+    await _store_posture(setup["agent_a_id"], setup["tenant_b_id"], "active")
+    token_a = await _login(client, setup["tenant_a_code"], setup["user_a_email"])
+    headers = {"Authorization": f"Bearer {token_a}"}
+
+    detail = await client.get(f"/api/v1/dashboard/agents/{setup['agent_a_id']}", headers=headers)
+
+    assert detail.status_code == 200
+    assert detail.json()["posture"] is None
+    assert detail.json()["reason_codes"] == ["agent_update_required"]

@@ -1,7 +1,6 @@
 """Agent heartbeat endpoint — mTLS required."""
 
 from datetime import UTC, datetime
-from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -9,11 +8,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ransomguard_grid.api.v1.dependencies.auth import get_authenticated_agent
 from ransomguard_grid.api.v1.schemas.agent import HeartbeatRequest, HeartbeatResponse
-from ransomguard_grid.db.models.agent import Agent, AgentHeartbeat
+from ransomguard_grid.db.models.agent import Agent
 from ransomguard_grid.db.models.enums import AgentStatus, CommandStatus
 from ransomguard_grid.db.models.operations import CommandQueue
-from ransomguard_grid.db.repositories.agent_heartbeat_repository import AgentHeartbeatRepository
 from ransomguard_grid.db.session import get_db
+from ransomguard_grid.services.posture_store import record_heartbeat
 
 router = APIRouter(prefix="/agents/{agent_id}", tags=["heartbeat"])
 
@@ -25,7 +24,11 @@ async def heartbeat(
     agent: Agent = Depends(get_authenticated_agent),
     db: AsyncSession = Depends(get_db),
 ) -> HeartbeatResponse:
-    """Record agent heartbeat and return pending commands."""
+    """Record the agent's posture and return pending commands.
+
+    The agent and its tenant come from the authenticated certificate, never from the body; the
+    path must name that same agent. Freshness is the server's reception time.
+    """
     if agent.id != agent_id:
         raise HTTPException(403, "Agent ID mismatch")
 
@@ -37,17 +40,9 @@ async def heartbeat(
     agent.last_heartbeat_at = now
     await db.flush()
 
-    # Persist heartbeat record
-    hb_repo = AgentHeartbeatRepository(db, agent.tenant_id)
-    await hb_repo.append(AgentHeartbeat(
-        id=str(uuid4()),
-        tenant_id=agent.tenant_id,
-        agent_id=agent.id,
-        received_at=now,
-        agent_uptime_seconds=body.agent_uptime_seconds,
-        threat_intel_version=body.threat_intel_version,
-        modules_status_json=body.modules_status,
-    ))
+    # Current posture, module states, and a transition row only when a module changes
+    # (agent_heartbeats, one row per beat never read back, is gone).
+    await record_heartbeat(db, agent, body, now)
 
     # Check for pending commands
     pending_stmt = (

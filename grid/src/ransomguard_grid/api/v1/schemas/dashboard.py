@@ -49,6 +49,42 @@ class AgentItem(BaseModel):
     agent_version: str
     status: str
     last_heartbeat_at: datetime | None
+    # Computed by the server at read time (services/agent_posture.py); the console translates
+    # and colours, it never recomputes. Defaults are only for model_validate before the verdict.
+    protection_state: str = "unknown"
+    reason_codes: list[str] = Field(default_factory=list)
+    signal_age_seconds: int | None = None
+
+
+class ModuleStatusItem(BaseModel):
+    code: str
+    state: str
+    reason_code: str | None
+    changed_at: datetime
+
+
+class AgentPostureItem(BaseModel):
+    """Last posture reported. Null numbers mean "unavailable", never 0."""
+
+    schema_version: int
+    received_at: datetime
+    agent_uptime_seconds: int
+    threat_intel_version: str | None
+    last_detection_at: datetime | None
+    system_free_bytes: int | None
+    db_volume_free_bytes: int | None
+    pending_alerts: int | None
+    last_upload_ok_at: datetime | None  # agent clock, as reported
+    # Computed by the server at read time (agent's own measure when sent, never negative):
+    # what the console shows as "last transmission N min ago".
+    last_upload_age_seconds: int | None
+    last_upload_error_code: str | None
+    rejected_alerts: int | None
+    modules: list[ModuleStatusItem]
+
+
+class AgentDetailItem(AgentItem):
+    posture: AgentPostureItem | None = None
 
 
 class PaginatedAgentResponse(PaginatedResponse):
