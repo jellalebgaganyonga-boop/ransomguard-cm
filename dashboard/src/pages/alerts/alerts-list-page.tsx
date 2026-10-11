@@ -12,6 +12,7 @@
 
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { AlertModule } from '@/components/alerts/alert-module';
 import { Search, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, Shield, Download } from 'lucide-react';
 import { SeverityBadge } from '@/components/ui/severity-badge';
 import { Button } from '@/components/ui/button';
@@ -233,10 +234,7 @@ export function AlertsListPage() {
                     </td>
                     {/* MODULE: the module (translated code), then the event type underneath. */}
                     <td className="px-3 py-2.5 text-xs text-text-secondary">
-                      <span className="font-semibold text-text-primary">
-                        {t(`modules.${alert.module ?? 'UNKNOWN'}`, alert.module ?? 'UNKNOWN')}
-                      </span>
-                      <span className="block text-[10px]">{alert.alert_type}</span>
+                      <AlertModule module={alert.module} alertType={alert.alert_type} />
                     </td>
                     <td
                       className="px-3 py-2.5 text-right"

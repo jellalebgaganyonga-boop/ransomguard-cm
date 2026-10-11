@@ -16,6 +16,7 @@
 import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { AlertModule } from '@/components/alerts/alert-module';
 import { Copy, ChevronLeft, ChevronDown, ChevronUp, FileQuestion } from 'lucide-react';
 import { SeverityBadge } from '@/components/ui/severity-badge';
 import { Button } from '@/components/ui/button';
@@ -132,10 +133,7 @@ export function AlertDetailPage() {
           <span className="text-[10px] font-semibold uppercase text-text-secondary">
             {t('alerts.list.col.module', 'Module')}
           </span>
-          <p className="mt-0.5 font-semibold text-text-primary">
-            {t(`modules.${alert.module ?? 'UNKNOWN'}`, alert.module ?? 'UNKNOWN')}
-          </p>
-          <p className="font-mono text-[10px] text-text-secondary">{alert.alert_type}</p>
+          <AlertModule module={alert.module} alertType={alert.alert_type} layout="field" />
         </div>
       </div>
 
