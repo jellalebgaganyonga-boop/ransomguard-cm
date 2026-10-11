@@ -28,7 +28,7 @@
 |----|-----------|--------|----------|------------|--------|-----|------|
 | T1 | CanaryFileService | Path traversal in canary destination | High | PathValidator with canonical resolution | Mitigated | CWE-22 | SI-10 |
 | T2 | CanaryFileService | Symlink attack on canary creation | Medium | Directory ownership check at startup | Accepted Risk | CWE-59 | AC-3 |
-| T3 | SentinelMonitor | Attacker modifies database to mark canaries as Deleted | High | SQLCipher encryption + DACL on db file | Mitigated | CWE-311 | SC-28 |
+| T3 | SentinelMonitor | Attacker modifies database to mark canaries as Deleted | High | SQLCipher encryption + DACL on db file (no DACL is applied today: `keys\` inherits `BUILTIN\Users` read from `C:\ProgramData`, and the keys are DPAPI LocalMachine, so the database key is readable too) | Not implemented — AGT-KEY-001 | CWE-311 | SC-28 |
 | T4 | CanaryContentGenerator | Attacker reverse-engineers canary patterns | Medium | Randomized content per generation, no fixed template | Mitigated | — | — |
 | T5 | AuditLog | Tamper with audit entries | Critical | SHA-256 hash chain verified on read | Mitigated | CWE-354 | AU-10 |
 
@@ -60,8 +60,8 @@
 | ID | Component | Threat | Severity | Mitigation | Status | CWE | NIST |
 |----|-----------|--------|----------|------------|--------|-----|------|
 | E1 | Service | Non-admin stops protection service | High | DACL security descriptor on service | Mitigated | CWE-269 | AC-6 |
-| E2 | Database | Non-admin modifies database | High | File-level DACL + SQLCipher | Mitigated | CWE-732 | AC-3 |
-| E3 | Keys | Non-admin reads encryption key | High | DPAPI LocalMachine scope + DACL on key file | Mitigated | CWE-522 | SC-12 |
+| E2 | Database | Non-admin modifies database | High | File-level DACL + SQLCipher (no DACL is applied today: `keys\` inherits `BUILTIN\Users` read from `C:\ProgramData`, and the keys are DPAPI LocalMachine, so the database key is readable too) | Not implemented — AGT-KEY-001 | CWE-732 | AC-3 |
+| E3 | Keys | Non-admin reads encryption key | High | DPAPI LocalMachine scope + DACL on key file (no DACL is applied today: `keys\` inherits `BUILTIN\Users` read from `C:\ProgramData`, and the keys are DPAPI LocalMachine: any local account can read and decrypt them) | Not implemented — AGT-KEY-001 | CWE-522 | SC-12 |
 
 ## Coverage Summary
 
