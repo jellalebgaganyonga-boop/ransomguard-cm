@@ -134,16 +134,17 @@ jobs:
           do {
             Start-Sleep 3
             if ((Get-Service $env:SERVICE_NAME).Status -ne 'Running') { Write-Host '::error::the service stopped'; exit 1 }
-            $canaries = @(Get-ChildItem $env:WATCH_DIR -File -Filter '0001_*' -ErrorAction SilentlyContinue)
+            # Canaries are Hidden | System (CanaryFileService): -Force lists them.
+            $canaries = @(Get-ChildItem $env:WATCH_DIR -File -Force -Filter '0001_*' -ErrorAction SilentlyContinue)
           } while ($canaries.Count -eq 0 -and (Get-Date) -lt $deadline)
-          $canaries | Format-Table Name, Length -AutoSize | Out-String | Write-Host
+          $canaries | Format-Table Name, Length, Attributes -AutoSize | Out-String | Write-Host
           if ($canaries.Count -eq 0) { Write-Host '::error::no canary in the configured directory'; exit 1 }
 
       - name: A canary modification writes the signed audit chain
         shell: pwsh
         run: |
-          $canary = Get-ChildItem $env:WATCH_DIR -File -Filter '0001_*' | Select-Object -First 1
-          Add-Content -Path $canary.FullName -Value 'modified by the CI service check'
+          $canary = Get-ChildItem $env:WATCH_DIR -File -Force -Filter '0001_*' | Select-Object -First 1
+          Add-Content -Path $canary.FullName -Value 'modified by the CI service check' -Force
           Start-Sleep 20
           Stop-Service $env:SERVICE_NAME -Force
           $exe = Join-Path $env:INSTALL_DIR 'RansomGuard.Agent.Service.exe'
