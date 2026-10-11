@@ -161,7 +161,9 @@ public sealed class AgentDataProtectionTests : IDisposable
     [Fact]
     public void A_dedicated_directory_outside_the_root_is_closed_too()
     {
-        string logs = Path.Combine(Path.GetTempPath(), "rg-dataprot-logs-" + Guid.NewGuid().ToString("N"));
+        // Outside the data root and outside any profile (%TEMP% is in one, and is refused).
+        // Only resolved, never created.
+        string logs = Path.Combine(Path.GetPathRoot(Path.GetTempPath())!, "rg-dataprot-logs-" + Guid.NewGuid().ToString("N"));
         AgentConfiguration config = ConfigUnder(_root, ("Agent:Logging:LogFilePath", Path.Combine(logs, "agent-.log")));
 
         (IReadOnlyList<string> roots, IReadOnlyList<string> errors) = AgentDataProtection.ResolveRoots(config, _root);
@@ -176,6 +178,7 @@ public sealed class AgentDataProtectionTests : IDisposable
     [InlineData("Agent:Database:KeyDirectory", @"C:\ProgramData")]
     [InlineData("Agent:Database:KeyDirectory", @"C:\Program Files")]
     [InlineData("Agent:Database:KeyDirectory", @"%PUBLIC%\..\SomeUser\Documents")]
+    [InlineData("Agent:Database:KeyDirectory", @"%TEMP%\rg-keys")]
     public void A_shared_or_system_folder_is_refused_never_closed(string setting, string path)
     {
         (_, IReadOnlyList<string> errors) = AgentDataProtection.ResolveRoots(ConfigUnder(_root, (setting, path)), _root);
