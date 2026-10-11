@@ -63,6 +63,9 @@ downloads/
 eggs/
 .eggs/
 lib/
+# The Python rule above also caught the console's own source folder: any new file in
+# dashboard/src/lib was silently left out of commits (agent-posture.ts, R8).
+!dashboard/src/lib/
 lib64/
 parts/
 sdist/
