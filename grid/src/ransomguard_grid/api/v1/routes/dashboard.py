@@ -460,6 +460,11 @@ async def disable_user(
     target = await repo.get_by_id(user_id)
     if not target:
         raise HTTPException(404, "User not found")
+    # GRID-SEC-002: the backend refuses, not only the console.
+    if target.id == admin.id:
+        raise HTTPException(403, "Cannot disable your own account")
+    if target.is_active and await _is_last_active_admin(db, admin.tenant_id, target.id):
+        raise HTTPException(409, "Cannot disable the last active administrator of the tenant")
     target.is_active = False
     await _log_user_action(
         db, user=admin, action_type="user_disable",
@@ -547,6 +552,13 @@ async def update_user_roles(
     if not target:
         raise HTTPException(404, "User not found")
 
+    if (
+        "tenant_admin" not in body.role_names
+        and target.is_active
+        and await _is_last_active_admin(db, admin.tenant_id, target.id)
+    ):
+        raise HTTPException(409, "Cannot remove the tenant_admin role from the last active administrator")
+
     if target.id == admin.id and "tenant_admin" not in body.role_names:
         raise HTTPException(400, "Cannot remove tenant_admin role from yourself")
 
@@ -569,6 +581,22 @@ async def update_user_roles(
         id=target.id, email=target.email, full_name=target.full_name,
         is_active=target.is_active, roles=updated_roles,
     )
+
+
+async def _is_last_active_admin(db: AsyncSession, tenant_id: str, user_id: str) -> bool:
+    """True if ``user_id`` is an active tenant_admin and no other active tenant_admin exists in the
+    tenant: disabling or demoting it would leave the hospital without an administrator."""
+    from ransomguard_grid.db.models.tenant_user import Role, UserRole
+
+    admins = (
+        await db.execute(
+            select(User.id)
+            .join(UserRole, UserRole.user_id == User.id)
+            .join(Role, Role.id == UserRole.role_id)
+            .where(User.tenant_id == tenant_id, User.is_active.is_(True), Role.name == "tenant_admin")
+        )
+    ).scalars().all()
+    return set(admins) == {user_id}
 
 
 # --- NOTIFICATION PREFERENCES ---
