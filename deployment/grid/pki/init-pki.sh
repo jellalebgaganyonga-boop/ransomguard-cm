@@ -108,16 +108,9 @@ else
     echo "[ok] DH parameters generated"
 fi
 
-# Step 5: Ed25519 threat intel signing key
-if [ -f "threat-intel-ed25519.key" ]; then
-    echo "[skip] Threat intel Ed25519 key already exists"
-else
-    echo "[5/5] Generating Ed25519 key for threat intel signing..."
-    openssl genpkey -algorithm ED25519 -out threat-intel-ed25519.key
-    chmod 600 threat-intel-ed25519.key
-    openssl pkey -in threat-intel-ed25519.key -pubout -out threat-intel-ed25519.key.pub
-    echo "[ok] Ed25519 keys generated"
-fi
+# Step 5: Ed25519 threat intel signing key -- one script, also run on its own (GRID-KEY-001)
+echo "[5/5] Ed25519 key for threat intel signing..."
+bash "$PKI_DIR/init-signing-key.sh" "$PKI_DIR"
 
 echo ""
 echo "=== PKI Initialization Complete ==="

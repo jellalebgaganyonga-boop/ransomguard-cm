@@ -58,6 +58,22 @@ dans les SAN), les secrets, le certificat de la console, et installe les timers
 systemd (renouvellement TLS + sauvegarde nocturne). Il n'écrase jamais un `.env`
 ni une PKI existants.
 
+### Clé de signature du renseignement sur les menaces (GRID-KEY-001)
+
+Les agents font confiance à la clé publique de `shared/pki/threat-intel-ed25519.key` :
+chaque paquet de renseignement est signé avec elle. Hors `development`, la GRID
+**ne la génère jamais** : sans elle, `grid-api` refuse de démarrer et le journal
+nomme le chemin attendu. Elle n'est créée que par cette commande, lancée par
+`bootstrap.sh` et sans danger à relancer (elle n'écrase jamais une clé existante) :
+
+```bash
+bash /opt/ransomguard/shared/pki/init-signing-key.sh /opt/ransomguard/shared/pki
+```
+
+Sauvegardez-la hors machine aussitôt (section 7). Une **nouvelle** clé ferait
+rejeter par tous les agents les paquets suivants : en cas de perte, restaurez la
+sauvegarde, ne régénérez pas.
+
 Prérequis côté Tailscale, **une seule fois** :
 console → **DNS** → **HTTPS Certificates** → *Enable*.
 Sans cette option, `tailscale cert` échoue et la console retombe sur la PKI
@@ -185,4 +201,6 @@ emporterait les sauvegardes avec lui — copiez `backups/` sur un support extern
 | Avertissement de certificat sur la console | HTTPS Certificates désactivé côté Tailscale | activer l'option, puis `./refresh-tls.sh` |
 | Agent ne s'enrôle pas | poste hors du tailnet, ou OTP déjà consommé | vérifier `tailscale status`, régénérer un OTP |
 | `grid-api` en boucle de redémarrage | migration Alembic en échec | `docker logs grid-api`, corriger, redéployer |
+| `grid-api` refuse de démarrer : « GRID threat-intel signing key not found at … » | clé de signature absente de `shared/pki` | restaurer la sauvegarde hors machine ; sur un serveur neuf seulement, `init-signing-key.sh` (section 2) |
+| `grid-api` refuse de démarrer : « GRID configuration refused -- GRID_… » | variable obligatoire absente ou invalide dans `shared/.env` (ex. `GRID_JWT_SECRET_KEY`, GRID-SEC-007) | compléter `.env` avec la variable nommée, puis `deploy.sh` |
 | Serveur injoignable | VM éteinte | rallumer : la stack remonte seule |

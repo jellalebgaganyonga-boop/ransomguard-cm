@@ -46,6 +46,10 @@ sudo -n tailscale set --operator="$(id -un)" 2>/dev/null     || sudo tailscale s
 EXTRA_SANS="IP:${TS_IP}"
 [ -n "$TS_DNS" ] && EXTRA_SANS="DNS:${TS_DNS},${EXTRA_SANS}"
 
+# init-pki.sh calls init-signing-key.sh from its own directory.
+cp "$SCRIPT_DIR/pki/init-signing-key.sh" "$SHARED_DIR/pki/init-signing-key.sh"
+chmod +x "$SHARED_DIR/pki/init-signing-key.sh"
+
 if [ -f "$SHARED_DIR/pki/server.key" ]; then
     echo "[skip] PKI already initialised"
 else
@@ -54,6 +58,10 @@ else
     chmod +x "$SHARED_DIR/pki/init-pki.sh"
     "$SHARED_DIR/pki/init-pki.sh" "$HOSPITAL_NAME" "$COUNTRY_CODE" "$EXTRA_SANS"
 fi
+# The threat-intel signing key on its own: a PKI initialised before that step
+# existed has server.key but no signing key, and the GRID refuses to start
+# without one (GRID-KEY-001). Never overwrites an existing key.
+bash "$SHARED_DIR/pki/init-signing-key.sh" "$SHARED_DIR/pki"
 
 # ── 2. Secrets ────────────────────────────────────────────────────
 if [ -f "$SHARED_DIR/.env" ]; then

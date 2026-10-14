@@ -43,7 +43,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Initialize GRID Ed25519 signing service
     signing_service = GridSigningKeyService(settings.threat_intel_signing_key_path)
-    signing_service.initialize()
+    signing_service.initialize(allow_generate=settings.environment == "development")
     app.state.grid_signing_service = signing_service
 
     # Initialize threat intel worker
