@@ -73,6 +73,9 @@ services:
     volumes:
       - ./pki:/etc/ransomguard-grid/pki:ro
       - threat_intel_packages:/var/lib/ransomguard-grid/threat-intel-packages
+      # The same directory nginx serves at /agent/: the console shows the SHA-256 of the very
+      # install.ps1 that is served (GRID-SEC-006). Read-only.
+      - ${AGENT_PACKAGES_DIR:-../../agent/packages}:/srv/agent-packages:ro
     networks:
       - grid_internal
       - grid_public

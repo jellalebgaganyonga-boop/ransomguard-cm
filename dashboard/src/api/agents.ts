@@ -160,6 +160,8 @@ export async function issueCommand(payload: IssueCommandPayload): Promise<Comman
 export interface ProvisionAgentResponse {
   otp: string;
   expires_in_minutes: number;
+  /** SHA-256 of the install.ps1 the GRID serves (upper-case hex); null when none is published. */
+  installer_sha256: string | null;
 }
 
 export async function provisionAgent(): Promise<ProvisionAgentResponse> {

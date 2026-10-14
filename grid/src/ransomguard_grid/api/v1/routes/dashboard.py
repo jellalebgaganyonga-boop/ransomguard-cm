@@ -37,6 +37,7 @@ from ransomguard_grid.api.v1.schemas.dashboard import (
     UserWithRolesItem,
 )
 from ransomguard_grid.core.alert_modules import module_for
+from ransomguard_grid.core.config import get_settings
 from ransomguard_grid.core.security import hash_password
 from ransomguard_grid.db.models.agent import Agent
 from ransomguard_grid.db.models.alerts import Alert, AlertStatusChange
@@ -48,6 +49,7 @@ from ransomguard_grid.db.repositories.alert_repository import AlertRepository
 from ransomguard_grid.db.repositories.role_repository import UserRoleRepository
 from ransomguard_grid.db.session import get_db
 from ransomguard_grid.schemas.dashboard.me import MeResponse, TenantContext, UserPreferences
+from ransomguard_grid.services.agent_installer import installer_sha256
 from ransomguard_grid.services.agent_posture import compute_protection_state, last_upload_age_seconds
 from ransomguard_grid.services.posture_store import count_recent_restarts, load_postures, snapshot
 
@@ -776,8 +778,10 @@ async def provision_agent(
 ) -> ProvisionAgentResponse:
     """Generate a one-time enrollment token for a new agent. Admin only.
 
-    The OTP is valid for 30 minutes and can only be used once.
-    Give it to the agent's appsettings.json under Agent.Server.EnrollmentOtp.
+    The OTP is valid for 30 minutes and can only be used once. install.ps1 writes it into the
+    agent's configuration; nobody copies it by hand. The response carries the SHA-256 of the
+    installer this GRID serves, which the console's install command checks before running it
+    (GRID-SEC-006).
     """
     from ransomguard_grid.services.enrollment_otp_service import get_shared_otp_service
 
@@ -790,4 +794,6 @@ async def provision_agent(
         details={"otp_prefix": otp_string[:14]},
     )
 
-    return ProvisionAgentResponse(otp=otp_string, expires_in_minutes=30)
+    return ProvisionAgentResponse(
+        otp=otp_string, expires_in_minutes=30, installer_sha256=installer_sha256(get_settings().agent_packages_dir)
+    )

@@ -252,12 +252,16 @@
     },
     "provision": {
       "title": "Add new agent",
-      "subtitle": "An enrollment OTP is generated. Copy it into the agent's appsettings.json before the 30-minute expiry.",
+      "subtitle": "An enrollment OTP is generated, valid for 30 minutes. Run the command below on the endpoint: it installs the agent and enrolls it, with nothing to copy by hand.",
       "otpLabel": "Enrollment OTP",
       "expires": "— expires in {n} min",
-      "installLabel": "PowerShell one-liner (run as Administrator on target machine)",
       "hint": "After the agent enrolls, it will appear here within 60 seconds (next auto-refresh).",
-      "regenerate": "Generate new OTP"
+      "regenerate": "Generate new OTP",
+      "commandLabel": "Command — PowerShell as administrator, on the endpoint",
+      "fingerprintLabel": "Expected SHA-256 fingerprint of the installer",
+      "commandHint": "The command downloads the script with TLS validation into a temporary file, checks its fingerprint, and stops if it differs. If the download fails on the certificate, the endpoint does not trust the GRID authority yet: first apply the \"Trusting the GRID certificate authority\" procedure from the agent README (AGT-PKI-001).",
+      "noInstaller": "No installer is published on this GRID: no command can be offered. Publish the agent package (continuous deployment), then generate a new OTP.",
+      "copyCommand": "Copy the install command"
     },
     "detail": {
       "notFound": "Agent not found",

@@ -22,6 +22,7 @@ import { Button } from '@/components/ui/button';
 import { CommandModal } from '@/components/agents/command-modal';
 import { agentStatusVariant, isSignalLostRed, protectionVariant } from '@/lib/agent-status';
 import { verdictSentence } from '@/lib/agent-posture';
+import { buildInstallCommand } from '@/lib/install-command';
 import { formatDistanceToNow } from '@/lib/format-date';
 import type { AgentStatus, AgentItem } from '@/api/agents';
 
@@ -308,7 +309,7 @@ export function AgentsListPage() {
               {t('agents.provision.title', 'Add new agent')}
             </h2>
             <p className="mb-4 text-sm text-text-secondary">
-              {t('agents.provision.subtitle', 'An enrollment OTP is generated. Copy it into the agent\'s appsettings.json before the 30-minute expiry.')}
+              {t('agents.provision.subtitle')}
             </p>
 
             {provision.isPending && (
@@ -325,54 +326,63 @@ export function AgentsListPage() {
             )}
 
             {provision.isSuccess && provision.data && (() => {
-              const otp = provision.data.otp;
-              const gridServer = window.location.hostname;
-              const cmd1 = `curl.exe -k -o C:\\inst.ps1 https://${gridServer}:8443/agent/install.ps1`;
-              // -GridServer must be passed explicitly: without it the installer
-              // falls back to its built-in default, which is not this server.
-              const cmd2 = `powershell -EP Bypass -File C:\\inst.ps1 -OTP ${otp} -GridServer ${gridServer}`;
+              const { otp, installer_sha256: sha256, expires_in_minutes: expires } = provision.data;
+              // GRID-SEC-006: one command, TLS validated, written under %TEMP%, SHA-256 checked
+              // against the installer the GRID serves before anything runs.
+              let command: string | null = null;
+              if (sha256) {
+                try {
+                  command = buildInstallCommand({ host: window.location.hostname, otp, sha256 });
+                } catch {
+                  command = null;
+                }
+              }
               return (
                 <div className="space-y-4">
-                  {/* Step 1: Download */}
                   <div>
-                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-text-secondary">
-                      {t('agents.provision.installLabel')} — Step 1
-                    </label>
-                    <div className="flex items-center gap-2 rounded-lg border border-border-subtle bg-surface-subtle px-3 py-2">
-                      <code className="flex-1 font-mono text-xs text-text-primary">
-                        {cmd1}
-                      </code>
-                      <button
-                        onClick={() => copyToClipboard(cmd1, 'otp')}
-                        className="shrink-0 text-text-secondary hover:text-text-primary"
-                        aria-label="Copy download command"
-                      >
-                        {copiedField === 'otp' ? <CheckCircle2 className="size-4 text-success" /> : <Copy className="size-4" />}
-                      </button>
-                    </div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-text-secondary">
+                      {t('agents.provision.otpLabel')}
+                      <span className="ml-2 font-semibold text-[color:var(--ref-palette-orange-30)]">
+                        {t('agents.provision.expires', { n: expires })}
+                      </span>
+                    </p>
+                    <p className="mt-1 font-mono text-sm text-text-primary">{otp}</p>
                   </div>
 
-                  {/* Step 2: Install with OTP */}
-                  <div>
-                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-text-secondary">
-                      Step 2 — {t('agents.provision.otpLabel')}
-                      <span className="ml-2 font-normal text-warning">
-                        {t('agents.provision.expires', { n: provision.data.expires_in_minutes })}
-                      </span>
-                    </label>
-                    <div className="flex items-center gap-2 rounded-lg border border-border-subtle bg-surface-subtle px-3 py-2">
-                      <code className="flex-1 font-mono text-xs text-text-primary">
-                        {cmd2}
-                      </code>
-                      <button
-                        onClick={() => copyToClipboard(cmd2, 'cmd')}
-                        className="shrink-0 text-text-secondary hover:text-text-primary"
-                        aria-label="Copy install command"
-                      >
-                        {copiedField === 'cmd' ? <CheckCircle2 className="size-4 text-success" /> : <Copy className="size-4" />}
-                      </button>
-                    </div>
-                  </div>
+                  {command ? (
+                    <>
+                      <div>
+                        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-text-secondary">
+                          {t('agents.provision.commandLabel')}
+                        </p>
+                        <div className="flex items-start gap-2 rounded-lg border border-border-subtle bg-surface-subtle px-3 py-2">
+                          <code className="flex-1 break-all font-mono text-xs text-text-primary" data-testid="install-command">
+                            {command}
+                          </code>
+                          <button
+                            onClick={() => copyToClipboard(command, 'cmd')}
+                            className="shrink-0 text-text-secondary hover:text-text-primary"
+                            aria-label={t('agents.provision.copyCommand')}
+                          >
+                            {copiedField === 'cmd' ? <CheckCircle2 className="size-4 text-success" /> : <Copy className="size-4" />}
+                          </button>
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-text-secondary">
+                          {t('agents.provision.fingerprintLabel')}
+                        </p>
+                        <p className="mt-1 break-all font-mono text-xs text-text-primary" data-testid="installer-sha256">
+                          {sha256}
+                        </p>
+                      </div>
+                      <p className="text-xs text-text-secondary">{t('agents.provision.commandHint')}</p>
+                    </>
+                  ) : (
+                    <p role="alert" className="text-sm text-error">
+                      {t('agents.provision.noInstaller')}
+                    </p>
+                  )}
 
                   <p className="text-xs text-text-secondary">
                     {t('agents.provision.hint', 'After the agent enrolls, it will appear here within 60 seconds (next auto-refresh).')}

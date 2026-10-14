@@ -90,6 +90,11 @@ class Settings(BaseSettings):
     # out of an environment label.
     agent_auth_mode: str = Field(default="mtls", pattern="^(mtls|agent_id)$")
 
+    # The directory nginx serves at /agent/ (install.ps1, the agent package), mounted read-only
+    # into grid-api too: the console shows the SHA-256 of the very installer that is served, and
+    # the install command refuses to run a script whose hash differs (GRID-SEC-006).
+    agent_packages_dir: str = Field(default="/srv/agent-packages")
+
 
 def get_settings() -> Settings:
     """Factory function for settings, enables test override."""

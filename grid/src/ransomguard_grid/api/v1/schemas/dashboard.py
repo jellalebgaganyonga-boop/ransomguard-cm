@@ -240,3 +240,6 @@ class ProvisionAgentResponse(BaseModel):
 
     otp: str = Field(description="One-time enrollment token (format: RG-CAM-YYYY-XXXXXX)")
     expires_in_minutes: int = Field(default=30)
+    # SHA-256 (upper-case hex, as Get-FileHash prints it) of the install.ps1 this GRID serves at
+    # /agent/install.ps1. Null when no installer is published: the console then shows no command.
+    installer_sha256: str | None = None

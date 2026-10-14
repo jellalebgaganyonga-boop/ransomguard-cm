@@ -170,3 +170,43 @@ test.describe('Agent detail — security_analyst RBAC (AC4.1.3)', () => {
     await expect(page.getByRole('button', { name: /isoler/i })).not.toBeAttached();
   });
 });
+
+test.describe('Add agent — install command (GRID-SEC-006)', () => {
+  const SHA = 'C0FFEE'.repeat(10) + 'BEEF';
+
+  test('one command: TLS validated, under %TEMP%, SHA-256 of the served installer checked first', async ({ page }) => {
+    await setupMocks(page, 'tenant_admin');
+    await page.route('**/api/v1/dashboard/agents/provision', (r) =>
+      r.fulfill({ status: 200, json: { otp: 'RG-CAM-2026-X7K9P3', expires_in_minutes: 30, installer_sha256: SHA } }));
+    await loginAs(page, 'tenant_admin');
+    await navigateTo(page, '/agents');
+
+    await page.getByRole('button', { name: /ajouter un agent/i }).click();
+
+    const command = page.getByTestId('install-command');
+    await expect(command).toContainText(`(Get-FileHash -Algorithm SHA256 $f).Hash -ne '${SHA}'`);
+    await expect(page.getByTestId('installer-sha256')).toHaveText(SHA);
+    const text = (await command.textContent()) ?? '';
+    expect(text).not.toMatch(/(^|\s)-k(\s|$)/);
+    expect(text).not.toMatch(/C:\\/i);
+    expect(text).not.toMatch(/SkipCertificateCheck/i);
+    expect(text).toContain('Join-Path $env:TEMP');
+
+    const results = await new AxeBuilder({ page }).analyze();
+    const critical = results.violations.filter((v) => v.impact === 'critical' || v.impact === 'serious');
+    expect(critical, `Critical/serious a11y violations: ${JSON.stringify(critical, null, 2)}`).toEqual([]);
+  });
+
+  test('no installer published: no command at all', async ({ page }) => {
+    await setupMocks(page, 'tenant_admin');
+    await page.route('**/api/v1/dashboard/agents/provision', (r) =>
+      r.fulfill({ status: 200, json: { otp: 'RG-CAM-2026-X7K9P3', expires_in_minutes: 30, installer_sha256: null } }));
+    await loginAs(page, 'tenant_admin');
+    await navigateTo(page, '/agents');
+
+    await page.getByRole('button', { name: /ajouter un agent/i }).click();
+
+    await expect(page.getByRole('alert')).toContainText("Aucun programme d'installation n'est publié");
+    await expect(page.getByTestId('install-command')).toHaveCount(0);
+  });
+});
