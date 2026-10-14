@@ -81,32 +81,50 @@ public sealed record HeartbeatRequest
     public List<ModuleStatusInfo> Modules { get; init; } = [];
 }
 
-/// <summary>Free space on the volumes that matter, in bytes.</summary>
+/// <summary>Free space on the volumes that matter, in bytes. Null = could not be measured, never 0.</summary>
 public sealed record DiskInfo
 {
     /// <summary>Free bytes on the system volume.</summary>
     [JsonPropertyName("system_free_bytes")]
-    public long SystemFreeBytes { get; init; }
+    public long? SystemFreeBytes { get; init; }
 
     /// <summary>Free bytes on the volume holding the agent database (matters for Sprint 10 backups).</summary>
     [JsonPropertyName("db_volume_free_bytes")]
-    public long DbVolumeFreeBytes { get; init; }
+    public long? DbVolumeFreeBytes { get; init; }
 }
 
 /// <summary>Alert transmission health. Answers "did everything it detected reach the GRID?".</summary>
 public sealed record TransmissionInfo
 {
-    /// <summary>Alerts waiting in the local upload queue.</summary>
+    /// <summary>
+    /// Alerts waiting in the local upload queue. Null when the local database could not be
+    /// read: 0 would tell the GRID "the queue is empty" and could turn the verdict green.
+    /// </summary>
     [JsonPropertyName("pending_alerts")]
-    public int PendingAlerts { get; init; }
+    public int? PendingAlerts { get; init; }
 
     /// <summary>Last successful upload, UTC. Null if none yet.</summary>
     [JsonPropertyName("last_upload_ok_at")]
     public DateTime? LastUploadOkAt { get; init; }
 
+    /// <summary>
+    /// Age of the last successful upload, in seconds, measured on the agent's monotonic
+    /// clock at send time. Immune to clock skew and wall-clock changes; the GRID prefers
+    /// it to last_upload_ok_at. Null if no upload has succeeded since startup.
+    /// </summary>
+    [JsonPropertyName("last_upload_ok_age_seconds")]
+    public long? LastUploadOkAgeSeconds { get; init; }
+
     /// <summary>Stable code of the last upload failure (never an exception message). Null if none.</summary>
     [JsonPropertyName("last_upload_error_code")]
     public string? LastUploadErrorCode { get; init; }
+
+    /// <summary>
+    /// Alerts the GRID refused (400/422, not retried) over the last 24 hours. Null when
+    /// the local database could not be read — never 0 for "unknown".
+    /// </summary>
+    [JsonPropertyName("rejected_alerts")]
+    public int? RejectedAlerts { get; init; }
 }
 
 /// <summary>One module's runtime state.</summary>

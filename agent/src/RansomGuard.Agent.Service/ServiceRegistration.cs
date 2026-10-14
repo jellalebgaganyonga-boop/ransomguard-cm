@@ -122,6 +122,11 @@ public static class ServiceRegistration
         // Runtime module-state registry: each module publishes its real state here
         // and the heartbeat reads it, instead of deriving status from config.
         services.AddSingleton<IModuleStateRegistry, InMemoryModuleStateRegistry>();
+        // One reporter for every module: registry, Critical log, audit — and the
+        // per-minute limit on ModuleEventsLost entries.
+        services.AddSingleton<IModuleFailureReporter, ModuleFailureReporter>();
+        // Monotonic clock (Stopwatch) for uptime and upload ages, and timers; fakeable in tests.
+        services.AddSingleton(TimeProvider.System);
 
         // Cross-module event bus
         services.AddSingleton<IDetectionEventBus, InMemoryDetectionEventBus>();

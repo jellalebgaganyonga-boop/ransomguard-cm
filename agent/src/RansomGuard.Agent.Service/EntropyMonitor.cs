@@ -36,10 +36,26 @@ public sealed class EntropyMonitor : BackgroundService
     private readonly IDetectionEventBus? _eventBus;
     private readonly IAlertForwardingQueue? _alertQueue;
     private readonly IModuleStateRegistry _moduleState;
+    private readonly IModuleFailureReporter _failureReporter;
+    private readonly TimeSpan _startupDelay;
+    private readonly TaskCompletionSource _watcherFault = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     /// <summary>
     /// Initializes the entropy monitor.
     /// </summary>
+    /// <param name="logger">Logger.</param>
+    /// <param name="config">Agent configuration.</param>
+    /// <param name="scopeFactory">Scope factory for per-event services.</param>
+    /// <param name="deduplicator">File event deduplicator.</param>
+    /// <param name="calculator">Shannon entropy calculator.</param>
+    /// <param name="moduleState">Runtime module-state registry.</param>
+    /// <param name="failureReporter">Reports the module going down.</param>
+    /// <param name="rateLimiterFactory">Rate limiter for entropy computations.</param>
+    /// <param name="eventBus">Cross-module detection bus.</param>
+    /// <param name="alertQueue">Queue forwarding alerts to the GRID.</param>
+    /// <param name="startupDelay">
+    /// Test seam: wait before starting, for SENTINEL's deployment; null (the DI default) is 5 s.
+    /// </param>
     public EntropyMonitor(
         ILogger<EntropyMonitor> logger,
         IOptionsMonitor<AgentConfiguration> config,
@@ -47,9 +63,11 @@ public sealed class EntropyMonitor : BackgroundService
         IFileEventDeduplicator deduplicator,
         IEntropyCalculator calculator,
         IModuleStateRegistry moduleState,
+        IModuleFailureReporter failureReporter,
         RateLimiterFactory? rateLimiterFactory = null,
         IDetectionEventBus? eventBus = null,
-        IAlertForwardingQueue? alertQueue = null)
+        IAlertForwardingQueue? alertQueue = null,
+        TimeSpan? startupDelay = null)
     {
         _logger = logger;
         _config = config.CurrentValue;
@@ -57,6 +75,8 @@ public sealed class EntropyMonitor : BackgroundService
         _deduplicator = deduplicator;
         _calculator = calculator;
         _moduleState = moduleState;
+        _failureReporter = failureReporter;
+        _startupDelay = startupDelay ?? TimeSpan.FromSeconds(5);
         _rateLimiter = rateLimiterFactory?.GetLimiter(RateLimiterFactory.EntropyComputation);
         _eventBus = eventBus;
         _alertQueue = alertQueue;
@@ -72,61 +92,77 @@ public sealed class EntropyMonitor : BackgroundService
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         bool reachedActive = false;
+        Task? consumerTask = null;
+
+        // Every task of the module runs on this token, so that after a failure
+        // nothing keeps running unseen.
+        using var moduleCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+        CancellationToken moduleToken = moduleCts.Token;
+
         try
         {
-        EntropyOptions? entropy = _config.Entropy;
-        if (entropy is null || !entropy.Enabled)
-        {
-            _logger.LogInformation("ENTROPY module is disabled");
-            _moduleState.Publish(ModuleCode.Entropy, ModuleState.DisabledByConfig, ModuleReasonCode.DisabledByConfig);
-            return;
-        }
-
-        // Wait for SENTINEL deployment and baseline scan
-        await Task.Delay(5000, stoppingToken);
-
-        // Build initial baselines
-        await BuildBaselinesAsync(stoppingToken);
-
-        // Start consumer
-        Task consumerTask = ConsumeEventsAsync(entropy, stoppingToken);
-
-        // Set up FSW on watch directories
-        string[] resolvedPaths = EnvironmentVariableResolver.ResolvePaths(_config.Detection.WatchPaths);
-        foreach (string dir in resolvedPaths)
-        {
-            if (!Directory.Exists(dir)) continue;
-
-            var watcher = new FileSystemWatcher(dir)
+            EntropyOptions? entropy = _config.Entropy;
+            if (entropy is null || !entropy.Enabled)
             {
-                NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size,
-                IncludeSubdirectories = true,
-                EnableRaisingEvents = true
-            };
+                _logger.LogInformation("ENTROPY module is disabled");
+                _moduleState.Publish(ModuleCode.Entropy, ModuleState.DisabledByConfig, ModuleReasonCode.DisabledByConfig);
+                return;
+            }
 
-            watcher.Changed += (_, e) =>
+            // Wait for SENTINEL deployment and baseline scan
+            await Task.Delay(_startupDelay, stoppingToken);
+
+            // Build initial baselines
+            await BuildBaselinesAsync(stoppingToken);
+
+            consumerTask = ConsumeEventsAsync(entropy, moduleToken);
+
+            // Set up FSW on watch directories
+            string[] resolvedPaths = EnvironmentVariableResolver.ResolvePaths(_config.Detection.WatchPaths);
+            foreach (string dir in resolvedPaths)
             {
-                if (_deduplicator.ShouldProcess(e.FullPath, e.ChangeType))
+                if (!Directory.Exists(dir))
                 {
-                    _fileChannel.Writer.TryWrite(e.FullPath);
+                    _logger.LogWarning("ENTROPY: folder {Directory} does not exist and is not watched", dir);
+                    continue;
                 }
-            };
 
-            _watchers.Add(watcher);
-        }
+                var watcher = new FileSystemWatcher(dir)
+                {
+                    NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size,
+                    IncludeSubdirectories = true,
+                    EnableRaisingEvents = true
+                };
 
-        _logger.LogInformation("ENTROPY monitor active on {DirCount} directories", _watchers.Count);
-        _moduleState.Publish(ModuleCode.Entropy, ModuleState.Active);
-        reachedActive = true;
+                watcher.Changed += (_, e) =>
+                {
+                    if (_deduplicator.ShouldProcess(e.FullPath, e.ChangeType))
+                    {
+                        _fileChannel.Writer.TryWrite(e.FullPath);
+                    }
+                };
+                watcher.Error += OnWatcherError;
 
-        // Keep alive
-        try { await Task.Delay(Timeout.Infinite, stoppingToken); }
-        catch (OperationCanceledException) { }
+                _watchers.Add(watcher);
+            }
 
-        _fileChannel.Writer.TryComplete();
-        await consumerTask;
+            // Zero watcher is not "active": the module would see no modification at all.
+            if (_watchers.Count == 0)
+            {
+                _logger.LogError("ENTROPY watches nothing: none of the {Count} configured folders exists",
+                    resolvedPaths.Length);
+                _moduleState.Publish(ModuleCode.Entropy, ModuleState.Inactive, ModuleReasonCode.NoWatchDirectory);
+                return;
+            }
 
-        foreach (var w in _watchers) { w.EnableRaisingEvents = false; w.Dispose(); }
+            _logger.LogInformation("ENTROPY monitor active on {DirCount} directories", _watchers.Count);
+            _moduleState.Publish(ModuleCode.Entropy, ModuleState.Active);
+            reachedActive = true;
+
+            await ModuleTaskObserver.ObserveUntilStoppedAsync(
+                stoppingToken,
+                ("consumer", consumerTask),
+                ("watchers", _watcherFault.Task));
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
@@ -134,11 +170,59 @@ public sealed class EntropyMonitor : BackgroundService
         }
         catch (Exception ex)
         {
-            // Publish the real state and do NOT rethrow: one module crashing must
-            // not take the host — and all other protection — down with it.
-            _moduleState.Publish(ModuleCode.Entropy, ModuleState.Inactive,
-                reachedActive ? ModuleReasonCode.StoppedUnexpectedly : ModuleReasonCode.InitFailed);
-            _logger.LogError(ex, "ENTROPY monitor stopped unexpectedly");
+            // Swallowed on purpose: one module going down must not take the host —
+            // and every other module — with it. The reporter leaves the three
+            // traces: registry state, Critical log, audit entry.
+            await _failureReporter.ReportStoppedAsync(ModuleCode.Entropy, reachedActive, ex);
+        }
+        finally
+        {
+            await StopModuleAsync(moduleCts, consumerTask);
+        }
+    }
+
+    /// <summary>
+    /// A watcher reports an error. A buffer overflow loses events but the watcher
+    /// keeps running; any other error means it has stopped and ENTROPY is blind.
+    /// </summary>
+    private void OnWatcherError(object sender, ErrorEventArgs e)
+    {
+        Exception error = e.GetException();
+        if (error is InternalBufferOverflowException)
+        {
+            // ReportEventsLostAsync never throws, and writes at most once a minute.
+            // A burst of overflows here is itself a hint of mass modification (AGT-FSW-001).
+            _ = _failureReporter.ReportEventsLostAsync(ModuleCode.Entropy, error);
+            return;
+        }
+
+        _watcherFault.TrySetException(error);
+    }
+
+    /// <summary>Stops every source and task of the module; best effort, never throws.</summary>
+    private async Task StopModuleAsync(CancellationTokenSource moduleCts, Task? consumerTask)
+    {
+        foreach (FileSystemWatcher watcher in _watchers)
+        {
+            watcher.EnableRaisingEvents = false;
+            watcher.Dispose();
+        }
+
+        _watchers.Clear();
+        _fileChannel.Writer.TryComplete();
+        await moduleCts.CancelAsync();
+
+        if (consumerTask is not null)
+        {
+            try
+            {
+                await consumerTask;
+            }
+            catch (Exception ex)
+            {
+                // Cancelled by the stop above, or already reported as the failure.
+                _logger.LogDebug(ex, "ENTROPY consumer ended during stop");
+            }
         }
     }
 

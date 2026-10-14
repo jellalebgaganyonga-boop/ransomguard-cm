@@ -54,13 +54,19 @@ public static class ModuleCode
 /// </summary>
 public static class ModuleReasonCode
 {
+    /// <summary>
+    /// The module has not reached its running state yet. The startup default:
+    /// a heartbeat sent before the modules are up must not read as a failure.
+    /// </summary>
+    public const string Starting = "starting";
+
     /// <summary>Requires administrator rights that the agent does not have.</summary>
     public const string AdminRightsMissing = "admin_rights_missing";
 
     /// <summary>Turned off in configuration.</summary>
     public const string DisabledByConfig = "disabled_by_config";
 
-    /// <summary>Failed before reaching its running state.</summary>
+    /// <summary>Failed before reaching its running state. Only ever published from a failure path.</summary>
     public const string InitFailed = "init_failed";
 
     /// <summary>Crashed after having started.</summary>
@@ -77,6 +83,19 @@ public static class ModuleReasonCode
     /// Strict). Console labels: FR « Blocage non implémenté », EN « Blocking not implemented ».
     /// </summary>
     public const string ActionsNotImplemented = "actions_not_implemented";
+
+    /// <summary>
+    /// None of the configured folders exists, so the module watches nothing (e.g. under
+    /// LocalSystem, %USERPROFILE% resolves to the system profile). Console labels:
+    /// FR « Aucun dossier surveillé », EN « No folder being watched ».
+    /// </summary>
+    public const string NoWatchDirectory = "no_watch_directory";
+
+    /// <summary>
+    /// SENTINEL's periodic integrity check keeps failing; its real-time watchers still run.
+    /// Console labels: FR « Vérification d'intégrité en échec », EN « Integrity check failing ».
+    /// </summary>
+    public const string IntegrityCheckFailing = "integrity_check_failing";
 }
 
 /// <summary>One module's current state.</summary>
@@ -102,9 +121,11 @@ public interface IModuleStateRegistry
 /// Seeded so the heartbeat always reports all six entries, even before a module
 /// has started:
 /// <list type="bullet">
-/// <item>the four detection modules start Inactive/init_failed — the safe default
-///   for a security product is "not protecting until proven otherwise"; each
-///   flips itself to Active once it reaches its "monitor active" point;</item>
+/// <item>the four detection modules start Inactive/starting — the safe default
+///   for a security product is "not protecting until proven otherwise", without
+///   claiming a failure that has not happened; each flips itself to Active once
+///   it reaches its "monitor active" point, and only a failure path publishes
+///   init_failed;</item>
 /// <item>GENEALOGY is Degraded/attribution_unreliable: it is an enricher, not a
 ///   detector, and its process attribution measured 0/120 (see AttributionBench).
 ///   It becomes Active when ETW attribution exists and is measured;</item>
@@ -123,10 +144,10 @@ public sealed class InMemoryModuleStateRegistry : IModuleStateRegistry
         _clock = clock ?? (() => DateTime.UtcNow);
         DateTime now = _clock();
 
-        _entries[ModuleCode.Sentinel] = new(ModuleCode.Sentinel, ModuleState.Inactive, ModuleReasonCode.InitFailed, now);
-        _entries[ModuleCode.Entropy] = new(ModuleCode.Entropy, ModuleState.Inactive, ModuleReasonCode.InitFailed, now);
-        _entries[ModuleCode.UsbGuard] = new(ModuleCode.UsbGuard, ModuleState.Inactive, ModuleReasonCode.InitFailed, now);
-        _entries[ModuleCode.ExfilWatch] = new(ModuleCode.ExfilWatch, ModuleState.Inactive, ModuleReasonCode.InitFailed, now);
+        _entries[ModuleCode.Sentinel] = new(ModuleCode.Sentinel, ModuleState.Inactive, ModuleReasonCode.Starting, now);
+        _entries[ModuleCode.Entropy] = new(ModuleCode.Entropy, ModuleState.Inactive, ModuleReasonCode.Starting, now);
+        _entries[ModuleCode.UsbGuard] = new(ModuleCode.UsbGuard, ModuleState.Inactive, ModuleReasonCode.Starting, now);
+        _entries[ModuleCode.ExfilWatch] = new(ModuleCode.ExfilWatch, ModuleState.Inactive, ModuleReasonCode.Starting, now);
         _entries[ModuleCode.Genealogy] = new(ModuleCode.Genealogy, ModuleState.Degraded, ModuleReasonCode.AttributionUnreliable, now);
         _entries[ModuleCode.AntiTampering] = new(ModuleCode.AntiTampering, ModuleState.Inactive, ModuleReasonCode.NotImplemented, now);
     }

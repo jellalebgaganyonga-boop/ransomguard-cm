@@ -45,4 +45,8 @@
     <WriteLinesToFile File="$(PublishDir)$(TargetFileName).sha256" Lines="$(SelfIntegrityHash)" Overwrite="true" />
     <Message Importance="high" Text="Self-integrity hash generated: $(PublishDir)$(TargetFileName).sha256" />
   </Target>
+  <ItemGroup>
+    <!-- GridHeartbeatService.BuildHeartbeatAsync and AlertForwardingService.MarkUploadOk are tested directly. -->
+    <InternalsVisibleTo Include="RansomGuard.Agent.Tests" />
+  </ItemGroup>
 </Project>

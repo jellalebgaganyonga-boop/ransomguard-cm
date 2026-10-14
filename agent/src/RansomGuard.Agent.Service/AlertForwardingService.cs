@@ -45,6 +45,8 @@ public sealed class AlertForwardingService : BackgroundService, IAlertForwarding
     private long _totalFailedValidation;
 
     private long _lastUploadOkTicks; // 0 = never; UTC ticks otherwise
+    private long _lastUploadOkTimestamp; // 0 = never; TimeProvider (monotonic) timestamp otherwise
+    private readonly TimeProvider _time;
     private long _lastDetectionTicks; // 0 = never; UTC ticks otherwise
     private volatile string? _lastUploadErrorCode;
 
@@ -77,12 +79,27 @@ public sealed class AlertForwardingService : BackgroundService, IAlertForwarding
     /// </summary>
     public string? LastUploadErrorCode => _lastUploadErrorCode;
 
+    /// <summary>
+    /// Seconds since the last successful upload, on the monotonic clock (Stopwatch):
+    /// a wall-clock change or a skewed clock cannot make it lie. Null if none since startup.
+    /// </summary>
+    public long? LastUploadOkAgeSeconds
+    {
+        get
+        {
+            long stamp = Interlocked.Read(ref _lastUploadOkTimestamp);
+            return stamp == 0 ? null : (long)_time.GetElapsedTime(stamp).TotalSeconds;
+        }
+    }
+
     public AlertForwardingService(
         IGridApiClient gridClient,
         EnrollmentService enrollmentService,
         IServiceScopeFactory scopeFactory,
-        ILogger<AlertForwardingService> logger)
+        ILogger<AlertForwardingService> logger,
+        TimeProvider? time = null)
     {
+        _time = time ?? TimeProvider.System;
         _gridClient = gridClient;
         _enrollmentService = enrollmentService;
         _scopeFactory = scopeFactory;
@@ -304,9 +321,11 @@ public sealed class AlertForwardingService : BackgroundService, IAlertForwarding
         }
     }
 
-    private void MarkUploadOk()
+    internal void MarkUploadOk()
     {
         Interlocked.Exchange(ref _lastUploadOkTicks, DateTime.UtcNow.Ticks);
+        // A real timestamp is never 0 (Stopwatch counts from boot), so 0 keeps meaning "never".
+        Interlocked.Exchange(ref _lastUploadOkTimestamp, Math.Max(1, _time.GetTimestamp()));
         _lastUploadErrorCode = null;
     }
 

@@ -28,6 +28,8 @@ public sealed class ExfilWatchMonitor : BackgroundService
     private readonly IAlertForwardingQueue? _alertQueue;
     private readonly AgentConfiguration _config;
     private readonly IModuleStateRegistry _moduleState;
+    private readonly IModuleFailureReporter _failureReporter;
+    private readonly Func<bool> _isElevated;
     private readonly Channel<NetworkEvent> _eventChannel;
     private long _totalEventsProcessed;
 
@@ -35,13 +37,26 @@ public sealed class ExfilWatchMonitor : BackgroundService
     public long TotalEventsProcessed => Interlocked.Read(ref _totalEventsProcessed);
 
     /// <summary>Initializes the EXFIL WATCH monitor.</summary>
+    /// <param name="logger">Logger.</param>
+    /// <param name="networkMonitor">Kernel ETW network capture.</param>
+    /// <param name="scopeFactory">Scope factory for per-event services.</param>
+    /// <param name="config">Agent configuration.</param>
+    /// <param name="moduleState">Runtime module-state registry.</param>
+    /// <param name="failureReporter">Reports the module going down.</param>
+    /// <param name="alertQueue">Queue forwarding alerts to the GRID.</param>
+    /// <param name="isElevated">
+    /// Test seam for the elevation check; null (the DI default) uses the real
+    /// Windows administrator check.
+    /// </param>
     public ExfilWatchMonitor(
         ILogger<ExfilWatchMonitor> logger,
         INetworkActivityMonitor networkMonitor,
         IServiceScopeFactory scopeFactory,
         IOptionsMonitor<AgentConfiguration> config,
         IModuleStateRegistry moduleState,
-        IAlertForwardingQueue? alertQueue = null)
+        IModuleFailureReporter failureReporter,
+        IAlertForwardingQueue? alertQueue = null,
+        Func<bool>? isElevated = null)
     {
         _logger = logger;
         _networkMonitor = networkMonitor;
@@ -49,6 +64,8 @@ public sealed class ExfilWatchMonitor : BackgroundService
         _alertQueue = alertQueue;
         _config = config.CurrentValue;
         _moduleState = moduleState;
+        _failureReporter = failureReporter;
+        _isElevated = isElevated ?? IsElevated;
         _eventChannel = Channel.CreateBounded<NetworkEvent>(
             new BoundedChannelOptions(EventChannelCapacity)
             {
@@ -61,54 +78,50 @@ public sealed class ExfilWatchMonitor : BackgroundService
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         bool reachedActive = false;
+        bool captureStarted = false;
+        Task? consumerTask = null;
+
+        // Every task of the module runs on this token, so that after a failure
+        // nothing keeps running unseen.
+        using var moduleCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+        CancellationToken moduleToken = moduleCts.Token;
+
         try
         {
-        if (_config.ExfilWatch is null || !_config.ExfilWatch.Enabled)
-        {
-            _logger.LogInformation("EXFIL WATCH module is disabled");
-            _moduleState.Publish(ModuleCode.ExfilWatch, ModuleState.DisabledByConfig, ModuleReasonCode.DisabledByConfig);
-            return;
-        }
-
-        // Kernel ETW (the core TCP/IP capture) requires elevation. Without it the
-        // module cannot do its job, so report it honestly as inactive rather than
-        // letting it look active on a degraded capture.
-        if (!IsElevated())
-        {
-            _logger.LogWarning("EXFIL WATCH inactive: administrator rights missing (kernel ETW unavailable)");
-            _moduleState.Publish(ModuleCode.ExfilWatch, ModuleState.Inactive, ModuleReasonCode.AdminRightsMissing);
-            return;
-        }
-
-        _logger.LogInformation("EXFIL WATCH monitor starting (learning phase: {Days} days)",
-            _config.ExfilWatch.LearningPhaseDays);
-
-        // Start ETW capture
-        _networkMonitor.Start(_eventChannel.Writer, stoppingToken);
-
-        // Start consumer
-        Task consumerTask = ConsumeEventsAsync(stoppingToken);
-
-        _logger.LogInformation("EXFIL WATCH monitor active");
-        _moduleState.Publish(ModuleCode.ExfilWatch, ModuleState.Active);
-        reachedActive = true;
-
-        // Heartbeat
-        using var heartbeat = new PeriodicTimer(TimeSpan.FromSeconds(60));
-        try
-        {
-            while (await heartbeat.WaitForNextTickAsync(stoppingToken))
+            if (_config.ExfilWatch is null || !_config.ExfilWatch.Enabled)
             {
-                _logger.LogInformation(
-                    "EXFIL WATCH heartbeat | Events processed: {Processed} | ETW captured: {Captured}",
-                    TotalEventsProcessed, _networkMonitor.TotalEventsCaptured);
+                _logger.LogInformation("EXFIL WATCH module is disabled");
+                _moduleState.Publish(ModuleCode.ExfilWatch, ModuleState.DisabledByConfig, ModuleReasonCode.DisabledByConfig);
+                return;
             }
-        }
-        catch (OperationCanceledException) { }
 
-        _eventChannel.Writer.TryComplete();
-        await consumerTask;
-        await _networkMonitor.StopAsync();
+            // Kernel ETW (the core TCP/IP capture) requires elevation. Without it the
+            // module cannot do its job, so report it honestly as inactive rather than
+            // letting it look active on a degraded capture.
+            if (!_isElevated())
+            {
+                _logger.LogWarning("EXFIL WATCH inactive: administrator rights missing (kernel ETW unavailable)");
+                _moduleState.Publish(ModuleCode.ExfilWatch, ModuleState.Inactive, ModuleReasonCode.AdminRightsMissing);
+                return;
+            }
+
+            _logger.LogInformation("EXFIL WATCH monitor starting (learning phase: {Days} days)",
+                _config.ExfilWatch.LearningPhaseDays);
+
+            // Start ETW capture
+            _networkMonitor.Start(_eventChannel.Writer, moduleToken);
+            captureStarted = true;
+
+            consumerTask = ConsumeEventsAsync(moduleToken);
+
+            _logger.LogInformation("EXFIL WATCH monitor active");
+            _moduleState.Publish(ModuleCode.ExfilWatch, ModuleState.Active);
+            reachedActive = true;
+
+            await ModuleTaskObserver.ObserveUntilStoppedAsync(
+                stoppingToken,
+                ("consumer", consumerTask),
+                ("status-log", LogStatusPeriodicallyAsync(moduleToken)));
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
@@ -116,11 +129,57 @@ public sealed class ExfilWatchMonitor : BackgroundService
         }
         catch (Exception ex)
         {
-            // Publish the real state and do NOT rethrow: one module crashing must
-            // not take the host — and all other protection — down with it.
-            _moduleState.Publish(ModuleCode.ExfilWatch, ModuleState.Inactive,
-                reachedActive ? ModuleReasonCode.StoppedUnexpectedly : ModuleReasonCode.InitFailed);
-            _logger.LogError(ex, "EXFIL WATCH monitor stopped unexpectedly");
+            // Swallowed on purpose: one module going down must not take the host —
+            // and every other module — with it. The reporter leaves the three
+            // traces: registry state, Critical log, audit entry.
+            await _failureReporter.ReportStoppedAsync(ModuleCode.ExfilWatch, reachedActive, ex);
+        }
+        finally
+        {
+            await StopModuleAsync(moduleCts, consumerTask, captureStarted);
+        }
+    }
+
+    private async Task LogStatusPeriodicallyAsync(CancellationToken ct)
+    {
+        using var heartbeat = new PeriodicTimer(TimeSpan.FromSeconds(60));
+        while (await heartbeat.WaitForNextTickAsync(ct))
+        {
+            _logger.LogInformation(
+                "EXFIL WATCH heartbeat | Events processed: {Processed} | ETW captured: {Captured}",
+                TotalEventsProcessed, _networkMonitor.TotalEventsCaptured);
+        }
+    }
+
+    /// <summary>Stops every source and task of the module; best effort, never throws.</summary>
+    private async Task StopModuleAsync(CancellationTokenSource moduleCts, Task? consumerTask, bool captureStarted)
+    {
+        _eventChannel.Writer.TryComplete();
+        await moduleCts.CancelAsync();
+
+        if (consumerTask is not null)
+        {
+            try
+            {
+                await consumerTask;
+            }
+            catch (Exception ex)
+            {
+                // Cancelled by the stop above, or already reported as the failure.
+                _logger.LogDebug(ex, "EXFIL WATCH consumer ended during stop");
+            }
+        }
+
+        if (captureStarted)
+        {
+            try
+            {
+                await _networkMonitor.StopAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "EXFIL WATCH: ETW capture did not stop cleanly");
+            }
         }
     }
 

@@ -30,7 +30,7 @@ public sealed class ModuleStateRegistryTests
         {
             ModuleStateEntry entry = registry.Snapshot().Single(e => e.Code == code);
             entry.State.ShouldBe(ModuleState.Inactive);
-            entry.ReasonCode.ShouldBe(ModuleReasonCode.InitFailed);
+            entry.ReasonCode.ShouldBe(ModuleReasonCode.Starting); // not a failure that has not happened
         }
     }
 

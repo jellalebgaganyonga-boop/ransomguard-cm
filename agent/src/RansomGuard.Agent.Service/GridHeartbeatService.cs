@@ -33,7 +33,9 @@ public sealed class GridHeartbeatService : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly AgentConfiguration _config;
     private readonly ILogger<GridHeartbeatService> _logger;
-    private readonly DateTime _startedAt = DateTime.UtcNow;
+    private readonly TimeProvider _time;
+    // Monotonic: the uptime must not jump with a wall-clock change (NTP, DST, a user).
+    private readonly long _startedAtTimestamp;
 
     /// <summary>Last list of pending command IDs returned by the server.</summary>
     public IReadOnlyList<string> LastPendingCommands { get; private set; } = [];
@@ -45,8 +47,11 @@ public sealed class GridHeartbeatService : BackgroundService
         AlertForwardingService forwarding,
         IServiceScopeFactory scopeFactory,
         IOptions<AgentConfiguration> config,
-        ILogger<GridHeartbeatService> logger)
+        ILogger<GridHeartbeatService> logger,
+        TimeProvider? time = null)
     {
+        _time = time ?? TimeProvider.System;
+        _startedAtTimestamp = _time.GetTimestamp();
         _gridClient = gridClient;
         _enrollmentService = enrollmentService;
         _moduleState = moduleState;
@@ -142,9 +147,11 @@ public sealed class GridHeartbeatService : BackgroundService
         }
     }
 
-    private async Task<HeartbeatRequest> BuildHeartbeatAsync(CancellationToken ct)
+    internal async Task<HeartbeatRequest> BuildHeartbeatAsync(CancellationToken ct)
     {
-        var uptimeSeconds = (int)(DateTime.UtcNow - _startedAt).TotalSeconds;
+        // Real uptime on the monotonic clock. A module still "starting" is judged on it by
+        // the GRID: under 300 s it is "starting", beyond it counts as a start failure.
+        var uptimeSeconds = (int)_time.GetElapsedTime(_startedAtTimestamp).TotalSeconds;
 
         var modules = _moduleState.Snapshot()
             .Select(e => new ModuleStatusInfo
@@ -156,7 +163,7 @@ public sealed class GridHeartbeatService : BackgroundService
             })
             .ToList();
 
-        (int pendingAlerts, long dbVolumeFreeBytes) = await QueryDbStateAsync(ct).ConfigureAwait(false);
+        (int? pendingAlerts, int? rejectedAlerts, long? dbVolumeFreeBytes) = await QueryDbStateAsync(ct).ConfigureAwait(false);
 
         return new HeartbeatRequest
         {
@@ -174,17 +181,20 @@ public sealed class GridHeartbeatService : BackgroundService
             {
                 PendingAlerts = pendingAlerts,
                 LastUploadOkAt = _forwarding.LastUploadOkAtUtc,
+                LastUploadOkAgeSeconds = _forwarding.LastUploadOkAgeSeconds,
                 LastUploadErrorCode = _forwarding.LastUploadErrorCode,
+                RejectedAlerts = rejectedAlerts,
             },
             Modules = modules,
         };
     }
 
     /// <summary>
-    /// Reads the two DB-backed facts in a single scope: the backlog of alerts still
-    /// waiting to upload, and the free space on the volume that holds the database.
+    /// Reads the DB-backed facts in a single scope: the backlog of alerts still waiting
+    /// to upload, the alerts the GRID refused over the last 24 h, and the free space on
+    /// the volume that holds the database.
     /// </summary>
-    private async Task<(int PendingAlerts, long DbVolumeFreeBytes)> QueryDbStateAsync(CancellationToken ct)
+    private async Task<(int? PendingAlerts, int? RejectedAlerts, long? DbVolumeFreeBytes)> QueryDbStateAsync(CancellationToken ct)
     {
         try
         {
@@ -197,33 +207,47 @@ public sealed class GridHeartbeatService : BackgroundService
                     ct)
                 .ConfigureAwait(false);
 
-            long dbFree = FreeBytes(ExtractDataSource(db.Database.GetConnectionString()));
-            return (pending, dbFree);
+            // Rolling 24 h, approximated on FirstAttemptAt (when the alert was first sent), not
+            // on the moment the GRID refused it: a 400/422 is not retried, so the refusal comes
+            // on the first attempt or within its retries, minutes later at most. The window is
+            // on the wall clock (UTC) because it must survive a restart, which the monotonic
+            // clock does not.
+            DateTime since = DateTime.UtcNow.AddHours(-24);
+            int rejected = await db.PendingAlertUploads
+                .CountAsync(p => p.Status == PendingUploadStatus.FailedValidation && p.FirstAttemptAt >= since, ct)
+                .ConfigureAwait(false);
+
+            long? dbFree = FreeBytes(ExtractDataSource(db.Database.GetConnectionString()));
+            return (pending, rejected, dbFree);
         }
         catch (Exception ex)
         {
-            // Never let a diagnostics read break the heartbeat itself.
+            // Never let a diagnostics read break the heartbeat itself. What could not be read
+            // is unknown (null), never a reassuring 0: pending_alerts = 0 would read "queue
+            // empty" and could turn the verdict green; the GRID shows null as unavailable and,
+            // past 300 s, as partial / transmission_unknown.
             _logger.LogWarning(ex, "Could not read local DB state for heartbeat");
-            return (0, 0);
+            return (null, null, null);
         }
     }
 
     /// <summary>Free bytes on the volume holding <paramref name="path"/>, or 0 if it cannot be read.</summary>
-    private static long FreeBytes(string? path)
+    /// <summary>Free bytes on the volume holding <paramref name="path"/>; null if it cannot be measured, never 0.</summary>
+    private static long? FreeBytes(string? path)
     {
         try
         {
             string? root = string.IsNullOrWhiteSpace(path) ? null : Path.GetPathRoot(Path.GetFullPath(path));
             if (string.IsNullOrEmpty(root))
             {
-                return 0;
+                return null;
             }
 
             return new DriveInfo(root).AvailableFreeSpace;
         }
         catch
         {
-            return 0;
+            return null;
         }
     }
 
