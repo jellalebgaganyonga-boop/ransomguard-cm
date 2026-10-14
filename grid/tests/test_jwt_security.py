@@ -14,6 +14,7 @@ import base64
 import hashlib
 import hmac
 import json
+import os
 import time
 from collections.abc import Callable
 from functools import cache
@@ -29,8 +30,8 @@ from ransomguard_grid.core.jwt_service import JwtService
 from tests.api.test_tenant_isolation import _create_two_tenants, _login
 
 _SECRET = "jwt-security-test-secret-at-least-32-chars"
-# Must match tests/conftest.py (GRID_JWT_SECRET_KEY), used by the running app.
-_APP_SECRET = "test-secret-key-minimum-32-characters-long!"
+# The key of the running app: tests/conftest.py draws a fresh one per run.
+_APP_SECRET = os.environ["GRID_JWT_SECRET_KEY"]
 
 # Issued by python-jose 3.5.0 (HS256) before the migration. Its signature is still valid under
 # PyJWT (same secret, same algorithm), but it predates session families and versions (fam, ver):

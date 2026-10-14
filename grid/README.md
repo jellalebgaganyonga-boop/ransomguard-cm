@@ -40,6 +40,8 @@ python -m venv .venv
 .venv\Scripts\activate
 pip install -e ".[dev]"
 cp .env.example .env  # Edit with local MySQL credentials
+# GRID_JWT_SECRET_KEY has no default: without it the GRID refuses to start (GRID-SEC-007).
+python -c "import secrets; print('GRID_JWT_SECRET_KEY=' + secrets.token_urlsafe(48))"  # paste into .env
 alembic upgrade head
 uvicorn ransomguard_grid.main:app --reload
 ```

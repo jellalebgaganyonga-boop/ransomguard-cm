@@ -3,8 +3,21 @@
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, ValidationError, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# JWT keys that have been published in this repository (old default, .env.example placeholder,
+# old test key). A GRID started with one of them issues tokens anyone can forge (GRID-SEC-007).
+_PUBLISHED_JWT_SECRETS = frozenset({
+    "dev-secret-key-minimum-32-characters-long!",
+    "replace_with_strong_secret_minimum_32_chars",
+    "test-secret-key-minimum-32-characters-long!",
+})
+_GENERATE_JWT_SECRET = 'python -c "import secrets; print(secrets.token_urlsafe(48))"'
+
+
+class ConfigurationError(RuntimeError):
+    """The GRID refuses to start: the message names the GRID_ variables to fix."""
 
 
 class Settings(BaseSettings):
@@ -30,8 +43,8 @@ class Settings(BaseSettings):
     # Redis (optional, for rate limiting and cache)
     redis_url: str = Field(default="redis://localhost:6379/0")
 
-    # JWT (dashboard)
-    jwt_secret_key: str = Field(default="dev-secret-key-minimum-32-characters-long!", min_length=32)
+    # JWT (dashboard). No default: a default is a key everyone knows (GRID-SEC-007).
+    jwt_secret_key: str = Field(min_length=32)
     # HS256 only: the algorithm is fixed in code (core/jwt_service.py). Kept so an
     # existing GRID_JWT_ALGORITHM setting fails at startup unless it says HS256.
     jwt_algorithm: Literal["HS256"] = "HS256"
@@ -95,7 +108,26 @@ class Settings(BaseSettings):
     # the install command refuses to run a script whose hash differs (GRID-SEC-006).
     agent_packages_dir: str = Field(default="/srv/agent-packages")
 
+    @field_validator("jwt_secret_key")
+    @classmethod
+    def _not_a_published_key(cls, value: str) -> str:
+        if value in _PUBLISHED_JWT_SECRETS:
+            raise ValueError("this key is published in the repository, generate your own")
+        return value
+
 
 def get_settings() -> Settings:
-    """Factory function for settings, enables test override."""
-    return Settings()  # type: ignore[call-arg,unused-ignore]
+    """Factory function for settings, enables test override.
+
+    Raises ConfigurationError, naming each GRID_ variable at fault, instead of a bare pydantic
+    error that names fields: whoever deploys sets variables, not fields.
+    """
+    try:
+        return Settings()  # type: ignore[call-arg,unused-ignore]
+    except ValidationError as error:
+        fields = [str(item["loc"][0]) if item["loc"] else "?" for item in error.errors()]
+        problems = [f"GRID_{field.upper()}: {item['msg']}" for field, item in zip(fields, error.errors(), strict=True)]
+        message = "GRID configuration refused -- " + "; ".join(problems)
+        if "jwt_secret_key" in fields:
+            message += f". Generate a JWT key with: {_GENERATE_JWT_SECRET}"
+        raise ConfigurationError(message) from error

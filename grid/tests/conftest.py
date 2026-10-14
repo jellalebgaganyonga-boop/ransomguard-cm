@@ -1,6 +1,7 @@
 """Shared test fixtures for GRID server tests."""
 
 import os
+import secrets
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -24,7 +25,8 @@ if TYPE_CHECKING:
 
 # Set test environment before importing app
 os.environ["GRID_DATABASE_URL"] = "sqlite+aiosqlite://"
-os.environ["GRID_JWT_SECRET_KEY"] = "test-secret-key-minimum-32-characters-long!"
+# A fresh key per run: no JWT key is ever published in the repository (GRID-SEC-007).
+os.environ["GRID_JWT_SECRET_KEY"] = secrets.token_urlsafe(48)
 os.environ["GRID_ENVIRONMENT"] = "development"
 # Agent-endpoint tests call /agents/* without a client certificate, which is
 # exactly what the "agent_id" mode is for. Tests that assert the mTLS challenge
