@@ -122,7 +122,7 @@ export function CommandModal({
         <>
         <div className="flex flex-col gap-4 p-5">
           {/* Warning banner */}
-          <div className="rounded-lg border border-severity-critical-border bg-severity-critical-subtle px-4 py-3 text-sm text-severity-critical">
+          <div className="rounded-lg border border-severity-critical-border bg-severity-critical-subtle px-4 py-3 text-sm text-severity-critical-on-subtle">
             <p className="font-semibold">{t('agents.command.warningTitle', 'Action destructrice')}</p>
             <p className="mt-1">
               {t('agents.command.warningBody', { hostname })}

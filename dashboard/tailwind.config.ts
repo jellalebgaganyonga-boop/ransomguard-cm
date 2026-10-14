@@ -40,6 +40,7 @@ export default {
         'severity-critical': 'var(--sys-color-severity-critical)',
         'severity-critical-subtle': 'var(--sys-color-severity-critical-subtle)',
         'severity-critical-border': 'var(--sys-color-severity-critical-border)',
+        'severity-critical-on-subtle': 'var(--sys-color-severity-critical-on-subtle)',
         'severity-high': 'var(--sys-color-severity-high)',
         'severity-high-subtle': 'var(--sys-color-severity-high-subtle)',
         'severity-high-border': 'var(--sys-color-severity-high-border)',

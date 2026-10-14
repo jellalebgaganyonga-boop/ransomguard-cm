@@ -158,7 +158,7 @@ export function CreateUserModal({ onClose, onSuccess }: CreateUserModalProps) {
           </fieldset>
 
           {mutation.error && (
-            <p className="mb-4 rounded-md bg-severity-critical-subtle px-3 py-2 text-xs text-severity-critical">
+            <p className="mb-4 rounded-md bg-severity-critical-subtle px-3 py-2 text-xs text-severity-critical-on-subtle">
               {t('common.error', 'Une erreur est survenue')}
             </p>
           )}

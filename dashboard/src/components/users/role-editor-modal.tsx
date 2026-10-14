@@ -113,7 +113,7 @@ export function RoleEditorModal({
         </fieldset>
 
         {selfDemotionError && (
-          <p className="mb-4 rounded-md bg-severity-critical-subtle px-3 py-2 text-xs text-severity-critical">
+          <p className="mb-4 rounded-md bg-severity-critical-subtle px-3 py-2 text-xs text-severity-critical-on-subtle">
             {t(
               'users.roles.selfDemotionError',
               'Vous ne pouvez pas retirer le rôle tenant_admin de votre propre compte.',
@@ -122,7 +122,7 @@ export function RoleEditorModal({
         )}
 
         {mutation.error && (
-          <p className="mb-4 rounded-md bg-severity-critical-subtle px-3 py-2 text-xs text-severity-critical">
+          <p className="mb-4 rounded-md bg-severity-critical-subtle px-3 py-2 text-xs text-severity-critical-on-subtle">
             {t('common.error', 'Une erreur est survenue')}
           </p>
         )}

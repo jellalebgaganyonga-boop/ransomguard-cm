@@ -192,3 +192,4 @@ review date, in `docs/security/dependency-risk-register.md`.
 | GAP-03 | Heartbeat timeline endpoint not implemented |
 | GAP-08 | `GET /users` has no `roles` field |
 | DEP-001 | Vite v5→v8 breaking upgrade required for dev vuln fix |
+| FE-TOK-001 | `npm run tokens:build` is broken: `design-tokens/build.cjs` uses the Style Dictionary 3 API (`registerFormat`) while 4.4.0 is installed, and no CI job runs it (the header of `src/styles/tokens.css` says otherwise). Until it is repaired, a token change is made in `design-tokens/*.json` AND by hand in `tokens.css`, identically. |

@@ -34,6 +34,7 @@
         "criticalSubtle": { "value": "{ref.palette.red.95}", "type": "color" },
         "criticalBorder": { "value": "{ref.palette.red.40}", "type": "color" },
         "criticalOn": { "value": "{ref.palette.white}", "type": "color" },
+        "criticalOnSubtle": { "value": "{ref.palette.red.40}", "type": "color", "comment": "Text on criticalSubtle: red.50 gives 4.1:1 there, red.40 gives 5.8:1 (WCAG 1.4.3)" },
 
         "high": { "value": "{ref.palette.orange.50}", "type": "color" },
         "highSubtle": { "value": "{ref.palette.orange.95}", "type": "color" },

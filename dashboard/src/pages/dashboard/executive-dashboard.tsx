@@ -41,7 +41,7 @@ function StatusCard({ critical24h, alerts24h }: { critical24h: number; alerts24h
       >
         <div className="flex items-center gap-3">
           <AlertCircle className="size-6 shrink-0 text-severity-critical" aria-hidden="true" />
-          <p className="font-semibold text-severity-critical">
+          <p className="font-semibold text-severity-critical-on-subtle">
             {t('dashboard.exec.criticalStatus', {
               count: critical24h,
               defaultValue: `${critical24h} incidents critiques requièrent votre attention`,

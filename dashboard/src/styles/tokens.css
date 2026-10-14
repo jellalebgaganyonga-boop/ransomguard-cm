@@ -221,6 +221,7 @@
   --sys-color-severity-critical-subtle: var(--ref-palette-red-95);
   --sys-color-severity-critical-border: var(--ref-palette-red-40);
   --sys-color-severity-critical-on: var(--ref-palette-white);
+  --sys-color-severity-critical-on-subtle: var(--ref-palette-red-40);
 
   --sys-color-severity-high: var(--ref-palette-orange-50);
   --sys-color-severity-high-subtle: var(--ref-palette-orange-95);
