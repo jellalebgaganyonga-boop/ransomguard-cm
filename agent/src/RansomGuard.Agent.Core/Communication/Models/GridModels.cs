@@ -25,6 +25,13 @@ public sealed record EnrollmentRequest
 
     [JsonPropertyName("hardware_fingerprint")]
     public required string HardwareFingerprint { get; init; }
+
+    /// <summary>
+    /// The agent's own audit-signing public key (raw 32-byte Ed25519, base64): the GRID verifies
+    /// the audit chain with it. The private key never leaves the endpoint (GRID-SEC-003).
+    /// </summary>
+    [JsonPropertyName("ed25519_public_key_b64")]
+    public required string Ed25519PublicKeyB64 { get; init; }
 }
 
 public sealed record EnrollmentResponse
@@ -37,9 +44,6 @@ public sealed record EnrollmentResponse
 
     [JsonPropertyName("message")]
     public required string Message { get; init; }
-
-    [JsonPropertyName("ed25519_private_key_pem")]
-    public string? Ed25519PrivateKeyPem { get; init; }
 }
 
 // ─── Heartbeat ─────────────────────────────────────────────────────

@@ -1,3 +1,4 @@
+using RansomGuard.Agent.Core.Security.Cryptography;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -16,6 +17,7 @@ public sealed class EnrollmentService : BackgroundService
 {
     private readonly GridApiClient _gridClient;
     private readonly EnrollmentStateManager _stateManager;
+    private readonly AuditLogSigner _auditLogSigner;
     private readonly AgentConfiguration _config;
     private readonly ILogger<EnrollmentService> _logger;
     private readonly TaskCompletionSource _enrolledSignal = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -29,11 +31,13 @@ public sealed class EnrollmentService : BackgroundService
     public EnrollmentService(
         GridApiClient gridClient,
         EnrollmentStateManager stateManager,
+        AuditLogSigner auditLogSigner,
         IOptions<AgentConfiguration> config,
         ILogger<EnrollmentService> logger)
     {
         _gridClient = gridClient;
         _stateManager = stateManager;
+        _auditLogSigner = auditLogSigner;
         _config = config.Value;
         _logger = logger;
     }
@@ -79,6 +83,8 @@ public sealed class EnrollmentService : BackgroundService
                     OsVersion = Environment.OSVersion.ToString(),
                     AgentVersion = _config.Identity.Version,
                     HardwareFingerprint = GenerateHardwareFingerprint(),
+                    // GRID-SEC-003: the GRID verifies our audit chain with OUR key; it never makes one.
+                    Ed25519PublicKeyB64 = _auditLogSigner.GetPublicKeyBase64(),
                 };
 
                 var response = await _gridClient.EnrollAsync(request, stoppingToken).ConfigureAwait(false);

@@ -1,10 +1,11 @@
 """Agent enrollment endpoint — NO mTLS required (agent doesn't have cert yet)."""
 
+import base64
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from cryptography.hazmat.primitives.serialization import Encoding, NoEncryption, PrivateFormat, PublicFormat
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -63,10 +64,13 @@ async def enroll_agent(
     )
     db.add(agent)
 
-    # Generate Ed25519 key pair for audit log signing
-    ed25519_private_key = Ed25519PrivateKey.generate()
-    ed25519_public_pem = ed25519_private_key.public_key().public_bytes(Encoding.PEM, PublicFormat.SubjectPublicKeyInfo).decode()
-    ed25519_private_pem = ed25519_private_key.private_bytes(Encoding.PEM, PrivateFormat.PKCS8, NoEncryption()).decode()
+    # The agent's own audit-signing public key, stored as PEM for the audit-log verification. The
+    # GRID generates no key for the agent and never holds a private key (GRID-SEC-003).
+    ed25519_public_pem = (
+        Ed25519PublicKey.from_public_bytes(base64.b64decode(body.ed25519_public_key_b64))
+        .public_bytes(Encoding.PEM, PublicFormat.SubjectPublicKeyInfo)
+        .decode()
+    )
 
     cert = AgentCertificate(
         id=str(uuid4()),
@@ -82,9 +86,4 @@ async def enroll_agent(
 
     logger.info("Agent enrolled", agent_id=agent_id, tenant_id=tenant_id, hostname=body.hostname)
 
-    return EnrollmentResponse(
-        agent_id=agent_id,
-        tenant_id=tenant_id,
-        message="Agent enrolled successfully",
-        ed25519_private_key_pem=ed25519_private_pem,
-    )
+    return EnrollmentResponse(agent_id=agent_id, tenant_id=tenant_id, message="Agent enrolled successfully")

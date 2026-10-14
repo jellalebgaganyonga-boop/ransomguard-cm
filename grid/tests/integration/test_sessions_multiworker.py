@@ -10,6 +10,7 @@ it the module is skipped locally, and fails in CI so the proof can never silentl
 """
 
 import asyncio
+import base64
 import os
 import socket
 import subprocess
@@ -22,6 +23,8 @@ from uuid import uuid4
 
 import httpx
 import pytest
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from redis import Redis
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -208,9 +211,15 @@ async def test_an_otp_created_on_a_is_accepted_by_b_once(deployment: Deployment,
     assert provision.status_code == 200
     otp = provision.json()["otp"]
 
+    # The agent's own audit-signing public key (GRID-SEC-003).
+    public_key = base64.b64encode(
+        Ed25519PrivateKey.generate().public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
+    ).decode()
+
     def enroll(fingerprint: str) -> dict[str, str]:
         return {"otp": otp, "hostname": "mw-pc", "fqdn": "mw-pc.local", "os_version": "10",
-                "agent_version": "0.4.0", "hardware_fingerprint": fingerprint}
+                "agent_version": "0.4.0", "hardware_fingerprint": fingerprint,
+                "ed25519_public_key_b64": public_key}
 
     first = await http.post(f"{deployment.b}/api/v1/agents/enroll", json=enroll("e" * 64))
     assert first.status_code == 200, first.text

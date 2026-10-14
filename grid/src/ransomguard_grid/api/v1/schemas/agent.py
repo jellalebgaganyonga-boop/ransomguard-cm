@@ -1,9 +1,11 @@
 """Pydantic schemas for agent enrollment and heartbeat."""
 
+import base64
+import binascii
 from datetime import datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
 
 from ransomguard_grid.services.agent_posture import MAX_UPLOAD_AGE_SECONDS
 
@@ -17,13 +19,31 @@ class EnrollmentRequest(BaseModel):
     os_version: str = Field(max_length=100)
     agent_version: str = Field(max_length=50)
     hardware_fingerprint: str = Field(min_length=32, max_length=64, description="SHA-256 hardware ID")
+    # The agent's OWN audit-signing public key (raw 32-byte Ed25519, base64). Its private key never
+    # leaves the endpoint: the GRID verifies the agent's audit chain with this key, and holds no
+    # key able to sign in the agent's name (GRID-SEC-003).
+    ed25519_public_key_b64: str = Field(min_length=44, max_length=44)
+
+    @field_validator("ed25519_public_key_b64")
+    @classmethod
+    def _raw_ed25519_public_key(cls, value: str) -> str:
+        try:
+            raw = base64.b64decode(value, validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise ValueError("not base64") from exc
+        if len(raw) != 32:
+            raise ValueError("an Ed25519 public key is 32 bytes")
+        return value
 
 
 class EnrollmentResponse(BaseModel):
+    """No key material: the GRID never generates nor sends a signing key (GRID-SEC-003)."""
+
+    model_config = ConfigDict(extra="forbid")
+
     agent_id: str
     tenant_id: str
     message: str
-    ed25519_private_key_pem: str | None = None
 
 
 _ShortKey = Annotated[str, StringConstraints(max_length=64)]

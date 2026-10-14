@@ -1,3 +1,4 @@
+using RansomGuard.Agent.Core.Security.Cryptography;
 using System.Net;
 using System.Reflection;
 using Microsoft.Data.Sqlite;
@@ -384,7 +385,9 @@ public sealed class AlertForwardingIntegrationTests : IDisposable
         // Build EnrollmentStateManager (won't actually write files)
         var stateManager = new EnrollmentStateManager(configOptions, NullLogger<EnrollmentStateManager>.Instance);
 
-        var enrollmentService = new EnrollmentService(gridClient, stateManager, configOptions, NullLogger<EnrollmentService>.Instance);
+        var signer = new AuditLogSigner(Path.Combine(Path.GetTempPath(), "rg-signer-" + Guid.NewGuid().ToString("N")),
+            NullLogger<AuditLogSigner>.Instance);
+        var enrollmentService = new EnrollmentService(gridClient, stateManager, signer, configOptions, NullLogger<EnrollmentService>.Instance);
 
         // Signal enrollment complete via reflection
         var signalField = typeof(EnrollmentService).GetField("_enrolledSignal", BindingFlags.NonPublic | BindingFlags.Instance);

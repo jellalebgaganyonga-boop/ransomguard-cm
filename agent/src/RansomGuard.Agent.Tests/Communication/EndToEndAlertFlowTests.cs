@@ -1,3 +1,4 @@
+using RansomGuard.Agent.Core.Security.Cryptography;
 using System.Net;
 using System.Reflection;
 using System.Text.Json;
@@ -249,7 +250,9 @@ public sealed class EndToEndAlertFlowTests : IDisposable
         var mockHttpFactory = new FakeHttpClientFactory(new CaptureHandler(), "https://localhost");
         var gridClient = new GridApiClient(mockHttpFactory, configOptions, NullLogger<GridApiClient>.Instance);
         var stateManager = new EnrollmentStateManager(configOptions, NullLogger<EnrollmentStateManager>.Instance);
-        var enrollmentService = new EnrollmentService(gridClient, stateManager, configOptions, NullLogger<EnrollmentService>.Instance);
+        var signer = new AuditLogSigner(Path.Combine(Path.GetTempPath(), "rg-signer-" + Guid.NewGuid().ToString("N")),
+            NullLogger<AuditLogSigner>.Instance);
+        var enrollmentService = new EnrollmentService(gridClient, stateManager, signer, configOptions, NullLogger<EnrollmentService>.Instance);
 
         var signalField = typeof(EnrollmentService).GetField("_enrolledSignal", BindingFlags.NonPublic | BindingFlags.Instance);
         ((TaskCompletionSource?)signalField?.GetValue(enrollmentService))?.TrySetResult();
