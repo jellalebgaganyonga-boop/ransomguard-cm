@@ -12,7 +12,7 @@
 
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { AlertCircle, Shield, AlertTriangle, Users, ScrollText, FileText } from 'lucide-react';
+import { AlertCircle, Shield, AlertTriangle, Users, ScrollText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { KPICard } from '@/components/ui/kpi-card';
 import { SeverityBadge } from '@/components/ui/severity-badge';
@@ -205,7 +205,7 @@ export function ExecutiveDashboard() {
       </div>
 
       {/* AC2.2.4: Quick actions */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4">
         <div className="rounded-lg border border-border-subtle bg-elevated p-5 shadow-sm">
           <h2 className="mb-3 text-sm font-semibold text-text-primary">
             {t('dashboard.exec.quickActions', 'Actions rapides')}
@@ -219,29 +219,7 @@ export function ExecutiveDashboard() {
               <ScrollText className="size-4" aria-hidden="true" />
               {t('dashboard.exec.viewAudit', "Consulter les journaux d'audit")}
             </Button>
-            <Button variant="secondary" className="w-full justify-start" disabled>
-              <FileText className="size-4" aria-hidden="true" />
-              {t('dashboard.exec.report', 'Rapport trimestriel (Sprint 8)')}
-            </Button>
           </div>
-        </div>
-
-        <div className="rounded-lg border border-border-subtle bg-elevated p-5 shadow-sm">
-          <h2 className="mb-3 text-sm font-semibold text-text-primary">
-            {t('dashboard.exec.compliance', 'Conformité réglementaire')}
-          </h2>
-          <p className="mb-2 text-sm text-text-primary">
-            {t('dashboard.exec.anticLaw', 'Loi 2024/017 :')}
-            {' '}
-            <span className="font-semibold text-text-primary">&#x2705; Conforme</span>
-          </p>
-          <p className="mb-1 text-xs text-text-secondary">
-            {t('dashboard.exec.nextAudit', 'Prochain audit ANTIC : 15 septembre 2026')}
-          </p>
-          <Button variant="secondary" className="mt-3 w-full justify-start" disabled>
-            <FileText className="size-4" aria-hidden="true" />
-            {t('dashboard.exec.downloadReport', 'Télécharger le rapport (Sprint 8)')}
-          </Button>
         </div>
       </div>
     </div>

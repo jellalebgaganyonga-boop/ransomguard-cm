@@ -68,8 +68,12 @@ test.describe('Agent detail — tenant_admin isolate command', () => {
     await expect(submitBtn).toBeEnabled();
     await submitBtn.click();
 
-    // Command pending status shown (last command state in local React state)
-    await expect(page.getByText(/en attente|pending/i)).toBeVisible();
+    // Until the agent executes commands (Sprint 9), the console says the command is recorded,
+    // never that the endpoint is isolated, and shows no status made up in the browser.
+    await expect(modal.getByRole('status')).toHaveText(
+      "La commande est enregistrée ; son exécution sur le poste n'est pas encore disponible. Le poste n'est pas isolé.",
+    );
+    await expect(page.getByText(/en attente|pending/i)).toHaveCount(0);
   });
 
   test('Isolate submit disabled with short reason or unchecked ack', async ({ page }) => {

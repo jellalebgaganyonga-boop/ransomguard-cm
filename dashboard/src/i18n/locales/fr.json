@@ -84,11 +84,6 @@
       "quickActions": "Actions rapides",
       "manageUsers": "Gérer les utilisateurs",
       "viewAudit": "Consulter les journaux d'audit",
-      "report": "Rapport trimestriel (Sprint 8)",
-      "compliance": "Conformité réglementaire",
-      "anticLaw": "Loi 2024/017 :",
-      "nextAudit": "Prochain audit ANTIC : 15 septembre 2026",
-      "downloadReport": "Télécharger le rapport (Sprint 8)",
       "kpi": {
         "agents": "Postes protégés",
         "alerts24h": "Alertes 24h",
@@ -115,17 +110,12 @@
       }
     },
     "readonly": {
-      "title": "Vue de conformité",
+      "title": "Vue auditeur",
       "subtitle": "Accès en lecture seule",
-      "compliance": "CONFORMITÉ ACTUELLE : 98%",
-      "law": "Loi 2024/017 : Conforme",
-      "nextAudit": "Prochain audit ANTIC : 15 septembre 2026",
       "auditBtn": "Consulter les journaux d'audit",
       "auditSub": "Recherche, filtres par date, exportation CSV",
       "alertsBtn": "Consulter les alertes",
       "alertsSub": "Lecture seule des alertes de sécurité",
-      "reportBtn": "Rapport de conformité trimestriel",
-      "soon": "Bientôt",
       "notice": "Vous êtes connectée en mode auditeur. Aucune modification n'est possible.",
       "kpi": {
         "alerts24h": "Alertes dernières 24h",
@@ -278,28 +268,19 @@
       "noAlerts": "Aucune alerte pour cet agent",
       "allAlerts": "Toutes les alertes",
       "tabOverview": "Vue d'ensemble",
-      "tabAlerts": "Alertes",
-      "tabHeartbeats": "Heartbeats",
-      "tabConfig": "Configuration"
+      "tabAlerts": "Alertes"
     },
     "command": {
       "isolate": "Isoler le terminal",
       "title": "Isoler le terminal",
       "warningTitle": "Action destructrice",
-      "warningBody": "L'isolation de \"{hostname}\" coupera immédiatement l'accès réseau de cet agent. Il sera inaccessible jusqu'à ce qu'un opérateur effectue une restauration physique ou logicielle.",
+      "warningBody": "Une fois l'exécution des commandes disponible sur le poste, l'isolation de « {hostname} » coupera son accès réseau. Aujourd'hui, la commande est seulement enregistrée : le poste n'est pas isolé.",
       "reasonLabel": "Motif (obligatoire)",
       "reasonPlaceholder": "Ex: Suspicion de compromission — ransomware détecté en cours d'exécution...",
       "minChars": "{count} caractères minimum",
-      "ackLabel": "Je comprends que cette action déconnectera immédiatement le terminal du réseau.",
+      "ackLabel": "Je comprends que cette commande est enregistrée, et que le poste ne sera isolé qu'une fois son exécution disponible.",
       "submit": "Isoler le terminal",
-      "lastCommand": "Dernière commande",
-      "status": {
-        "pending": "En attente",
-        "dispatched": "Envoyée",
-        "acknowledged": "Reçue",
-        "completed": "Exécutée",
-        "failed": "Échouée"
-      }
+      "notYetExecuted": "La commande est enregistrée ; son exécution sur le poste n'est pas encore disponible. Le poste n'est pas isolé."
     }
   },
   "common": {
@@ -318,7 +299,6 @@
     "previous": "Précédent",
     "next": "Suivant",
     "page": "Page {page} / {totalPages}",
-    "comingInSprint8": "Disponible à partir de Sprint 8",
     "all": "Tous",
     "viewAll": "Voir tout →",
     "view": "Voir →",

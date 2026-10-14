@@ -2,16 +2,21 @@
 // src/pages/dashboard/read-only-dashboard.tsx
 // US2.4 — read_only_auditor landing
 //
-// AC2.4.1: audit-focused — alerts_24h, audit_entries_7d, 2 buttons
+// AC2.4.1: audit-focused — alerts_24h, audit_entries_7d (from the API), 2 buttons
+//
+// No compliance verdict here: a regulatory status ("98 %", "Loi 2024/017 : Conforme") is shown
+// only once a real computation backs it (Reports lot). Until then the tile does not exist.
 // AC2.4.2: no write actions visible
 // AC2.4.3: status changes hidden (no Acknowledge/Close buttons)
 // ============================================================
 
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Info, ScrollText, ShieldAlert } from 'lucide-react';
 import { KPICard } from '@/components/ui/kpi-card';
 import { useMetricsSummary } from '@/hooks/use-dashboard';
+import { useAuditLogs } from '@/hooks/use-audit';
 
 export function ReadOnlyDashboard() {
   const { t } = useTranslation();
@@ -19,33 +24,23 @@ export function ReadOnlyDashboard() {
   const metrics = useMetricsSummary();
   const summary = metrics.data;
 
+  // Audit entries received over the last 7 days, counted by the GRID (total of the page query).
+  // Rounded to the hour so the query key stays stable between renders.
+  const [weekAgo] = useState(() => {
+    const d = new Date(Date.now() - 7 * 24 * 3600 * 1000);
+    d.setMinutes(0, 0, 0);
+    return d.toISOString();
+  });
+  const auditWeek = useAuditLogs({ received_after: weekAgo, limit: 1 });
+
   return (
     <div>
       <h1 className="text-2xl font-semibold text-text-primary">
-        {t('dashboard.readonly.title', 'Vue de conformité')}
+        {t('dashboard.readonly.title', 'Vue auditeur')}
       </h1>
       <p className="mb-6 mt-1 text-sm text-text-secondary">
         {t('dashboard.readonly.subtitle', 'Accès en lecture seule')}
       </p>
-
-      {/* Compliance status banner */}
-      <div
-        className="mb-6 rounded-lg p-5"
-        style={{
-          background: 'var(--sys-color-feedback-success-subtle)',
-          borderLeft: '4px solid var(--sys-color-feedback-success)',
-        }}
-      >
-        <p className="text-lg font-semibold text-text-primary">
-          &#x2705; {t('dashboard.readonly.compliance', 'CONFORMITÉ ACTUELLE : 98%')}
-        </p>
-        <p className="mt-1 text-sm text-text-primary">
-          {t('dashboard.readonly.law', 'Loi 2024/017 : Conforme')}
-        </p>
-        <p className="mt-1 text-xs text-text-secondary">
-          {t('dashboard.readonly.nextAudit', 'Prochain audit ANTIC : 15 septembre 2026')}
-        </p>
-      </div>
 
       {/* AC2.4.1: Two KPI cards */}
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -58,7 +53,7 @@ export function ReadOnlyDashboard() {
         />
         <KPICard
           label={t('dashboard.readonly.kpi.auditEntries', 'Journal derniers 7 jours')}
-          value={'487'}
+          value={auditWeek.data?.total ?? '—'}
           description={t('dashboard.readonly.kpi.auditSub', "entrées d'audit")}
         />
       </div>
@@ -105,20 +100,6 @@ export function ReadOnlyDashboard() {
           </span>
         </button>
 
-        {/* Sprint 8 deferred */}
-        <div className="flex items-center justify-between rounded-lg border border-border-subtle bg-elevated p-5 opacity-60">
-          <div className="text-left">
-            <p className="font-semibold text-text-primary">
-              &#x1F4C4; {t('dashboard.readonly.reportBtn', 'Rapport de conformité trimestriel')}
-            </p>
-            <p className="text-sm text-text-secondary">
-              {t('common.comingInSprint8', 'Disponible à partir de Sprint 8')}
-            </p>
-          </div>
-          <span className="text-xs text-text-secondary">
-            {t('dashboard.readonly.soon', 'Bientôt')}
-          </span>
-        </div>
       </div>
 
       {/* AC2.4.2: Read-only mode notice */}

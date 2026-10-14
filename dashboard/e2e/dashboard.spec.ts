@@ -6,12 +6,14 @@
 import { test, expect, AxeBuilder, setupMocks, loginAs } from './fixtures/index';
 
 test.describe('Dashboard routing by role', () => {
-  test('tenant_admin → Executive dashboard (Conformité réglementaire visible)', async ({ page }) => {
+  test('tenant_admin → Executive dashboard (Actions rapides visible)', async ({ page }) => {
     await setupMocks(page, 'tenant_admin');
     await loginAs(page, 'tenant_admin');
 
-    // Executive dashboard has compliance section (fr.json: dashboard.exec.compliance)
-    await expect(page.getByText(/conformité réglementaire/i)).toBeVisible();
+    // Executive dashboard quick actions (fr.json: dashboard.exec.quickActions). The compliance
+    // card is gone: no regulatory verdict is shown without a real computation behind it.
+    await expect(page.getByText(/actions rapides/i)).toBeVisible();
+    await expect(page.getByText(/conforme/i)).toHaveCount(0);
   });
 
   test('security_analyst → Operational dashboard (FLUX D\'ALERTES visible)', async ({ page }) => {
@@ -28,6 +30,8 @@ test.describe('Dashboard routing by role', () => {
 
     // Read-only dashboard has auditor notice (fr.json: dashboard.readonly.notice)
     await expect(page.getByText(/mode auditeur/i)).toBeVisible();
+    // No compliance percentage made up by the console.
+    await expect(page.getByText(/\d+\s?%/)).toHaveCount(0);
   });
 
   test('@a11y accessibility: executive dashboard', async ({ page }) => {

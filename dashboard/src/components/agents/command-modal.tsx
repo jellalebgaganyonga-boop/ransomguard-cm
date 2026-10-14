@@ -61,16 +61,24 @@ export function CommandModal({
   const reasonValid = reason.length >= REASON_MIN && reason.length <= REASON_MAX;
   const formValid = reasonValid && acknowledged;
 
+  // Until the agent executes commands (Sprint 9), a queued command changes nothing on the
+  // endpoint: the modal says so and never lets anyone believe the endpoint is isolated.
+  const [queued, setQueued] = useState(false);
+
   const handleConfirm = async () => {
     if (!formValid) return;
-    await mutation.mutateAsync({
-      agent_id: agentId,
-      command_type: 'isolate',
-      parameters: { reason },
-    });
+    try {
+      await mutation.mutateAsync({
+        agent_id: agentId,
+        command_type: 'isolate',
+        parameters: { reason },
+      });
+    } catch {
+      return; // mutation.isError shows the message below
+    }
     setReason('');
     setAcknowledged(false);
-    onOpenChange(false);
+    setQueued(true);
     onSuccess?.();
   };
 
@@ -78,6 +86,8 @@ export function CommandModal({
     if (!next) {
       setReason('');
       setAcknowledged(false);
+      setQueued(false);
+      mutation.reset();
     }
     onOpenChange(next);
   };
@@ -92,15 +102,30 @@ export function CommandModal({
           </DialogTitle>
         </DialogHeader>
 
+        {queued ? (
+          <>
+            <div className="p-5">
+              <p
+                role="status"
+                className="rounded-lg border border-border-default bg-surface-subtle px-4 py-3 text-sm text-text-primary"
+              >
+                {t('agents.command.notYetExecuted')}
+              </p>
+            </div>
+            <DialogFooter>
+              <Button variant="secondary" onClick={() => handleOpenChange(false)}>
+                {t('common.close')}
+              </Button>
+            </DialogFooter>
+          </>
+        ) : (
+        <>
         <div className="flex flex-col gap-4 p-5">
           {/* Warning banner */}
           <div className="rounded-lg border border-severity-critical-border bg-severity-critical-subtle px-4 py-3 text-sm text-severity-critical">
             <p className="font-semibold">{t('agents.command.warningTitle', 'Action destructrice')}</p>
             <p className="mt-1">
-              {t('agents.command.warningBody', {
-                hostname,
-                defaultValue: `L'isolation de "${hostname}" coupera immédiatement l'accès réseau de cet agent. Il sera inaccessible jusqu'à ce qu'un opérateur effectue une restauration physique ou logicielle.`,
-              })}
+              {t('agents.command.warningBody', { hostname })}
             </p>
           </div>
 
@@ -153,12 +178,15 @@ export function CommandModal({
               className="mt-0.5"
             />
             <Label htmlFor="cmd-ack" className="cursor-pointer leading-snug text-text-primary">
-              {t(
-                'agents.command.ackLabel',
-                "Je comprends que cette action déconnectera immédiatement le terminal du réseau."
-              )}
+              {t('agents.command.ackLabel')}
             </Label>
           </div>
+
+          {mutation.isError && (
+            <p role="alert" className="text-sm text-error">
+              {t('common.error')}
+            </p>
+          )}
         </div>
 
         <DialogFooter>
@@ -175,6 +203,8 @@ export function CommandModal({
             {t('agents.command.submit', 'Isoler le terminal')}
           </Button>
         </DialogFooter>
+        </>
+        )}
       </DialogContent>
     </Dialog>
   );

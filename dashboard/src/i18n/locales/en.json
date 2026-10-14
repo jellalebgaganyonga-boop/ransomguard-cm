@@ -84,11 +84,6 @@
       "quickActions": "Quick actions",
       "manageUsers": "Manage users",
       "viewAudit": "View audit logs",
-      "report": "Quarterly report (Sprint 8)",
-      "compliance": "Regulatory compliance",
-      "anticLaw": "Law 2024/017:",
-      "nextAudit": "Next ANTIC audit: September 15, 2026",
-      "downloadReport": "Download report (Sprint 8)",
       "kpi": {
         "agents": "Protected endpoints",
         "alerts24h": "Alerts 24h",
@@ -115,17 +110,12 @@
       }
     },
     "readonly": {
-      "title": "Compliance view",
+      "title": "Auditor view",
       "subtitle": "Read-only access",
-      "compliance": "CURRENT COMPLIANCE: 98%",
-      "law": "Law 2024/017: Compliant",
-      "nextAudit": "Next ANTIC audit: September 15, 2026",
       "auditBtn": "View audit logs",
       "auditSub": "Search, date filters, CSV export",
       "alertsBtn": "View alerts",
       "alertsSub": "Read-only security alerts",
-      "reportBtn": "Quarterly compliance report",
-      "soon": "Coming soon",
       "notice": "You are connected in auditor mode. No modifications are possible.",
       "kpi": {
         "alerts24h": "Alerts last 24h",
@@ -278,28 +268,19 @@
       "noAlerts": "No alerts for this agent",
       "allAlerts": "All alerts",
       "tabOverview": "Overview",
-      "tabAlerts": "Alerts",
-      "tabHeartbeats": "Heartbeats",
-      "tabConfig": "Configuration"
+      "tabAlerts": "Alerts"
     },
     "command": {
       "isolate": "Isolate endpoint",
       "title": "Isolate endpoint",
       "warningTitle": "Destructive action",
-      "warningBody": "Isolating \"{hostname}\" will immediately cut this agent's network access. It will be unreachable until an operator performs a physical or software restore.",
+      "warningBody": "Once command execution is available on the endpoint, isolating \"{hostname}\" will cut its network access. Today the command is only recorded: the endpoint is not isolated.",
       "reasonLabel": "Reason (required)",
       "reasonPlaceholder": "E.g.: Suspected compromise — ransomware detected running...",
       "minChars": "{count} characters minimum",
-      "ackLabel": "I understand this will immediately disconnect the endpoint from the network.",
+      "ackLabel": "I understand this command is recorded, and that the endpoint will only be isolated once its execution is available.",
       "submit": "Isolate endpoint",
-      "lastCommand": "Last command",
-      "status": {
-        "pending": "Pending",
-        "dispatched": "Dispatched",
-        "acknowledged": "Acknowledged",
-        "completed": "Completed",
-        "failed": "Failed"
-      }
+      "notYetExecuted": "The command is recorded; its execution on the endpoint is not available yet. The endpoint is not isolated."
     }
   },
   "common": {
@@ -318,7 +299,6 @@
     "previous": "Previous",
     "next": "Next",
     "page": "Page {page} / {totalPages}",
-    "comingInSprint8": "Available from Sprint 8",
     "all": "All",
     "viewAll": "View all →",
     "view": "View →",

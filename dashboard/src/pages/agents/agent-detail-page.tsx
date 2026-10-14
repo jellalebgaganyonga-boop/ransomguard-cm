@@ -3,13 +3,14 @@
  *
  * AC4.2.1: header — hostname, OS, version, last heartbeat (relative), status
  *          NOTE: enrolled_at NOT available from backend AgentItem (GAP-01 in diagnostic)
- * AC4.2.2: tabs — Overview (alerts for this agent), Alerts (full filtered list)
- *          Heartbeats tab: descoped to Sprint 8 (no backend endpoint)
- *          Configuration tab: descoped to Sprint 8 (no backend endpoint)
+ * AC4.2.2: tabs — Overview (alerts for this agent), Alerts (full filtered list). The Heartbeats
+ *          and Configuration tabs have no backend (GAP-03): hidden rather than shown inert.
  * AC4.2.3: alerts tab links to /alerts/{id}
  * AC4.3.1: Isolate button (tenant_admin only), CommandModal
  * AC4.3.2: no Isolate button for analyst / auditor
- * AC4.3.4: last issued command status displayed (local state — no GET /commands endpoint)
+ * AC4.3.4: no command status is shown. There is no GET /commands endpoint, and the agent does not
+ *          execute commands before Sprint 9: a status made up in the browser ("Pending") was
+ *          removed. The command modal says the command is recorded, not executed.
  * R8: the posture section (verdict banner, modules, transmission, endpoint), refreshed every
  *     30 s while the tab is visible. The heartbeat age is shown as is: its colour is the
  *     server's verdict, never a console threshold.
@@ -29,7 +30,6 @@ import { CommandModal } from '@/components/agents/command-modal';
 import { AgentPostureSection } from '@/components/agents/agent-posture-section';
 import { agentStatusVariant } from '@/lib/agent-status';
 import { formatDistanceToNow, formatDateTime } from '@/lib/format-date';
-import type { CommandItem } from '@/api/agents';
 
 // ── Not found ───────────────────────────────────────────────
 
@@ -66,7 +66,6 @@ export function AgentDetailPage() {
 
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [commandModalOpen, setCommandModalOpen] = useState(false);
-  const [lastCommand, setLastCommand] = useState<CommandItem | null>(null);
 
   // Alerts for this agent (used in both overview and alerts tab)
   const { data: alertsData } = useAlertList(
@@ -164,18 +163,6 @@ export function AgentDetailPage() {
           </div>
         </div>
 
-        {/* AC4.3.4: last issued command status (from local state — no GET /commands endpoint) */}
-        {lastCommand && (
-          <div className="mt-4 rounded border border-border-subtle bg-surface-subtle px-3 py-2 text-xs">
-            <span className="font-semibold text-text-secondary">
-              {t('agents.command.lastCommand', 'Dernière commande')}:
-            </span>{' '}
-            <span className="font-mono">{lastCommand.command_type}</span>{' '}
-            <span className="text-text-secondary">
-              — {t(`agents.command.status.${lastCommand.status.toLowerCase()}`, lastCommand.status)}
-            </span>
-          </div>
-        )}
       </div>
 
       {/* R8: is this endpoint protected, why not, did everything arrive? */}
@@ -199,13 +186,6 @@ export function AgentDetailPage() {
             {tab.label}
           </button>
         ))}
-        {/* Sprint 8 deferred tabs */}
-        <span className="px-4 py-2 text-sm text-text-secondary cursor-not-allowed" title={t('common.comingInSprint8', 'Available from Sprint 8')}>
-          {t('agents.detail.tabHeartbeats', 'Heartbeats')}
-        </span>
-        <span className="px-4 py-2 text-sm text-text-secondary cursor-not-allowed" title={t('common.comingInSprint8', 'Available from Sprint 8')}>
-          {t('agents.detail.tabConfig', 'Configuration')}
-        </span>
       </div>
 
       {/* Tab content */}
@@ -320,16 +300,6 @@ export function AgentDetailPage() {
         hostname={agent.hostname}
         open={commandModalOpen}
         onOpenChange={setCommandModalOpen}
-        onSuccess={() => {
-          // Track the issued command locally (no GET /commands endpoint in Sprint 7)
-          setLastCommand({
-            id: 'pending',
-            agent_id: agent.id,
-            command_type: 'isolate',
-            status: 'Pending',
-            issued_at: new Date().toISOString(),
-          });
-        }}
       />
     </div>
   );
