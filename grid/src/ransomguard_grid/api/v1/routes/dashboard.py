@@ -5,6 +5,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import ColumnElement, and_, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -37,6 +38,7 @@ from ransomguard_grid.api.v1.schemas.dashboard import (
     UserWithRolesItem,
 )
 from ransomguard_grid.core.alert_modules import module_for
+from ransomguard_grid.core.alert_transitions import ALLOWED_TRANSITIONS, is_allowed
 from ransomguard_grid.core.config import get_settings
 from ransomguard_grid.core.security import hash_password
 from ransomguard_grid.db.models.agent import Agent
@@ -218,6 +220,14 @@ async def update_alert_status(
         raise HTTPException(404, "Alert not found")
 
     old_status = alert.status
+    # GRID-ALR-001: a closed table of transitions; anything else is a conflict with the workflow.
+    if not is_allowed(old_status, body.new_status):
+        allowed = sorted(s.value for s in ALLOWED_TRANSITIONS.get(old_status, frozenset()))
+        raise HTTPException(
+            409,
+            f"Transition {old_status.value} -> {body.new_status.value} is not allowed"
+            + (f" (allowed: {', '.join(allowed)})" if allowed else f" ({old_status.value} is final)"),
+        )
     alert.status = body.new_status  # type: ignore[assignment]
 
     db.add(AlertStatusChange(
@@ -419,7 +429,12 @@ async def create_user(
     admin: User = Depends(require_roles("tenant_admin")),
     db: AsyncSession = Depends(get_db),
 ) -> UserItem:
-    """Create user in admin's tenant."""
+    """Create user in admin's tenant. The email is normalized (lower-case) by the schema; a second
+    account with the same email in the tenant is refused (409, GRID-USR-001)."""
+    from ransomguard_grid.db.repositories.user_repository import UserRepository
+
+    if await UserRepository(db, tenant_id=admin.tenant_id).find_by_email(body.email):
+        raise HTTPException(409, "A user with this email already exists in the tenant")
     new_user = User(
         id=str(uuid4()), tenant_id=admin.tenant_id,
         email=body.email, hashed_password=hash_password(body.password),
@@ -443,7 +458,10 @@ async def create_user(
         target_type="user", target_id=new_user.id,
         details={"email": body.email, "roles": body.roles},
     )
-    await db.flush()
+    try:
+        await db.flush()
+    except IntegrityError:  # a concurrent creation won the unique (tenant, email) constraint
+        raise HTTPException(409, "A user with this email already exists in the tenant") from None
     return UserItem.model_validate(new_user)
 
 
@@ -571,12 +589,20 @@ async def update_user_roles(
         valid_roles.append(role)
 
     user_role_repo = UserRoleRepository(db)
+    roles_before = sorted(await user_role_repo.get_user_role_names(user_id))
     await user_role_repo.revoke_all_for_user(user_id)
     for role in valid_roles:
         await user_role_repo.grant_role(user_id, role.id, admin.id)
 
     await db.flush()
     updated_roles = await user_role_repo.get_user_role_names(user_id)
+    # GRID-AUD-001: a privilege change leaves a trace -- before, after, who (actor), when.
+    await _log_user_action(
+        db, user=admin, action_type="user_roles_change",
+        target_type="user", target_id=user_id,
+        details={"email": target.email, "before": roles_before, "after": sorted(updated_roles)},
+    )
+    await db.flush()
     return UserWithRolesItem(
         id=target.id, email=target.email, full_name=target.full_name,
         is_active=target.is_active, roles=updated_roles,

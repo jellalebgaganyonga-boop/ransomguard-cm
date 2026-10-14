@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ransomguard_grid.db.models.enums import AlertStatus
 
@@ -130,6 +130,12 @@ class CreateUserRequest(BaseModel):
     full_name: str = Field(max_length=200)
     password: str = Field(min_length=8, max_length=128)
     roles: list[str] = Field(default_factory=list)
+
+    @field_validator("email")
+    @classmethod
+    def _normalize_email(cls, value: str) -> str:
+        # One account per (tenant, email), case-insensitive (GRID-USR-001).
+        return value.strip().lower()
 
 
 class UserItem(BaseModel):

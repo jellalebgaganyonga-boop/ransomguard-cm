@@ -56,7 +56,7 @@ async def seed() -> None:
     tenant_code = os.getenv("GRID_SEED_TENANT_CODE", "default")
     # No silent default for an identity: without an administrator address the seed
     # refuses and says so -- it used to create admin@example.local on its own.
-    admin_email = os.getenv("GRID_SEED_ADMIN_EMAIL", "").strip()
+    admin_email = os.getenv("GRID_SEED_ADMIN_EMAIL", "").strip().lower()  # stored lower-case (GRID-USR-001)
     if not admin_email:
         print(
             "[FAIL] GRID_SEED_ADMIN_EMAIL is required: the seed never invents an "
@@ -160,7 +160,7 @@ async def seed() -> None:
                 continue
             email = os.getenv(
                 f"GRID_SEED_{prefix}_EMAIL", f"{role_name.split('_')[0]}@ransomguard.local"
-            )
+            ).strip().lower()
             user = (
                 await session.execute(select(User).where(User.email == email))
             ).scalar_one_or_none()

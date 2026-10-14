@@ -1,6 +1,6 @@
 """Pydantic schemas for authentication endpoints."""
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class LoginRequest(BaseModel):
@@ -9,6 +9,12 @@ class LoginRequest(BaseModel):
     tenant_code: str = Field(max_length=50)
     email: str = Field(max_length=255)
     password: str = Field(min_length=1, max_length=128)
+
+    @field_validator("email")
+    @classmethod
+    def _normalize_email(cls, value: str) -> str:
+        # Emails are stored lower-case (GRID-USR-001): "Admin@X" and "admin@x" are one account.
+        return value.strip().lower()
 
 
 class LoginResponse(BaseModel):
