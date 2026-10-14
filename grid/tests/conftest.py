@@ -4,6 +4,7 @@ import os
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 import pytest
@@ -17,6 +18,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 # selected for this run -- so a file run on its own could miss tables entirely.
 import ransomguard_grid.db.models  # noqa: F401,E402  (side-effecting import)
 from ransomguard_grid.db.base import Base
+
+if TYPE_CHECKING:
+    from ransomguard_grid.core.session_store import SessionStore
 
 # Set test environment before importing app
 os.environ["GRID_DATABASE_URL"] = "sqlite+aiosqlite://"
@@ -71,12 +75,31 @@ async def _override_get_db() -> AsyncGenerator[AsyncSession, None]:
 
 
 @pytest.fixture
-async def client() -> AsyncGenerator[AsyncClient, None]:
+async def session_store() -> AsyncGenerator["SessionStore", None]:
+    """A fresh in-memory Redis per test (fakeredis) behind the real SessionStore.
+
+    The in-process tests need a session store; the multi-process tests
+    (tests/integration/test_sessions_multiworker.py) use a real Redis shared by two uvicorn
+    processes -- the only way to prove a property that two workers must share.
+    """
+    from fakeredis import FakeAsyncRedis
+
+    from ransomguard_grid.core.session_store import SessionStore
+
+    redis = FakeAsyncRedis()
+    yield SessionStore(redis)
+    await redis.aclose()
+
+
+@pytest.fixture
+async def client(session_store: "SessionStore") -> AsyncGenerator[AsyncClient, None]:
     """Provide an async HTTP client with get_db overridden to test engine."""
+    from ransomguard_grid.core.session_store import get_session_store
     from ransomguard_grid.db.session import get_db
     from ransomguard_grid.main import app
 
     app.dependency_overrides[get_db] = _override_get_db
+    app.dependency_overrides[get_session_store] = lambda: session_store
     transport = ASGITransport(app=app)
     # https, not http: the refresh cookie is issued with Secure=true, and a
     # client on a plain-http base URL silently drops it -- the cookie flow could
@@ -84,6 +107,7 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
     async with AsyncClient(transport=transport, base_url="https://test") as ac:
         yield ac
     app.dependency_overrides.pop(get_db, None)
+    app.dependency_overrides.pop(get_session_store, None)
 
 
 def _make_self_signed_cert() -> tuple[str, str]:

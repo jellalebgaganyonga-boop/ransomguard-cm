@@ -10,19 +10,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ransomguard_grid.api.v1.schemas.agent import EnrollmentRequest, EnrollmentResponse
 from ransomguard_grid.core.logging import get_logger
+from ransomguard_grid.core.session_store import SessionStore, SessionStoreUnavailableError, get_session_store
 from ransomguard_grid.db.models.agent import Agent, AgentCertificate
 from ransomguard_grid.db.models.enums import AgentStatus
 from ransomguard_grid.db.repositories.agent_repository import AgentRepository
 from ransomguard_grid.db.session import get_db
-from ransomguard_grid.services.enrollment_otp_service import EnrollmentOtpService, get_shared_otp_service
+from ransomguard_grid.services.enrollment_otp_service import EnrollmentOtpService
 
 logger = get_logger("enrollment")
 router = APIRouter(prefix="/agents", tags=["enrollment"])
 
 
-def get_otp_service() -> EnrollmentOtpService:
-    """FastAPI dependency — uses process-wide OTP singleton."""
-    return get_shared_otp_service()
+def get_otp_service(store: SessionStore = Depends(get_session_store)) -> EnrollmentOtpService:
+    """FastAPI dependency: OTPs live in the shared session store (Redis), seen by every worker."""
+    return EnrollmentOtpService(store)
 
 
 @router.post("/enroll", response_model=EnrollmentResponse)
@@ -32,11 +33,13 @@ async def enroll_agent(
     otp_service: EnrollmentOtpService = Depends(get_otp_service),
 ) -> EnrollmentResponse:
     """Enroll a new agent using a one-time enrollment token."""
-    otp = otp_service.validate_and_consume(body.otp)
-    if otp is None:
+    try:
+        tenant_id = await otp_service.validate_and_consume(body.otp)
+    except SessionStoreUnavailableError:
+        raise HTTPException(503, "Session store unavailable") from None
+    if tenant_id is None:
         raise HTTPException(401, "Invalid or expired enrollment token")
 
-    tenant_id = otp.tenant_id
     agent_repo = AgentRepository(db, tenant_id)
 
     existing = await agent_repo.find_by_fingerprint(body.hardware_fingerprint)

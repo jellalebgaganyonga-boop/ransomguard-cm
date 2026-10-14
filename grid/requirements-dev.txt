@@ -4,3 +4,4 @@ pytest-asyncio>=0.25.0
 pytest-cov>=6.0.0
 ruff==0.16.9  # pinned: a new ruff release adds rules and breaks CI with no code change
 mypy>=1.14.0
+fakeredis>=2.26.0  # in-process session store for tests; the multi-worker tests use a real Redis

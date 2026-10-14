@@ -29,7 +29,10 @@ services:
     image: redis:7-alpine
     container_name: grid-redis
     restart: unless-stopped
-    command: redis-server --requirepass ${REDIS_PASSWORD:?required} --maxmemory 256mb --maxmemory-policy allkeys-lru
+    # noeviction, never an LRU policy: Redis holds session revocations (GRID-SEC-004/005). An
+    # evicted revocation key would make a revoked token valid again -- fail open. With
+    # noeviction a full Redis refuses writes, and authentication answers 503 -- fail closed.
+    command: redis-server --requirepass ${REDIS_PASSWORD:?required} --maxmemory 256mb --maxmemory-policy noeviction
     volumes:
       - redis_data:/data
     networks:

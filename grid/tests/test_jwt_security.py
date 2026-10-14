@@ -32,9 +32,9 @@ _SECRET = "jwt-security-test-secret-at-least-32-chars"
 # Must match tests/conftest.py (GRID_JWT_SECRET_KEY), used by the running app.
 _APP_SECRET = "test-secret-key-minimum-32-characters-long!"
 
-# Issued by python-jose 3.5.0 (HS256) before the migration, with the same claim
-# shape as JwtService.create_access_token. It proves that tokens already in
-# circulation stay valid: same secret, same algorithm, same claims.
+# Issued by python-jose 3.5.0 (HS256) before the migration. Its signature is still valid under
+# PyJWT (same secret, same algorithm), but it predates session families and versions (fam, ver):
+# since the Redis sessions (GRID-SEC-004/005) such a token cannot be revoked, so it is refused.
 _GOLDEN_SECRET = "golden-secret-key-for-jwt-compat-test-0001"
 _GOLDEN_TOKEN_FROM_PYTHON_JOSE = (
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
@@ -56,6 +56,7 @@ def _claims(tenant_id: str = "tenant-A", exp_offset: int = 3600) -> dict[str, ob
     return {
         "sub": "user-123", "tenant_id": tenant_id, "roles": ["tenant_admin"], "token_type": "access",
         "iat": now - 10, "exp": now + exp_offset, "jti": "11111111-2222-3333-4444-555555555555",
+        "fam": "fam-hand-made", "ver": 0,
     }
 
 
@@ -139,7 +140,9 @@ def test_valid_token_round_trips_with_its_claims() -> None:
     service = JwtService(_SECRET)
     before = int(time.time())
 
-    token = service.create_access_token("user-123", "tenant-A", ["tenant_admin"], expires_minutes=60)
+    token = service.create_access_token(
+        "user-123", "tenant-A", ["tenant_admin"], family="fam-1", version=3, expires_minutes=60,
+    )
     payload = service.decode(token)
 
     assert payload.sub == "user-123"
@@ -149,6 +152,7 @@ def test_valid_token_round_trips_with_its_claims() -> None:
     assert payload.exp - payload.iat == 3600
     assert before - 1 <= payload.iat <= int(time.time()) + 1
     assert payload.jti
+    assert (payload.fam, payload.ver) == ("fam-1", 3)
 
 
 def test_hand_made_hs256_token_with_right_secret_is_accepted() -> None:
@@ -157,16 +161,15 @@ def test_hand_made_hs256_token_with_right_secret_is_accepted() -> None:
     assert payload.tenant_id == "tenant-A"
 
 
-def test_token_issued_by_python_jose_is_still_valid() -> None:
-    payload = JwtService(_GOLDEN_SECRET).decode(_GOLDEN_TOKEN_FROM_PYTHON_JOSE)
+def test_token_issued_by_python_jose_has_a_valid_signature_but_is_refused_without_session_claims() -> None:
+    import jwt
 
-    assert payload.sub == "user-golden-001"
-    assert payload.tenant_id == "tenant-golden-A"
-    assert payload.roles == ["tenant_admin"]
-    assert payload.token_type == "access"
-    assert payload.iat == 1759900000
-    assert payload.exp == 4102444800
-    assert payload.jti == "6f1c2b9e-0d4a-4c1e-9a77-3b2f5e8d1a01"
+    claims = jwt.decode(_GOLDEN_TOKEN_FROM_PYTHON_JOSE, _GOLDEN_SECRET, algorithms=["HS256"])
+    assert claims["sub"] == "user-golden-001"  # the signature verifies: same algorithm, same secret
+    assert "fam" not in claims and "ver" not in claims
+
+    with pytest.raises(AuthenticationError, match="missing or malformed claims"):
+        JwtService(_GOLDEN_SECRET).decode(_GOLDEN_TOKEN_FROM_PYTHON_JOSE)
 
 
 # ── Refusals: JwtService (production path) ──────────────────────
@@ -181,7 +184,7 @@ def test_forged_token_is_refused(name: str) -> None:
 
 def test_modified_signature_is_refused() -> None:
     service = JwtService(_SECRET)
-    header, payload, signature = service.create_access_token("user-123", "tenant-A", ["tenant_admin"]).split(".")
+    header, payload, signature = service.create_access_token("user-123", "tenant-A", ["tenant_admin"], family="f", version=0).split(".")
     # Change the FIRST signature character: the last one partly carries padding
     # bits, so changing it can leave the decoded bytes identical.
     tampered = f"{header}.{payload}.{'B' if signature[0] != 'B' else 'C'}{signature[1:]}"
@@ -191,7 +194,7 @@ def test_modified_signature_is_refused() -> None:
 
 def test_modified_payload_with_original_signature_is_refused() -> None:
     service = JwtService(_SECRET)
-    header, _, signature = service.create_access_token("user-123", "tenant-A", ["tenant_admin"]).split(".")
+    header, _, signature = service.create_access_token("user-123", "tenant-A", ["tenant_admin"], family="f", version=0).split(".")
     other_payload = _b64url(json.dumps(_claims(tenant_id="tenant-B")).encode())
     with pytest.raises(AuthenticationError):
         service.decode(f"{header}.{other_payload}.{signature}")
@@ -200,7 +203,7 @@ def test_modified_payload_with_original_signature_is_refused() -> None:
 def test_expired_token_is_refused() -> None:
     service = JwtService(_SECRET)
     with pytest.raises(AuthenticationError):
-        service.decode(service.create_access_token("user-123", "tenant-A", ["tenant_admin"], expires_minutes=-5))
+        service.decode(service.create_access_token("user-123", "tenant-A", ["tenant_admin"], family="f", version=0, expires_minutes=-5))
     with pytest.raises(AuthenticationError):
         service.decode(_hmac_token("HS256", _SECRET.encode(), _claims(exp_offset=-60)))
 

@@ -83,6 +83,31 @@ test.describe('Logout', () => {
   });
 });
 
+test.describe('Logout of every device (US1.2.2)', () => {
+  test('confirmation dialog, then POST /auth/logout-all and back to the login page', async ({ page }) => {
+    await setupMocks(page, 'tenant_admin');
+    let called = false;
+    await page.route('**/api/v1/auth/logout-all', (r) => {
+      called = true;
+      return r.fulfill({ status: 200, json: { detail: 'Logged out of every session' } });
+    });
+    await loginAs(page, 'tenant_admin');
+
+    await page.getByRole('button', { name: /profil|déconnect/i }).first().click();
+    await page.getByRole('menuitem', { name: /tous les appareils/i }).click();
+
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toContainText('Toutes vos sessions ouvertes');
+    const results = await new AxeBuilder({ page }).include('[role="dialog"]').analyze();
+    const critical = results.violations.filter((v) => v.impact === 'critical' || v.impact === 'serious');
+    expect(critical, `Critical/serious a11y violations: ${JSON.stringify(critical, null, 2)}`).toEqual([]);
+
+    await dialog.getByRole('button', { name: /tout déconnecter/i }).click();
+    await page.waitForURL('**/auth/login');
+    expect(called).toBe(true);
+  });
+});
+
 test.describe('Session guard', () => {
   test('unauthenticated access to /dashboard → redirect to /auth/login', async ({ page }) => {
     // No login — fresh context, no tokens. The stub keeps the boot-time silent

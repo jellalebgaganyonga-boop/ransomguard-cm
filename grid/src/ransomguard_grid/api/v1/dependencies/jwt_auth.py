@@ -5,7 +5,8 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ransomguard_grid.core.config import get_settings
-from ransomguard_grid.core.jwt_service import JwtService, is_token_blacklisted
+from ransomguard_grid.core.jwt_service import JwtPayload, JwtService
+from ransomguard_grid.core.session_store import SessionStore, SessionStoreUnavailableError, get_session_store
 from ransomguard_grid.db.models.tenant_user import User
 from ransomguard_grid.db.repositories.role_repository import UserRoleRepository
 from ransomguard_grid.db.repositories.user_repository import UserRepository
@@ -22,11 +23,27 @@ def get_jwt_service() -> JwtService:
     return _jwt_service
 
 
+async def ensure_session_valid(store: SessionStore, payload: JwtPayload) -> None:
+    """401 if the token, its session family or the user's session version was revoked; 503 if
+    the session store cannot answer -- a possibly revoked token is never accepted."""
+    try:
+        revoked = (
+            await store.is_access_revoked(payload.jti)
+            or await store.is_family_revoked(payload.fam)
+            or payload.ver < await store.user_version(payload.sub)
+        )
+    except SessionStoreUnavailableError:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Session store unavailable") from None
+    if revoked:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Token revoked")
+
+
 async def get_current_user(
     request: Request,
     token: str = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db),
     jwt_svc: JwtService = Depends(get_jwt_service),
+    store: SessionStore = Depends(get_session_store),
 ) -> User:
     """Decode JWT, validate, return current user. Sets tenant_id on request.state."""
     from ransomguard_grid.core.exceptions import AuthenticationError
@@ -43,8 +60,8 @@ async def get_current_user(
     if payload.token_type != "access":
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Refresh token cannot be used for API access")
 
-    if is_token_blacklisted(payload.jti):
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Token revoked")
+    # Revocation is shared by every worker (Redis): GRID-SEC-004.
+    await ensure_session_valid(store, payload)
 
     user_repo = UserRepository(db, tenant_id=payload.tenant_id)
     user = await user_repo.get_by_id(payload.sub)

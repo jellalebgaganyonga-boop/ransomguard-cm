@@ -41,6 +41,7 @@ from ransomguard_grid.core.alert_modules import module_for
 from ransomguard_grid.core.alert_transitions import ALLOWED_TRANSITIONS, is_allowed
 from ransomguard_grid.core.config import get_settings
 from ransomguard_grid.core.security import hash_password
+from ransomguard_grid.core.session_store import SessionStore, SessionStoreUnavailableError, get_session_store
 from ransomguard_grid.db.models.agent import Agent
 from ransomguard_grid.db.models.alerts import Alert, AlertStatusChange
 from ransomguard_grid.db.models.enums import AgentStatus, AlertStatus, CommandStatus, Severity
@@ -53,6 +54,7 @@ from ransomguard_grid.db.session import get_db
 from ransomguard_grid.schemas.dashboard.me import MeResponse, TenantContext, UserPreferences
 from ransomguard_grid.services.agent_installer import installer_sha256
 from ransomguard_grid.services.agent_posture import compute_protection_state, last_upload_age_seconds
+from ransomguard_grid.services.enrollment_otp_service import EnrollmentOtpService
 from ransomguard_grid.services.posture_store import count_recent_restarts, load_postures, snapshot
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -829,6 +831,7 @@ async def list_users_with_roles(
 async def provision_agent(
     user: User = Depends(require_roles("tenant_admin")),
     db: AsyncSession = Depends(get_db),
+    store: SessionStore = Depends(get_session_store),
 ) -> ProvisionAgentResponse:
     """Generate a one-time enrollment token for a new agent. Admin only.
 
@@ -837,10 +840,10 @@ async def provision_agent(
     installer this GRID serves, which the console's install command checks before running it
     (GRID-SEC-006).
     """
-    from ransomguard_grid.services.enrollment_otp_service import get_shared_otp_service
-
-    otp_service = get_shared_otp_service()
-    otp_string = otp_service.generate(tenant_id=user.tenant_id, validity_minutes=30)
+    try:
+        otp_string = await EnrollmentOtpService(store).generate(tenant_id=user.tenant_id, validity_minutes=30)
+    except SessionStoreUnavailableError:
+        raise HTTPException(503, "Session store unavailable") from None
 
     await _log_user_action(
         db, user=user, action_type="agent_provision",

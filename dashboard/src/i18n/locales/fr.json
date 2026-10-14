@@ -17,7 +17,11 @@
     "notifications": "Notifications",
     "language": "Langue",
     "profile": "Profil",
-    "logout": "Se déconnecter"
+    "logout": "Se déconnecter",
+    "logoutAll": "Se déconnecter de tous les appareils",
+    "logoutAllTitle": "Se déconnecter de tous les appareils ?",
+    "logoutAllBody": "Toutes vos sessions ouvertes, sur ce poste et sur tous les autres, seront fermées immédiatement. Vous devrez vous reconnecter partout.",
+    "logoutAllConfirm": "Tout déconnecter"
   },
   "auth": {
     "login": {

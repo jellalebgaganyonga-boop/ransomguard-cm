@@ -5,6 +5,7 @@
 // ============================================================
 
 import { Bell, Globe, LogOut, User as UserIcon, Menu } from 'lucide-react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
@@ -16,6 +17,14 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { useUIStore } from '@/stores/ui.store';
 import { useLogout } from '@/hooks/use-auth';
 import type { MeResponse } from '@/api/me';
@@ -45,6 +54,8 @@ export function Header({ me, notificationCount = 0 }: HeaderProps) {
 
   // AC1.2.1 + AC1.2.4: logout wired to backend, always clears client state
   const handleLogout = () => logoutMutation.mutate();
+  // US1.2.2: every session on every device, after an explicit confirmation.
+  const [confirmLogoutAll, setConfirmLogoutAll] = useState(false);
 
   return (
     <header className="flex h-16 shrink-0 items-center justify-between border-b border-border-subtle bg-canvas px-6 shadow-sm">
@@ -141,9 +152,40 @@ export function Header({ me, notificationCount = 0 }: HeaderProps) {
               <LogOut className="size-4" aria-hidden="true" />
               {t('header.logout')}
             </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() => setConfirmLogoutAll(true)}
+              className="text-error focus:text-error"
+            >
+              <LogOut className="size-4" aria-hidden="true" />
+              {t('header.logoutAll')}
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+
+      <Dialog open={confirmLogoutAll} onOpenChange={setConfirmLogoutAll}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('header.logoutAllTitle')}</DialogTitle>
+          </DialogHeader>
+          <DialogDescription className="px-5 text-sm text-text-primary">
+            {t('header.logoutAllBody')}
+          </DialogDescription>
+          <DialogFooter>
+            <Button variant="secondary" onClick={() => setConfirmLogoutAll(false)}>
+              {t('common.cancel')}
+            </Button>
+            <Button
+              variant="primary"
+              className="bg-error text-white hover:bg-error/90"
+              isLoading={logoutMutation.isPending}
+              onClick={() => logoutMutation.mutate({ everywhere: true })}
+            >
+              {t('header.logoutAllConfirm')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </header>
   );
 }

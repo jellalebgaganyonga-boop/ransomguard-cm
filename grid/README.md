@@ -64,7 +64,7 @@ uvicorn ransomguard_grid.main:app --reload
 - **nginx**: TLS 1.3 termination, mTLS verification for agents, rate limiting
 - **grid-api**: FastAPI application with async SQLAlchemy, Ed25519 verification
 - **MySQL 8.4**: 21 application tables + 1 alembic_version, InnoDB with utf8mb4
-- **Redis 7**: Rate limiting counters and JWT blacklist (in-memory fallback available)
+- **Redis 7**: session state shared by every worker -- access-token revocation, refresh-token families (each used once, a replay revokes the family), per-user session version (log out every session), enrollment OTPs (consumed with GETDEL). **Required, no in-memory fallback**: if Redis is unreachable, authentication answers 503. Policy `noeviction` (an evicted revocation would fail open). Also the notification queue.
 
 ## Tech Stack
 
@@ -137,4 +137,4 @@ pytest --cov=src --cov-report=term -v
 - **docker-compose version key**: `version: "3.9"` triggers deprecation warning (cosmetic)
 - **Worker lifespan tests**: Not added as separate test file (worker tested via service tests)
 - **Docker E2E tests**: Manual validation only (docker not available in pytest CI)
-- **Redis integration**: Rate limiting uses in-memory fallback; Redis wiring deferred to Sprint 8
+- **Redis integration**: sessions and enrollment OTPs are in Redis (GRID-SEC-004, GRID-SEC-005, GRID-ENR-001); the in-process rate limiter is still per worker.

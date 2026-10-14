@@ -97,6 +97,6 @@ async def test_refresh_returns_new_access_token(client: AsyncClient) -> None:
     assert login_resp.cookies.get("rg_refresh_token")
     assert login_resp.json()["refresh_token"] == ""
 
-    resp = await client.post("/api/v1/auth/refresh")
+    resp = await client.post("/api/v1/auth/refresh", headers={"X-Requested-With": "XMLHttpRequest"})
     assert resp.status_code == 200
     assert "access_token" in resp.json()

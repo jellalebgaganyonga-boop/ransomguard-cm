@@ -25,10 +25,3 @@ class LoginResponse(BaseModel):
     user_id: str
     tenant_id: str
     roles: list[str]
-
-
-class RefreshRequest(BaseModel):
-    """Body-based refresh (legacy). Cookie-based refresh reads from HttpOnly cookie."""
-    model_config = ConfigDict(extra="forbid")
-
-    refresh_token: str = ""  # Optional — if empty, server reads from cookie

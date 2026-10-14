@@ -47,3 +47,11 @@ export async function refresh(): Promise<LoginResponse> {
 export async function logout(): Promise<void> {
   await apiClient.post('/auth/logout');
 }
+
+/**
+ * POST /auth/logout-all — Logs out every session of the user, on every device (US1.2.2).
+ * The server increments the user's session version: every token issued before is refused.
+ */
+export async function logoutAll(): Promise<void> {
+  await apiClient.post('/auth/logout-all');
+}

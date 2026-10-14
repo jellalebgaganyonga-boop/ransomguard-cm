@@ -10,7 +10,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/stores/auth.store';
-import { login as apiLogin, logout as apiLogout } from '@/api/auth';
+import { login as apiLogin, logout as apiLogout, logoutAll as apiLogoutAll } from '@/api/auth';
 import { fetchMe } from '@/api/me';
 import type { LoginRequest } from '@/api/auth';
 
@@ -60,11 +60,17 @@ export function useLogout() {
   const clearAccessToken = useAuthStore((s) => s.clearAccessToken);
   const queryClient = useQueryClient();
 
-  return useMutation<void, Error, void>({
-    mutationFn: async () => {
+  // `everywhere`: US1.2.2, log out every session of the user on every device.
+  return useMutation<void, Error, { everywhere?: boolean } | void>({
+    mutationFn: async (options) => {
       try {
-        // AC1.2.1: POST /auth/logout — server invalidates JTI + clears HttpOnly cookie
-        await apiLogout();
+        // AC1.2.1: POST /auth/logout — server revokes this session (access token and its
+        // family of refresh tokens) on every worker, and clears the HttpOnly cookie.
+        if (options && options.everywhere) {
+          await apiLogoutAll();
+        } else {
+          await apiLogout();
+        }
       } catch {
         // AC1.2.4: logout always succeeds client-side even if API unreachable
       }

@@ -17,7 +17,11 @@
     "notifications": "Notifications",
     "language": "Language",
     "profile": "Profile",
-    "logout": "Sign out"
+    "logout": "Sign out",
+    "logoutAll": "Log out of every device",
+    "logoutAllTitle": "Log out of every device?",
+    "logoutAllBody": "Every open session, on this computer and on every other one, will be closed immediately. You will have to log in again everywhere.",
+    "logoutAllConfirm": "Log out everywhere"
   },
   "auth": {
     "login": {
