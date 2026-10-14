@@ -63,7 +63,7 @@ All decisions below are documented in full in
 | FE-006 | react-i18next + ICU MessageFormat, French-default |
 | FE-007 | Style Dictionary token pipeline (3-tier: reference/system/component) |
 | FE-008 | Vitest (Small) + Playwright (Medium/Large + a11y + visual) |
-| FE-009 | In-memory access token + in-memory refresh token (HttpOnly cookie deferred — GRID-SEC-001) |
+| FE-009 | In-memory access token + in-memory refresh token (HttpOnly cookie deferred — GRID-SEC-001) — **Fixed** in 3e8d245 (HttpOnly, Secure, SameSite=Strict cookie on `/api/v1/auth`; the body returns `""`). Remaining (body path still accepted, no server-side revocation, GRID-SEC-005): under review on `review/redis-sessions`. See `docs/console/INVENTAIRE_CONSOLE.md` (Sprint 7 debts) |
 | FE-010 | Optimistic UI via TanStack Query mutations |
 
 ---
@@ -104,6 +104,7 @@ dashboard/
   the JSON response body and stored in-memory — it is NOT an HttpOnly cookie.
   Both tokens are lost on page reload; the user must re-authenticate. A proper
   HttpOnly cookie implementation requires a backend change deferred to Sprint 8.
+  **Fixed** in 3e8d245 (HttpOnly, Secure, SameSite=Strict cookie on `/api/v1/auth`; the body returns `""`). Remaining (body path still accepted, no server-side revocation, GRID-SEC-005): under review on `review/redis-sessions`. See `docs/console/INVENTAIRE_CONSOLE.md` (Sprint 7 debts).
 - `src/api/client.ts` deduplicates concurrent refresh attempts via a
   module-level singleton promise — do not add a second refresh call site
   without reading that file's docstring first.
@@ -185,8 +186,8 @@ review date, in `docs/security/dependency-risk-register.md`.
 
 | ID | Description |
 |----|-------------|
-| GRID-SEC-001 | Refresh token in JSON body (not HttpOnly cookie) — tokens lost on reload |
-| GRID-SEC-002 | Backend has no self-disable guard — frontend-only protection |
+| GRID-SEC-001 | Refresh token in JSON body (not HttpOnly cookie) — tokens lost on reload — **Fixed** in 3e8d245 (HttpOnly, Secure, SameSite=Strict cookie on `/api/v1/auth`; the body returns `""`). Remaining (body path still accepted, no server-side revocation, GRID-SEC-005): under review on `review/redis-sessions`. See `docs/console/INVENTAIRE_CONSOLE.md` (Sprint 7 debts) |
+| GRID-SEC-002 | Backend has no self-disable guard — frontend-only protection — **Fixed** in 1088561 (403 on self-disable, 409 when the last active admin would be lost) |
 | GAP-01 | `AgentItem.enrolled_at` missing in backend schema |
 | GAP-03 | Heartbeat timeline endpoint not implemented |
 | GAP-08 | `GET /users` has no `roles` field |

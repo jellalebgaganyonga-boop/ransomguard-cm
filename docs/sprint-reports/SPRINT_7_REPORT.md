@@ -95,8 +95,8 @@ Sprint 7 delivered the complete **tenant operator console dashboard** for Ransom
 
 | ID | Description | Sprint |
 |----|-------------|--------|
-| GRID-SEC-001 | Refresh token in JSON body instead of HttpOnly cookie — both tokens lost on reload | Sprint 8 |
-| GRID-SEC-002 | disable_user backend has no auto-protection against disabling self — frontend-only guard | Sprint 8 |
+| GRID-SEC-001 | Refresh token in JSON body instead of HttpOnly cookie — both tokens lost on reload — **Fixed** in 3e8d245 (HttpOnly, Secure, SameSite=Strict cookie on `/api/v1/auth`; the body returns `""`). Remaining (body path still accepted, no server-side revocation, GRID-SEC-005): under review on `review/redis-sessions`. See `docs/console/INVENTAIRE_CONSOLE.md` (Sprint 7 debts) | Sprint 8 |
+| GRID-SEC-002 | disable_user backend has no auto-protection against disabling self — frontend-only guard — **Fixed** in 1088561 (403 on self-disable, 409 when the last active admin would be lost) | Sprint 8 |
 | GAP-01 | AgentItem.enrolled_at missing in backend schema — not shown on agent detail | Sprint 8 |
 | GAP-03 | Heartbeat timeline endpoint not implemented — Heartbeats tab descoped | Sprint 8 |
 | GAP-08 | GET /users has no `roles` field — no Roles column in users list | Sprint 8 |
