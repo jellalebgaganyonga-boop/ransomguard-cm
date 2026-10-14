@@ -12,7 +12,7 @@
 import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/auth.store';
-import { refresh } from '@/api/auth';
+import { refreshAccessToken } from '@/api/client';
 import { AuthLayout } from '@/components/layout/auth-layout';
 import { ProtectedRoute } from '@/components/layout/protected-route';
 import { LoginPage } from '@/pages/login-page';
@@ -42,8 +42,9 @@ export function App() {
 
     async function bootRefresh() {
       try {
-        // HttpOnly cookie is sent automatically by the browser
-        const { access_token } = await refresh();
+        // HttpOnly cookie is sent automatically by the browser. Same function as
+        // the 401 path: one refresh per tab, one tab at a time.
+        const access_token = await refreshAccessToken();
         if (!cancelled) {
           setAccessToken(access_token);
         }

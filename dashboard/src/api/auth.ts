@@ -32,14 +32,8 @@ export async function login(payload: LoginRequest): Promise<LoginResponse> {
   return LoginResponseSchema.parse(response.data);
 }
 
-/**
- * POST /auth/refresh — HttpOnly cookie is sent automatically by the browser.
- * No refresh_token in the body needed (GRID-SEC-001 resolved).
- */
-export async function refresh(): Promise<LoginResponse> {
-  const response = await apiClient.post('/auth/refresh', {});
-  return LoginResponseSchema.parse(response.data);
-}
+// POST /auth/refresh lives in ./client (refreshAccessToken): it must be the
+// single, locked entry point, see there.
 
 /**
  * POST /auth/logout — Revokes the access token and clears the refresh cookie.

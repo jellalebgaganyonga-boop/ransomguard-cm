@@ -108,6 +108,48 @@ test.describe('Logout of every device (US1.2.2)', () => {
   });
 });
 
+test.describe('Two tabs of the same browser (GRID-SEC-005 rotation)', () => {
+  test('two tabs loading at the same instant both stay signed in, no session is revoked', async ({ context, baseURL }) => {
+    // The mock applies the GRID rule: a refresh token is single-use, the next
+    // one is set in the shared cookie, and presenting a consumed one revokes the
+    // whole family (no grace period). The real rule is covered by
+    // grid/tests/api/test_sessions.py; this proves the console never trips it.
+    const cookieName = 'rg_refresh_token';
+    const domain = new URL(baseURL ?? 'http://localhost:5173').hostname;
+    let current = 'refresh-0';
+    let rotations = 0;
+    const revocations: string[] = [];
+    await context.addCookies([{ name: cookieName, value: current, domain, path: '/api/v1/auth' }]);
+
+    const pages = [await context.newPage(), await context.newPage()];
+    for (const page of pages) {
+      await setupMocks(page, 'tenant_admin');
+      await page.route('**/api/v1/auth/refresh', async (route) => {
+        const cookies = (await route.request().allHeaders()).cookie ?? '';
+        const presented = new RegExp(`${cookieName}=([^;]+)`).exec(cookies)?.[1] ?? '(none)';
+        await new Promise((resolve) => setTimeout(resolve, 300)); // keep both requests in flight
+        if (presented !== current) {
+          revocations.push(presented);
+          return route.fulfill({ status: 401, json: { detail: 'Refresh token reuse: session revoked' } });
+        }
+        rotations += 1;
+        current = `refresh-${rotations}`;
+        await context.addCookies([{ name: cookieName, value: current, domain, path: '/api/v1/auth' }]);
+        return route.fulfill({ status: 200, json: MOCK_TOKENS });
+      });
+    }
+
+    await Promise.all(pages.map((page) => page.goto('/dashboard')));
+
+    for (const page of pages) {
+      await expect(page).toHaveURL(/\/dashboard/);
+      await expect(page.getByRole('button', { name: /profil|déconnect/i }).first()).toBeVisible();
+    }
+    expect(revocations, 'a consumed refresh token was presented: the family would be revoked').toEqual([]);
+    expect(rotations).toBe(2);
+  });
+});
+
 test.describe('Session guard', () => {
   test('unauthenticated access to /dashboard → redirect to /auth/login', async ({ page }) => {
     // No login — fresh context, no tokens. The stub keeps the boot-time silent

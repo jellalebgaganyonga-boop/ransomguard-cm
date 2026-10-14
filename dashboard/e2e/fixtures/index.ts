@@ -255,8 +255,8 @@ export async function setupMocks(page: Page, role: Role): Promise<void> {
   await page.route('**/api/v1/dashboard/me', (r) =>
     r.fulfill({ status: 200, json: MOCK_ME[role] }));
 
-  // Dashboard metrics
-  await page.route('**/api/v1/dashboard/metrics', (r) =>
+  // Dashboard metrics (the console reads /metrics/summary, src/api/dashboard.ts)
+  await page.route('**/api/v1/dashboard/metrics/summary', (r) =>
     r.fulfill({ status: 200, json: MOCK_METRICS }));
 
   // Alerts — detail before list (more specific patterns registered first = lower priority in LIFO)

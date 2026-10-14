@@ -76,6 +76,9 @@ apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
  */
 let refreshPromise: Promise<string> | null = null;
 
+/** Web Locks name shared by every tab of the console on this origin. */
+export const REFRESH_LOCK_NAME = 'rg-auth-refresh';
+
 interface RetriableRequestConfig extends InternalAxiosRequestConfig {
   _retry?: boolean;
 }
@@ -91,6 +94,43 @@ async function performRefresh(): Promise<string> {
   const newToken = response.data.access_token;
   useAuthStore.getState().setAccessToken(newToken);
   return newToken;
+}
+
+/**
+ * Runs the refresh one tab at a time.
+ *
+ * The refresh token is single-use and the GRID revokes the whole family when
+ * a consumed one comes back (GRID-SEC-005, no grace period). The cookie is
+ * shared by every tab, and each tab keeps its access token in memory, so two
+ * tabs loading at the same instant would both present the same refresh token:
+ * the second would be taken for a theft and the session revoked.
+ *
+ * Under the lock the second tab waits until the first response has set the new
+ * cookie, then presents that one and succeeds.
+ *
+ * Without the Web Locks API (non-secure context, old browser) the behaviour is
+ * the previous one: deduplicated within a tab only, so two tabs refreshing at
+ * the same instant can still revoke the session.
+ */
+async function oneTabAtATime(task: () => Promise<string>): Promise<string> {
+  if (typeof navigator !== 'undefined' && 'locks' in navigator) {
+    // The lock is held until the task's promise settles, i.e. until the
+    // response (and its Set-Cookie) has been received.
+    return await navigator.locks.request(REFRESH_LOCK_NAME, task);
+  }
+  return task();
+}
+
+/**
+ * The only way to refresh the access token: at boot and on a 401 alike.
+ * Deduplicated within the tab (React StrictMode mounts the boot effect twice
+ * in development) and serialised across tabs.
+ */
+export function refreshAccessToken(): Promise<string> {
+  refreshPromise ??= oneTabAtATime(performRefresh).finally(() => {
+    refreshPromise = null;
+  });
+  return refreshPromise;
 }
 
 apiClient.interceptors.response.use(
@@ -119,13 +159,7 @@ apiClient.interceptors.response.use(
     originalRequest._retry = true;
 
     try {
-      // Deduplicate concurrent refresh attempts
-      if (!refreshPromise) {
-        refreshPromise = performRefresh().finally(() => {
-          refreshPromise = null;
-        });
-      }
-      const newToken = await refreshPromise;
+      const newToken = await refreshAccessToken();
 
       originalRequest.headers.Authorization = `Bearer ${newToken}`;
       return apiClient(originalRequest);
