@@ -117,6 +117,7 @@ CREATE TABLE users (
 ) ENGINE=InnoDB ROW_FORMAT=DYNAMIC COMMENT='User accounts with RBAC role assignment';
 
 
+-- Not implemented: no Alembic migration creates this table; see `docs/console/INVENTAIRE_CONSOLE.md` (MFA); decided: mandatory TOTP for tenant_admin, after Sprint 8.
 CREATE TABLE mfa_devices (
     id                  CHAR(36)        NOT NULL,
     user_id             CHAR(36)        NOT NULL,

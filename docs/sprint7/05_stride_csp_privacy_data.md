@@ -120,7 +120,7 @@ For each Data Flow Diagram element, STRIDE threats are enumerated. **Risk score 
 | WT1.1 | XSS via stored alert payload (attacker-controlled file path or process name) | T (Tampering) | 3 | 5 | 15 | React's default escaping + DOMPurify for HTML rendering + CSP `script-src` strict + No `dangerouslySetInnerHTML` policy | 🔵 |
 | WT1.2 | XSS via reflected URL params (filter values) | T | 2 | 4 | 8 | URL params validated via Zod schemas, escaped at render | 🔵 |
 | WT1.3 | Stored credentials in localStorage stolen by malicious browser extension | I (Info Disclosure) | 3 | 5 | 15 | Access tokens in memory only; refresh tokens in HttpOnly+SameSite=Strict+Secure cookies | 🔵 |
-| WT1.4 | Persistent UI session after machine theft (no idle timeout) | E (Elevation) | 3 | 4 | 12 | 30-min idle timeout, JWT 15-min TTL, refresh token revoked on logout-all | 🔵 |
+| WT1.4 | Persistent UI session after machine theft (no idle timeout) | E (Elevation) | 3 | 4 | 12 | 30-min idle timeout, JWT 15-min TTL, refresh token revoked on logout-all — logout-all: **Not implemented** — no logout-all endpoint; see `docs/console/INVENTAIRE_CONSOLE.md` (US1.2); under review on `review/redis-sessions` (GRID-SEC-004) | 🔵 |
 | WT1.5 | Browser extension reads page DOM (PII exposure) | I | 2 | 3 | 6 | Minimize PII in DOM, redact in inspect-friendly attributes | 🔵 |
 | WT1.6 | UI displays cached data from another tenant after re-login | I | 2 | 5 | 10 | TanStack Query keys include `tenant_id` from JWT, queryCache reset on login | 🔵 |
 | WT1.7 | Cross-site request forgery (CSRF) on state-changing actions | E | 3 | 4 | 12 | SameSite=Strict cookies + custom header X-Requested-With + CORS strict | 🔵 |
@@ -356,7 +356,7 @@ A formal **Data Protection Impact Assessment (DPIA)** under GDPR Article 35 is m
 | Category | Examples | Sensitivity | Subjects |
 |---|---|---|---|
 | Identification | full_name, email | Standard | Hospital IT staff (3 roles) |
-| Authentication | hashed_password (Argon2id), TOTP secret | Sensitive | Same |
+| Authentication | hashed_password (Argon2id), TOTP secret — **Not implemented** (MFA, see `docs/console/INVENTAIRE_CONSOLE.md`) | Sensitive | Same |
 | Activity | last_login_at, audit log entries (user actions) | Standard | Same |
 | Endpoint metadata | hostname, OS version, IP (internal) | Standard (NOT clinical data) | Hospital machines |
 | Alert payloads | Process names, file paths, hashes | Standard (NOT patient data) | Detection events |
@@ -441,7 +441,7 @@ A formal **Data Protection Impact Assessment (DPIA)** under GDPR Article 35 is m
 |---|:-:|:-:|---|
 | Cross-tenant data leak | Low | Catastrophic | Multi-tenant isolation tested 10/10; STRIDE WT4.2 |
 | Disclosure of who-did-what audit trail | Low | High | RBAC restricts audit log access to admin + auditor |
-| Authentication credential compromise | Medium | High | Argon2id hashing, MFA Sprint 8, rate limiting |
+| Authentication credential compromise | Medium | High | Argon2id hashing, MFA Sprint 8 — **Not implemented** (MFA, see `docs/console/INVENTAIRE_CONSOLE.md`), rate limiting |
 | Insider abuse by admin | Low | High | All admin actions audited; last-admin protection; cannot self-modify |
 | Backup tape theft | Low | High | Encrypted backups; encrypted media transport |
 | EU GDPR jurisdiction unclear (Cameroon) | N/A | N/A | Loi 2024/017 + ANTIC are governing frameworks; GDPR principles applied as best practice |
@@ -476,7 +476,7 @@ A formal **Data Protection Impact Assessment (DPIA)** under GDPR Article 35 is m
 | Tenant config | C2 | MySQL | Optional | TLS | Admin only | Indefinite (tenant lifecycle) |
 | User profile (email, name) | C3 | MySQL | Required | TLS | Admin + self | Tenant lifecycle |
 | Password hash | C4 | MySQL | Required | TLS | None (compared in code only) | Tenant lifecycle |
-| TOTP secret (Sprint 8) | C4 | MySQL | Required (envelope encryption) | TLS | None | User lifecycle |
+| TOTP secret (Sprint 8) — **Not implemented** (MFA, see `docs/console/INVENTAIRE_CONSOLE.md`) | C4 | MySQL | Required (envelope encryption) | TLS | None | User lifecycle |
 | Session (Redis) | C3 | Redis | At-rest (config dependent) | TLS in transit | Self | Token TTL (15 min access, 7 days refresh) |
 | JWT blacklist (Redis) | C3 | Redis | At-rest | TLS | None | Token original TTL |
 | Audit log entries | C3 | MySQL | Required | TLS | Admin + auditor | **Long: 7 years minimum (assumption pending ANTIC clarification)** |

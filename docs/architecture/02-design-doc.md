@@ -178,7 +178,7 @@ Eight modules constitute the product. Each covers a distinct responsibility:
 
 **Module 1 — Network Deployment**: Centralized installation from server via WMI/PSExec, license key activation verified online, degraded mode if license server unreachable, blocking after 30-day grace period post-expiration.
 
-**Module 2 — Supervision Dashboard**: Bilingual React interface accessible on LAN, real-time view of endpoints (green/orange/red), alert history, whitelist management, license status, strict RBAC (Admin/Technician/Director roles), OAuth2 authentication with MFA TOTP.
+**Module 2 — Supervision Dashboard**: Bilingual React interface accessible on LAN, real-time view of endpoints (green/orange/red), alert history, whitelist management, license status, strict RBAC (Admin/Technician/Director roles), OAuth2 authentication with MFA TOTP (**Not implemented** — no MFA in the GRID, the console or the database; see `docs/console/INVENTAIRE_CONSOLE.md` (MFA); decided: mandatory TOTP for tenant_admin, after Sprint 8.).
 
 **Module 3 — Detection**: Combination of the 7 Rings 1-3 mechanisms (USB GUARD, SENTINEL canaries, GRID multi-position, Shannon entropy, mass detection, GENEALOGY process tree, EXFIL WATCH exfiltration detection).
 
