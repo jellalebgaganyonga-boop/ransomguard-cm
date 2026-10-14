@@ -130,10 +130,11 @@ jobs:
     name: Dashboard E2E (Playwright)
     runs-on: ubuntu-latest
     needs: dashboard
-    # ~6 min, more than twice the next slowest job: run it where it gates a
-    # merge (main, pull requests) or on demand, not on every push of a work
-    # branch. The CI gate treats a skipped job as a pass.
-    if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    # Runs on every push of every branch, like the other jobs. It used to be
+    # limited to main, pull requests and manual runs to save ~6 min, which
+    # meant the review branches -- the ones fast-forwarded into the release
+    # branch -- showed a green CI without their E2E (98701bf was green on push
+    # and red once the E2E ran). Every commit goes to the end of its CI.
     defaults:
       run:
         working-directory: dashboard
