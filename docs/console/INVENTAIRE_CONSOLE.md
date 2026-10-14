@@ -297,13 +297,71 @@ Comparaison par script des 281 clés utilisées dans les appels `t('…')` avec 
 
 ### 5.3 Exigences non fonctionnelles
 
-La revue critère par critère de la section 14 du PRD n'a pas été menée à terme : l'analyse a été interrompue par une limite d'API. **Ce point reste à faire.**
+Revue critère par critère de la section 14 du PRD (`docs/sprint7/SPRINT_7_PRD_v2.md:1853-1909`), menée le 2026-10-14 sur `sprint8/recovery` (`9b883a9`). Un statut de plus : **Non mesuré**, pour une cible chiffrée que rien ne mesure. Abréviation : **NGX** = `deployment/grid/nginx/`.
 
-Constats déjà établis :
+**Synthèse.** Les exigences de sécurité sont tenues, à deux réserves près sur nginx. Aucune cible de performance n'est mesurée. L'accessibilité repose sur axe seul : aucun test au clavier, aucune campagne lecteur d'écran. La couverture unitaire ne peut pas être mesurée. Seul Chrome est testé.
+
+#### 14.1 Performance — rien n'est mesuré
+
+| Critère | Cible | Statut | Preuve |
+|---|---|---|---|
+| Lighthouse, FCP, LCP, TTI, navigation | ≥ 90 ; < 1,5 s ; < 2,5 s ; < 3,5 s ; < 1 s | Non mesuré | Ni Lighthouse ni web-vitals dans `dashboard/package.json` ni dans `.github/workflows/`. Le seul garde-fou est un avertissement de build sur la taille des chunks (`dashboard/vite.config.ts:52-53`). |
+| Latence API p95 | < 500 ms | Non mesuré | Le format de log nginx n'enregistre pas `$request_time` (`NGX/nginx.conf:14-17`). La GRID n'expose aucune métrique de latence. |
+
+#### 14.2 Sécurité — tenue, deux réserves sur nginx
+
+| Critère | Statut | Preuve |
+|---|---|---|
+| HTTPS, HSTS | Partiel | `max-age=63072000; includeSubDomains` (`NGX/conf.d/dashboard.conf:23,98`). **Réserve 1 :** `location /assets/` déclare son propre `add_header` (`dashboard.conf:77-82`). nginx n'hérite alors plus des en-têtes du bloc `server`, donc les JS et CSS sont servis sans HSTS, CSP, `nosniff` ni `X-Frame-Options`. Impact faible : le document HTML porte bien HSTS et CSP. À corriger dans le lot Console. **Réserve 2 :** le port 80 redirige vers 443 (`NGX/conf.d/redirect.conf:1-5`), pas vers le 8443 de la console. |
+| Limitation des connexions | Fait | Zone `login` à 30 req/min par IP (`NGX/nginx.conf:38`), `burst=5 nodelay` (`dashboard.conf:28-29`). |
+| CSP | Fait | `script-src 'self'` sans `unsafe-inline` (`dashboard.conf:26,101`). `style-src` autorise `'unsafe-inline'`. Même trou sur `/assets/` (réserve 1). |
+| Jeton d'accès en mémoire seulement | Fait | `FE/stores/auth.store.ts:4-6,25`. Aucun `localStorage` ni `sessionStorage` dans `FE` (`FE/i18n/index.ts:41` : `caches: []`). |
+| Refresh en cookie HttpOnly, Secure, SameSite=Strict | Fait | `BE/api/v1/routes/auth.py:36-44`, path `/api/v1/auth`. La révocation est en revue sur `review/redis-sessions` (GRID-SEC-004, GRID-SEC-005). |
+| XSS | Fait | Aucun `dangerouslySetInnerHTML` ni `innerHTML` dans `FE`. `escapeValue: false` (`FE/i18n/index.ts:35`) est normal avec React. |
+| CSRF | Fait | SameSite=Strict (`auth.py:41`), conforme au PRD. |
+| Aucune donnée sensible en URL | Fait | Ne passent en URL que des filtres, la pagination et des identifiants (`FE/hooks/use-alert-filters.ts:18-46`). Aucun jeton, email ni OTP. |
+
+#### 14.3 Accessibilité — axe seul
+
+| Critère | Cible | Statut | Preuve |
+|---|---|---|---|
+| WCAG AA | 2.1 AA | Partiel | axe s'exécute sur les pages de connexion, d'accueil, d'alertes, d'agents, d'audit et d'utilisateurs (`dashboard/e2e/*.spec.ts`). `AxeBuilder` est appelé sans `withTags`, donc axe lance toutes ses règles par défaut. Seuls les impacts `critical` et `serious` font échouer le test (ex. `e2e/agents.spec.ts:33`). Pas d'axe sur `user-actions` ni `notification-preferences`. En CI : chromium seulement, et seulement sur main, les PR et à la demande (`.github/workflows/ci.yml:122,138,146`). |
+| Navigation au clavier | 100 % | Absent | Aucun `keyboard.press`, `Tab` ni `toBeFocused` dans `dashboard/e2e/` ni `FE`. |
+| Contraste | ≥ 4,5:1 | Partiel | La règle axe `color-contrast` ne couvre que les pages listées ci-dessus. |
+| Focus visible | partout | Partiel | Contour global `:focus-visible` (`FE/styles/globals.css:36-39`). Les éléments de menu et d'option ont `outline-none` et seulement un changement de fond (`FE/components/ui/dropdown-menu.tsx:55,72,95,150` ; `select.tsx:76`). |
+| Lecteurs d'écran | NVDA, JAWS, VoiceOver | Absent | Aucune campagne documentée. Les libellés pour lecteur d'écran codés en dur sont relevés en 5.1. |
+
+#### 14.4 Internationalisation
+
+| Critère | Statut | Preuve |
+|---|---|---|
+| Français par défaut | Partiel | `fallbackLng: 'fr'`, mais le détecteur lit d'abord la langue du navigateur (`FE/i18n/index.ts:32,40`). Un navigateur anglais affiche donc la console en anglais. |
+| Anglais en seconde langue | Fait | `FE/i18n/index.ts:29-30` ; sélecteur dans `FE/components/layout/header.tsx:101-104`. |
+| Chaînes dans des fichiers de langue | Partiel *(adapté)* | Les fichiers sont dans `FE/i18n/locales/{fr,en}.json`, pas dans `public/locales/`. Les chaînes codées en dur sont relevées en 5.1. |
+| Dates et nombres selon la langue | Partiel | date-fns n'est pas installé : seul Intl est utilisé. Les locales sont figées à `'en-US'`/`'fr-FR'` (`FE/lib/format-date.ts:61,76`), alors que `en.json:496` annonce `en-GB`. Les durées relatives sont des chaînes codées en dur (`format-date.ts:40-50`). Un `toLocaleString()` n'a pas de locale (`FE/pages/audit/audit-log-page.tsx:290`). |
+
+#### 14.5 Navigateurs
+
+Il n'y a pas de `browserslist`. Seul réglage : `build.target: 'es2022'` (`dashboard/vite.config.ts:38`).
+
+| Navigateur | Statut | Preuve |
+|---|---|---|
+| Chrome ≥ 110 | Fait | Seul projet Playwright lancé en CI (`ci.yml:138,146`). |
+| Firefox ≥ 110, Edge ≥ 110 | Partiel | Projets définis (`dashboard/playwright.config.ts:47-52`), jamais lancés en CI. |
+| Safari ≥ 16 | Absent | Aucun projet webkit. es2022 n'est pas transpilé : Safari 16.0 à 16.3 n'est pas garanti. |
+
+#### 14.6 Couverture de tests
+
+| Critère | Cible | Statut | Preuve |
+|---|---|---|---|
+| Unitaires | ≥ 75 % des instructions | Non mesuré | Le fournisseur `v8` est configuré (`dashboard/vitest.config.ts:17-32`), mais `@vitest/coverage-v8` n'est pas une dépendance. `--coverage` ne peut donc pas s'exécuter, et la CI lance `vitest run` sans lui (`ci.yml:100-101`). Les seuils ne portent que sur `src/lib/**` et `src/stores/**`. Il n'y a pas de seuil global. |
+| Composants | toutes les pages et les composants critiques | Partiel | 16 pages dans `FE/pages`, aucun `*.test.tsx`. Seuls `pages/no-unsourced-claims.test.ts` (garde statique) et deux composants sont testés (`FE/components/alerts/alert-module.test.tsx`, `FE/components/agents/agent-posture-section.test.tsx`). |
+| E2E, parcours nominaux des Epics 1 à 6 | tous | Fait *(adapté)* | `dashboard/e2e/{auth,dashboard,alerts,agents,users,audit}.spec.ts`. Toutes les API sont simulées (`e2e/fixtures/index.ts:226-245`) : aucun test ne traverse la GRID. `user-actions` et `settings` n'ont pas de test. |
+| E2E, RBAC | appliqué | Fait *(adapté)* | `alerts.spec.ts:135`, `agents.spec.ts:160`, `audit.spec.ts:86`, `users.spec.ts:64,108,148`. Côté console seulement : le RBAC de la GRID est testé dans `grid/tests/api/test_rbac_distinction.py`. |
+
+Constats repris des sections précédentes :
 - cibles tactiles (5.2) ;
-- E2E en chromium seulement (5.2) ;
-- mise en veille de session à 30 min, faite ;
-- jetons : accès en mémoire, refresh en cookie HttpOnly, faits, mais sans révocation (GRID-SEC-004, GRID-SEC-005).
+- mise en veille de session à 30 min, faite.
 
 ---
 
