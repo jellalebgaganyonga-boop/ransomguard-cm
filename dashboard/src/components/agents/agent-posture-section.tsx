@@ -94,10 +94,16 @@ export function AgentPostureSection({ agent }: { agent: AgentDetail }) {
         <>
           {/* 2 — Modules: the six entries, product names, state and reason */}
           <div className="rounded-lg border border-border-subtle bg-elevated shadow-sm">
-            <h3 className="border-b border-border-subtle px-4 py-3 text-sm font-semibold uppercase tracking-wide text-text-primary">
+            <h3
+              id="posture-modules-title"
+              className="border-b border-border-subtle px-4 py-3 text-sm font-semibold uppercase tracking-wide text-text-primary"
+            >
               {t('posture.section.modules')}
             </h3>
-            <div className="overflow-x-auto">
+            {/* Scrolls horizontally on a narrow screen: a named region the keyboard can reach
+                (axe scrollable-region-focusable, WCAG 2.1.1). jsx-a11y does not know this pattern. */}
+            {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex */}
+            <div className="overflow-x-auto" tabIndex={0} role="region" aria-labelledby="posture-modules-title">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border-subtle text-left text-xs font-semibold uppercase tracking-wide text-text-secondary">
