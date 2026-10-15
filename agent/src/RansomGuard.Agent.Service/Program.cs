@@ -404,6 +404,10 @@ static async Task VerifyAuditLogAsync()
     var (verdict, entryCount) = await AuditChainVerification.VerifyAsync(context, repo);
     Console.WriteLine($"Database examined: {db.Path}");
     Console.WriteLine($"Audit log entries read: {entryCount}");
+    // Read only (AGT-AUD-002): recorded entries not chained yet. The agent chains them first at
+    // its next start; they are not covered by the chain until then.
+    int waiting = await context.PendingAuditEntries.CountAsync();
+    Console.WriteLine($"Audit entries recorded, waiting to be chained: {waiting}");
 
     switch (verdict)
     {

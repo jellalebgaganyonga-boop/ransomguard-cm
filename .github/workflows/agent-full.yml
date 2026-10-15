@@ -198,6 +198,78 @@ jobs:
           }
           "### Agent installed as a service`n`n$($out -split "`n" | Select-String 'Database examined|entries read|RESULT')" >> $env:GITHUB_STEP_SUMMARY
 
+      - name: A process killed during an audit burst loses no entry (AGT-AUD-002)
+        shell: pwsh
+        run: |
+          $exe = Join-Path $env:INSTALL_DIR 'RansomGuard.Agent.Service.exe'
+          function Verify {
+            Push-Location C:\Windows\System32
+            $o = & $exe --verify-audit-log 2>&1 | Out-String
+            $c = $LASTEXITCODE
+            Pop-Location
+            return @{ Out = $o; Code = $c;
+                      Read = [int]([regex]::Match($o, 'Audit log entries read: (\d+)').Groups[1].Value);
+                      Waiting = [regex]::Match($o, 'waiting to be chained: (\d+)').Groups[1].Value }
+          }
+          function WaitRunning {
+            $deadline = (Get-Date).AddSeconds(60)
+            do { Start-Sleep 2; $s = (Get-Service $env:SERVICE_NAME).Status } while ($s -ne 'Running' -and (Get-Date) -lt $deadline)
+            if ($s -ne 'Running') { Write-Host '::error::the service did not reach Running'; exit 1 }
+          }
+
+          $before = Verify
+          Write-Host "before: $($before.Read) entries chained"
+
+          sc.exe start $env:SERVICE_NAME | Out-Null
+          WaitRunning
+          Start-Sleep 10 # canaries deployed and watched
+          $agentPid = (Get-CimInstance Win32_Service -Filter "Name='$env:SERVICE_NAME'").ProcessId
+
+          # The burst: every deletion of an active canary records CanaryAlert, then CanaryRegenerated
+          # (or SustainedAttack past 10 an hour); the regenerated canary is active again.
+          $deleted = 0
+          $end = (Get-Date).AddSeconds(8)
+          $killAt = (Get-Date).AddSeconds(5)
+          $killed = $false
+          while ((Get-Date) -lt $end) {
+            foreach ($c in @(Get-ChildItem $env:WATCH_DIR -File -Force -Filter '0001_*' -ErrorAction SilentlyContinue)) {
+              Remove-Item $c.FullName -Force -ErrorAction SilentlyContinue; $deleted++
+            }
+            if (-not $killed -and (Get-Date) -ge $killAt) {
+              taskkill /F /PID $agentPid | Out-Host   # mid-burst: no shutdown, no last chaining pass
+              $killed = $true
+              break
+            }
+            Start-Sleep -Milliseconds 250
+          }
+          Write-Host "canary deletions during the burst: $deleted ; process $agentPid killed: $killed"
+          Start-Sleep 3
+
+          $afterKill = Verify
+          Write-Host "right after the kill: $($afterKill.Read) chained, $($afterKill.Waiting) recorded and waiting"
+
+          # Restart: Program chains what is waiting first.
+          sc.exe start $env:SERVICE_NAME | Out-Null
+          WaitRunning
+          Start-Sleep 10
+          Stop-Service $env:SERVICE_NAME -Force
+
+          $after = Verify
+          Write-Host $after.Out
+          $first = Select-String -Path "$env:DATA_ROOT\logs\*.log" -Pattern 'chained first' -ErrorAction SilentlyContinue | Select-Object -Last 1
+          Write-Host "startup: $(if ($first) { $first.Line } else { 'no entry was waiting at restart' })"
+
+          $bad = @()
+          if (-not $killed) { $bad += 'the process was not killed' }
+          if ($after.Code -ne 0 -or $after.Out -notmatch 'RESULT: PASS') { $bad += 'the chain does not verify' }
+          if ($after.Waiting -ne '0') { $bad += "entries still waiting after the restart: $($after.Waiting)" }
+          if ($after.Read -lt ($afterKill.Read + [int]$afterKill.Waiting)) { $bad += 'an entry recorded before the kill is missing from the chain' }
+          if ($after.Read -le $before.Read) { $bad += 'the burst left no entry' }
+          if ($bad.Count -gt 0) { $bad | ForEach-Object { Write-Host "::error::$_" }; exit 1 }
+          $line = "killed mid-burst: $($afterKill.Waiting) recorded entries waiting after the kill, all chained at restart; $($after.Read) entries, RESULT: PASS"
+          Write-Host "::notice title=AGT-AUD-002 real kill::$line"
+          "`n- **AGT-AUD-002 real kill**: $line" >> $env:GITHUB_STEP_SUMMARY
+
       - name: Diagnostics
         if: always()
         shell: pwsh
