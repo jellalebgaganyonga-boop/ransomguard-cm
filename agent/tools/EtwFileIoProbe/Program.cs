@@ -267,7 +267,7 @@ internal static class Measure
     {
         var stats = new PhaseStats { Config = config, Phase = phase };
         using Process self = Process.GetCurrentProcess();
-        Process? agent = agentPid is int pid ? Process.GetProcessById(pid) : null;
+        Process? agent = agentPid is int pid ? AgentProcess(pid) : null;
         double probeStart = Cpu(self), agentStart = agent is null ? 0 : Cpu(agent);
         var clock = Stopwatch.StartNew();
         Interlocked.Exchange(ref _current, stats);
@@ -302,9 +302,23 @@ internal static class Measure
         Interlocked.Exchange(ref _current, null);
         stats.Seconds = clock.Elapsed.TotalSeconds;
         stats.ProbeCpuSeconds = Cpu(self) - probeStart;
-        stats.AgentCpuSeconds = agent is null ? null : Cpu(agent) - agentStart;
+        stats.AgentCpuSeconds = agent is null || agent.HasExited ? null : Cpu(agent) - agentStart;
         Console.WriteLine($"  {config,-30} {phase,-5} events {stats.AllEvents,10:N0}  probe CPU {stats.ProbeCpuSeconds:F2} s");
         return stats;
+    }
+
+    /// <summary>The agent under measurement; null (reported "n/a") if it is not running.</summary>
+    private static Process? AgentProcess(int pid)
+    {
+        try
+        {
+            return Process.GetProcessById(pid);
+        }
+        catch (ArgumentException)
+        {
+            Console.WriteLine($"  agent PID {pid} is not running: its CPU is reported n/a");
+            return null;
+        }
     }
 
     private static double Cpu(Process process)
