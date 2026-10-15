@@ -93,6 +93,12 @@ public static class ServiceRegistration
             ? dbConnectionString
             : $"{dbConnectionString};Password={dbKey}";
 
+        // Durability (AGT-AUD-002): a recorded audit entry is one committed INSERT into
+        // PendingAuditEntries, chained later. It survives a power cut only if the commit is
+        // flushed to disk. Measured on this connection (AgentDatabaseDurabilityTests):
+        // journal_mode=WAL — set by EF Core when it creates the database — and synchronous=FULL,
+        // the SQLCipher build's default. In WAL mode, synchronous MUST stay FULL: NORMAL may lose
+        // the last commits on a power cut. Never lower it; the test fails if it changes.
         services.AddDbContext<AgentDbContext>(options =>
             options.UseSqlite(encryptedConnectionString));
 

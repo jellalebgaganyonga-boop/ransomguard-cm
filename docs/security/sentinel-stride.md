@@ -31,6 +31,7 @@
 | T3 | SentinelMonitor | Attacker modifies database to mark canaries as Deleted | High | SQLCipher encryption + DACL on db file (since `f7e508c` (AGT-KEY-001) the agent closes `%ProgramData%\RansomGuard-CM` at every start: SYSTEM and Administrators only, inheritance cut, verified, start refused otherwise) | Mitigated — `f7e508c` (AGT-KEY-001) | CWE-311 | SC-28 |
 | T4 | CanaryContentGenerator | Attacker reverse-engineers canary patterns | Medium | Randomized content per generation, no fixed template | Mitigated | — | — |
 | T5 | AuditLog | Tamper with audit entries | Critical | SHA-256 hash chain verified on read | Mitigated | CWE-354 | AU-10 |
+| T6 | PendingAuditEntries | Modify or delete an audit entry recorded but not chained yet (AGT-AUD-002: between the INSERT and the chaining, a few ms, at most 5 s — the writer's safety pass — or until the next start if the agent stops in between) | Medium | The entry is not protected by the hash chain during that window. Writing to the database needs Administrator rights: `%ProgramData%\RansomGuard-CM` is closed to SYSTEM and Administrators (AGT-KEY-001, `f7e508c`), and the file is SQLCipher-encrypted with a DPAPI-protected key. An attacker with those rights can also stop the agent | Accepted Risk — AGT-AUD-002 | CWE-354 | AU-9 |
 
 ### Repudiation
 
@@ -38,6 +39,7 @@
 |----|-----------|--------|----------|------------|--------|-----|------|
 | R1 | AuditLog | Deny having tampered with canary | High | Hash-chained audit log with timestamps | Mitigated | CWE-778 | AU-3 |
 | R2 | CanaryAlert | Deny process was responsible | Medium | Restart Manager API attribution | Partial | — | AU-3 |
+| R3 | PendingAuditEntries | Deny an action whose audit entry was altered or removed before it was chained (same window as T6) | Medium | Same as T6: Administrator rights required (AGT-KEY-001). Once chained, the entry is covered by R1. The window is the price of never letting the audit hold up a detection or an action (AGT-AUD-002) | Accepted Risk — AGT-AUD-002 | CWE-778 | AU-10 |
 
 ### Information Disclosure
 
