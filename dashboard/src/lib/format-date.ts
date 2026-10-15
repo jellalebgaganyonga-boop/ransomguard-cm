@@ -67,6 +67,20 @@ export function formatDateTime(isoString: string): string {
 }
 
 /**
+ * Format ISO datetime as the time of day only: "14:59" (FR) or "2:59 PM" (EN), Douala time.
+ */
+export function formatTime(isoString: string): string {
+  const date = parseUtc(isoString);
+  if (isNaN(date.getTime())) return '—';
+
+  const lang = i18n.language?.startsWith('en') ? 'en-US' : 'fr-FR';
+  return new Intl.DateTimeFormat(lang, {
+    timeStyle: 'short',
+    timeZone: 'Africa/Douala',
+  }).format(date);
+}
+
+/**
  * Format ISO date only (for audit log dates, compliance dates).
  */
 export function formatDate(isoString: string): string {

@@ -474,7 +474,8 @@
       "transmission": "Transmission des alertes",
       "endpoint": "Poste",
       "noPosture": "Ce poste n'a transmis aucune posture.",
-      "lastPosture": "Dernière posture reçue {when}"
+      "lastPosture": "Dernière posture reçue {when}",
+      "lastValueAt": "dernière valeur reçue à {time}"
     },
     "field": {
       "module": "Module",

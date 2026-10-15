@@ -474,7 +474,8 @@
       "transmission": "Alert transmission",
       "endpoint": "Endpoint",
       "noPosture": "This endpoint has not reported any posture.",
-      "lastPosture": "Last posture received {when}"
+      "lastPosture": "Last posture received {when}",
+      "lastValueAt": "last value received at {time}"
     },
     "field": {
       "module": "Module",

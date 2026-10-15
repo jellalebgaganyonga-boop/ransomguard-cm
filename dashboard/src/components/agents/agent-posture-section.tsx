@@ -25,14 +25,34 @@ import {
   uploadErrorLabel,
   verdictSentence,
 } from '@/lib/agent-posture';
-import { formatDateTime, formatDistanceToNow } from '@/lib/format-date';
+import { formatDateTime, formatDistanceToNow, formatTime } from '@/lib/format-date';
 
-function Field({ label, children, title }: { label: string; children: ReactNode; title?: string }) {
+/**
+ * One measure. `staleSince`: the signal is lost, so the value is the last one received, not the
+ * current one -- shown muted, with the time it was received (LOT 2 demo: "Alertes non transmises 0"
+ * during a cut read as a live count).
+ */
+function Field({
+  label,
+  children,
+  title,
+  staleSince,
+}: {
+  label: string;
+  children: ReactNode;
+  title?: string;
+  staleSince?: string;
+}) {
   return (
     <div>
       <dt className="text-[10px] font-semibold uppercase text-text-secondary">{label}</dt>
-      <dd className="mt-0.5 text-sm text-text-primary" title={title}>
+      <dd
+        className={`mt-0.5 text-sm ${staleSince ? 'text-text-secondary' : 'text-text-primary'}`}
+        title={title}
+        data-stale={staleSince ? 'true' : undefined}
+      >
         {children}
+        {staleSince && <span className="block text-xs italic">{staleSince}</span>}
       </dd>
     </div>
   );
@@ -43,6 +63,9 @@ export function AgentPostureSection({ agent }: { agent: AgentDetail }) {
   const posture = agent.posture;
   const findings = otherFindings(t, agent);
   const signalLost = agent.reason_codes.includes('signal_lost');
+  const staleSince =
+    posture && signalLost ? t('posture.section.lastValueAt', { time: formatTime(posture.received_at) }) : undefined;
+  const stale = staleSince ? { staleSince } : {};
 
   return (
     <section aria-labelledby="posture-verdict" className="space-y-6">
@@ -135,9 +158,11 @@ export function AgentPostureSection({ agent }: { agent: AgentDetail }) {
               <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-primary">
                 {t('posture.section.transmission')}
               </h3>
-              <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <Field label={t('posture.field.pendingAlerts')}>{formatCount(t, posture.pending_alerts)}</Field>
-                <Field label={t('posture.field.lastUpload')}>
+              <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2" data-testid="posture-transmission">
+                <Field label={t('posture.field.pendingAlerts')} {...stale}>
+                  {formatCount(t, posture.pending_alerts)}
+                </Field>
+                <Field label={t('posture.field.lastUpload')} {...stale}>
                   {posture.last_upload_age_seconds != null
                     ? t('posture.field.ago', { duration: formatDuration(t, posture.last_upload_age_seconds) })
                     : posture.pending_alerts == null
@@ -146,6 +171,7 @@ export function AgentPostureSection({ agent }: { agent: AgentDetail }) {
                 </Field>
                 <Field
                   label={t('posture.field.lastUploadError')}
+                  {...stale}
                   {...(posture.last_upload_error_code
                     ? { title: t('posture.field.rawCode', { code: posture.last_upload_error_code }) }
                     : {})}
@@ -154,8 +180,12 @@ export function AgentPostureSection({ agent }: { agent: AgentDetail }) {
                     ? uploadErrorLabel(t, posture.last_upload_error_code)
                     : t('posture.none')}
                 </Field>
-                <Field label={t('posture.field.rejectedAlerts')}>{formatCount(t, posture.rejected_alerts)}</Field>
-                <Field label={t('posture.field.auditWriteFailures')}>{formatCount(t, posture.audit_write_failures)}</Field>
+                <Field label={t('posture.field.rejectedAlerts')} {...stale}>
+                  {formatCount(t, posture.rejected_alerts)}
+                </Field>
+                <Field label={t('posture.field.auditWriteFailures')} {...stale}>
+                  {formatCount(t, posture.audit_write_failures)}
+                </Field>
               </dl>
             </div>
 

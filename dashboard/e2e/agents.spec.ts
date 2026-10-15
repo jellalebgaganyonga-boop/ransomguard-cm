@@ -148,6 +148,44 @@ test.describe('Agent detail — posture (R8)', () => {
     });
   }
 
+  // LOT 2 demo: during a cut the page showed "Alertes non transmises 0", the last value received,
+  // as if it were live. Signal lost: every transmission value says when it was received.
+  test('signal lost: the transmission values are marked as the last ones received, muted', async ({ page }) => {
+    await setupMocks(page, 'tenant_admin');
+    await page.route('**/api/v1/dashboard/agents/agent-e2e-aaa', (r) =>
+      r.fulfill({
+        status: 200,
+        json: { ...MOCK_AGENT, protection_state: 'partial', reason_codes: ['signal_lost'], signal_age_seconds: 420 },
+      }));
+    await loginAs(page, 'tenant_admin');
+    await navigateTo(page, '/agents/agent-e2e-aaa');
+
+    const transmission = page.getByTestId('posture-transmission');
+    // received_at 11:55 UTC = 12:55 in Douala.
+    await expect(transmission.getByText('dernière valeur reçue à 12:55')).toHaveCount(5);
+    const values = transmission.locator('dd');
+    await expect(values).toHaveCount(5);
+    for (const value of await values.all()) {
+      await expect(value).toHaveAttribute('data-stale', 'true');
+      await expect(value).toHaveClass(/text-text-secondary/);
+    }
+
+    const results = await new AxeBuilder({ page }).analyze();
+    const critical = results.violations.filter((v) => v.impact === 'critical' || v.impact === 'serious');
+    expect(critical, `Critical/serious a11y violations: ${JSON.stringify(critical, null, 2)}`).toEqual([]);
+  });
+
+  test('signal fresh: the transmission values are current, not marked', async ({ page }) => {
+    await setupMocks(page, 'tenant_admin');
+    await loginAs(page, 'tenant_admin');
+    await navigateTo(page, '/agents/agent-e2e-aaa');
+
+    const transmission = page.getByTestId('posture-transmission');
+    await expect(transmission.locator('dd')).toHaveCount(5);
+    await expect(transmission.getByText(/dernière valeur reçue/)).toHaveCount(0);
+    await expect(transmission.locator('dd[data-stale]')).toHaveCount(0);
+  });
+
   test('the list shows the verdict', async ({ page }) => {
     await setupMocks(page, 'tenant_admin');
     await loginAs(page, 'tenant_admin');
