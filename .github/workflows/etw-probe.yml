@@ -1,0 +1,98 @@
+# RansomGuard-CM — ETW FileIO measurement for the design gate (SPRINT_8_ARBITRAGE_LOT3.md, B.2).
+#
+# Measures, on a clean Windows runner (administrator, no third-party antivirus), what a kernel
+# FileIO session costs and carries: events per second at rest and during a file copy, the CPU of
+# the session's process, the CPU of the agent as it is today on the same copy, which events
+# carry a PID and a file name, whether that PID is right, and the ETW delivery delay.
+# Measurement only: agent/tools/EtwFileIoProbe is outside RansomGuard.Agent.sln, no product code
+# depends on it. Runs on the ADR review branch only; the report is the job summary and an artifact.
+name: ETW FileIO probe
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['review/adr-025-etw']
+    paths:
+      - 'agent/tools/EtwFileIoProbe/**'
+      - '.github/workflows/etw-probe.yml'
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_VERSION: '8.0.x'
+  AGENT_DIR: C:\RGAgentProbe
+  RG_PROBE_WORK: C:\rg-probe-work
+
+jobs:
+  probe:
+    name: ETW FileIO — volume, CPU, PID, file name
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Machine
+        shell: pwsh
+        run: |
+          Get-CimInstance Win32_Processor | Select-Object Name, NumberOfCores, NumberOfLogicalProcessors | Format-List
+          Get-CimInstance Win32_OperatingSystem | Select-Object Caption, Version, TotalVisibleMemorySize | Format-List
+          logman query -ets
+
+      - name: Publish the agent (Release), as it is today
+        working-directory: agent/src
+        run: dotnet publish RansomGuard.Agent.Service/RansomGuard.Agent.Service.csproj -c Release -o ${{ env.AGENT_DIR }}
+
+      - name: Build the probe
+        run: dotnet build agent/tools/EtwFileIoProbe/EtwFileIoProbe.csproj -c Release
+
+      - name: Start the agent, watching the probe's work directory
+        shell: pwsh
+        run: |
+          # Unreachable GRID on purpose, as in agent-full: the agent runs without it. Its SENTINEL
+          # and ENTROPY watch the directory the probe copies into, as on a real workstation.
+          New-Item -ItemType Directory -Force -Path $env:RG_PROBE_WORK | Out-Null
+          $env:Agent__Server__BaseUrl = 'https://grid.ci.invalid'
+          $env:Agent__Detection__WatchPaths__0 = $env:RG_PROBE_WORK
+          $env:Agent__Sentinel__WatchDirectories__0 = $env:RG_PROBE_WORK
+          $exe = Join-Path $env:AGENT_DIR 'RansomGuard.Agent.Service.exe'
+          $agent = Start-Process -FilePath $exe -WorkingDirectory $env:AGENT_DIR -PassThru -WindowStyle Hidden `
+            -RedirectStandardOutput "$env:RUNNER_TEMP\agent.log" -RedirectStandardError "$env:RUNNER_TEMP\agent.err"
+          "AGENT_PID=$($agent.Id)" >> $env:GITHUB_ENV
+          Start-Sleep -Seconds 60   # past the modules' start
+          if ($agent.HasExited) { Get-Content "$env:RUNNER_TEMP\agent.log" -Tail 50; exit 1 }
+          Get-Content "$env:RUNNER_TEMP\agent.log" | Select-String -Pattern 'started|active|ETW|SENTINEL|ENTROPY' | Select-Object -First 30
+
+      - name: Measure (baseline, then three keyword sets; rest then copy, 60 s each)
+        shell: pwsh
+        run: |
+          $probe = 'agent/tools/EtwFileIoProbe/bin/Release/net8.0-windows/EtwFileIoProbe.exe'
+          & $probe measure --seconds 60 --agent-pid $env:AGENT_PID --report "$env:RUNNER_TEMP\etw-probe-report.md"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Without administrator rights (point 5)
+        shell: pwsh
+        run: |
+          # The runner is an administrator: this only shows the probe's no-admin path runs here;
+          # the refusal itself is shown on a non-elevated developer machine.
+          & 'agent/tools/EtwFileIoProbe/bin/Release/net8.0-windows/EtwFileIoProbe.exe' no-admin
+
+      - name: Stop the agent
+        if: always()
+        shell: pwsh
+        run: |
+          if ($env:AGENT_PID) { Stop-Process -Id $env:AGENT_PID -Force -ErrorAction SilentlyContinue }
+          Get-Content "$env:RUNNER_TEMP\agent.log" -ErrorAction SilentlyContinue | Select-String -Pattern 'WRN|ERR|FTL' | Select-Object -First 40
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: etw-probe
+          path: |
+            ${{ runner.temp }}\etw-probe-report.md
+            ${{ runner.temp }}\agent.log
+          retention-days: 30
