@@ -23,9 +23,11 @@ namespace RansomGuard.Agent.Service;
 /// </summary>
 public sealed class GridHeartbeatService : BackgroundService
 {
-    // 15 minutes: the ceiling for the failure backoff, so a long outage never
-    // stretches heartbeats beyond the window the console treats as "recent".
-    private static readonly TimeSpan MaxBackoff = TimeSpan.FromMinutes(15);
+    // 2 minutes, the LOT 2 contract: with the ±20% jitter no wait after a failure exceeds 144 s,
+    // so once the link is back the console sees a heartbeat within 144 s, well inside the 5 min
+    // after which it reports the signal lost. It was 15 min (and the comment claimed the same
+    // guarantee): after a 7 min cut the LOT 2 demo waited 7 min more for green.
+    internal static readonly TimeSpan MaxBackoff = TimeSpan.FromMinutes(2);
 
     private readonly IGridApiClient _gridClient;
     private readonly EnrollmentService _enrollmentService;
@@ -142,7 +144,7 @@ public sealed class GridHeartbeatService : BackgroundService
 
             try
             {
-                await Task.Delay(TimeSpan.FromSeconds(delaySeconds), stoppingToken).ConfigureAwait(false);
+                await Task.Delay(TimeSpan.FromSeconds(delaySeconds), _time, stoppingToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -292,7 +294,10 @@ public sealed class GridHeartbeatService : BackgroundService
         return Math.Max(1, (int)Math.Round(baseSeconds * factor));
     }
 
-    /// <summary>Exponential backoff on repeated failures, capped at <see cref="MaxBackoff"/>.</summary>
+    /// <summary>
+    /// Exponential backoff on repeated failures, capped at <see cref="MaxBackoff"/> -- also below a
+    /// server interval longer than the cap: after a failure, the next try never waits longer.
+    /// </summary>
     private static int Backoff(int baseSeconds, int consecutiveFailures)
     {
         double multiplier = Math.Pow(2, Math.Min(consecutiveFailures, 10));
