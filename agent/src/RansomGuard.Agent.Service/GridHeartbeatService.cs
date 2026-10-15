@@ -9,6 +9,7 @@ using RansomGuard.Agent.Core.Configuration;
 using RansomGuard.Agent.Core.Diagnostics;
 using RansomGuard.Agent.Core.Persistence;
 using RansomGuard.Agent.Core.Persistence.Entities;
+using RansomGuard.Agent.Core.Persistence.Repositories;
 
 namespace RansomGuard.Agent.Service;
 
@@ -34,6 +35,7 @@ public sealed class GridHeartbeatService : BackgroundService
     private readonly AgentConfiguration _config;
     private readonly ILogger<GridHeartbeatService> _logger;
     private readonly TimeProvider _time;
+    private readonly AuditHealth? _auditHealth;
     // Monotonic: the uptime must not jump with a wall-clock change (NTP, DST, a user).
     private readonly long _startedAtTimestamp;
 
@@ -48,8 +50,10 @@ public sealed class GridHeartbeatService : BackgroundService
         IServiceScopeFactory scopeFactory,
         IOptions<AgentConfiguration> config,
         ILogger<GridHeartbeatService> logger,
-        TimeProvider? time = null)
+        TimeProvider? time = null,
+        AuditHealth? auditHealth = null)
     {
+        _auditHealth = auditHealth;
         _time = time ?? TimeProvider.System;
         _startedAtTimestamp = _time.GetTimestamp();
         _gridClient = gridClient;
@@ -184,6 +188,7 @@ public sealed class GridHeartbeatService : BackgroundService
                 LastUploadOkAgeSeconds = _forwarding.LastUploadOkAgeSeconds,
                 LastUploadErrorCode = _forwarding.LastUploadErrorCode,
                 RejectedAlerts = rejectedAlerts,
+                AuditWriteFailures = _auditHealth?.Failures,
             },
             Modules = modules,
         };

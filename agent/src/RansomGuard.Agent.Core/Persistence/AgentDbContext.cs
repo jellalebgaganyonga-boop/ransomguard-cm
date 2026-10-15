@@ -28,6 +28,9 @@ public sealed class AgentDbContext : DbContext
     /// </summary>
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
+    /// <summary>Audit entries recorded but not chained yet (AGT-AUD-002).</summary>
+    public DbSet<PendingAuditEntry> PendingAuditEntries => Set<PendingAuditEntry>();
+
     /// <summary>
     /// SENTINEL canary files deployed for ransomware detection.
     /// </summary>
@@ -171,6 +174,16 @@ public sealed class AgentDbContext : DbContext
             entity.Property(e => e.PreviousHash).HasMaxLength(64);
             entity.Property(e => e.CurrentHash).IsRequired().HasMaxLength(64);
             entity.Property(e => e.Signature).HasMaxLength(128);
+        });
+
+        modelBuilder.Entity<PendingAuditEntry>(entity =>
+        {
+            // INTEGER PRIMARY KEY: SQLite's rowid, assigned in insertion order -- the chain's order.
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).ValueGeneratedOnAdd();
+            entity.Property(e => e.Action).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Details).IsRequired();
+            entity.Property(e => e.EntityType).HasMaxLength(100);
         });
 
         modelBuilder.Entity<SentinelCanary>(entity =>

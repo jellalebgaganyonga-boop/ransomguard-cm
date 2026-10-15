@@ -749,6 +749,36 @@ namespace RansomGuard.Agent.Core.Persistence.Migrations
                     b.ToTable("PendingAlertUploads");
                 });
 
+            modelBuilder.Entity("RansomGuard.Agent.Core.Persistence.Entities.PendingAuditEntry", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Details")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("EntityId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("EntityType")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("PendingAuditEntries");
+                });
+
             modelBuilder.Entity("RansomGuard.Agent.Core.Persistence.Entities.QuarantinedFile", b =>
                 {
                     b.Property<Guid>("Id")

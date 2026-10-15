@@ -125,6 +125,13 @@ public sealed record TransmissionInfo
     /// </summary>
     [JsonPropertyName("rejected_alerts")]
     public int? RejectedAlerts { get; init; }
+
+    /// <summary>
+    /// Audit entries the agent could not record since it started (AGT-AUD-002): the detection
+    /// went on, the trace did not. Null when not measured, never 0 for "unknown".
+    /// </summary>
+    [JsonPropertyName("audit_write_failures")]
+    public int? AuditWriteFailures { get; init; }
 }
 
 /// <summary>One module's runtime state.</summary>

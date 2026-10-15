@@ -173,6 +173,10 @@ try
     // Ensure database directory exists and apply migrations
     EnsureDatabase(host.Services);
 
+    // Audit entries recorded before the last stop (a crash between recording and chaining)
+    // are chained first, in their order, before any service records new ones (AGT-AUD-002).
+    ChainWaitingAuditEntries(host.Services);
+
     host.Run();
 }
 catch (Exception ex)
@@ -187,6 +191,28 @@ catch (Exception ex)
 finally
 {
     Log.CloseAndFlush();
+}
+
+/// <summary>
+/// Chains the audit entries left waiting by the previous run. A failure does not stop the
+/// agent: the entries stay waiting and the chain writer retries (Critical log, heartbeat count).
+/// </summary>
+static void ChainWaitingAuditEntries(IServiceProvider services)
+{
+    try
+    {
+        int chained = services.GetRequiredService<AuditChainWriter>()
+            .ChainAllAsync(CancellationToken.None).GetAwaiter().GetResult();
+        if (chained > 0)
+        {
+            Log.Information("{Count} audit entries recorded before the last stop were chained first", chained);
+        }
+    }
+    catch (Exception ex)
+    {
+        services.GetRequiredService<AuditHealth>().RecordFailure();
+        Log.Fatal(ex, "Audit entries left waiting could not be chained at startup; the chain writer will retry");
+    }
 }
 
 /// <summary>

@@ -455,6 +455,14 @@ public sealed class SentinelMonitor : BackgroundService
             OffendingProcessPath = attribution?.ExecutablePath
         };
 
+        // The GRID first (AGT-AUD-002): nothing local — database, audit — may delay or cancel
+        // the alert. The forwarding queue persists it itself if the GRID is unreachable.
+        _alertQueue.TryEnqueue(AlertMapper.FromCanaryAlert(alert));
+        _logger.LogCritical(
+            "SENTINEL ALERT: {AlertType} on canary {CanaryPath} | Process: {ProcessName} (PID: {ProcessId}) | Severity: {Severity}",
+            alertType, canary.FilePath, attribution?.ProcessName ?? "unknown",
+            attribution?.ProcessId.ToString() ?? "N/A", alert.Severity);
+
         canary.Status = alertType switch
         {
             CanaryAlertType.CanaryModified => CanaryStatus.Modified,
@@ -462,23 +470,27 @@ public sealed class SentinelMonitor : BackgroundService
             CanaryAlertType.CanaryRenamed => CanaryStatus.Renamed,
             _ => CanaryStatus.Compromised
         };
-        await canaryRepo.UpdateAsync(canary, cancellationToken);
-        await canaryRepo.AddAlertAsync(alert, cancellationToken);
+        // From here the alert has left: its local record and its audit entry are completed even
+        // during a shutdown, so a sent detection never lacks its trace.
+        try
+        {
+            await canaryRepo.UpdateAsync(canary, CancellationToken.None);
+            await canaryRepo.AddAlertAsync(alert, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            // The alert is already on its way to the GRID; the local copy is what failed.
+            _logger.LogError(ex, "SENTINEL alert {AlertId} sent, but its local record failed", alert.Id);
+        }
 
         string details = $"Canary alert: {alertType} on {canary.FilePath}";
         if (attribution is not null)
         {
             details += $" by process {attribution.ProcessName} (PID: {attribution.ProcessId})";
         }
-        await auditRepo.AppendAsync("CanaryAlert", details, "CanaryAlert", alert.Id, cancellationToken);
 
-        _logger.LogCritical(
-            "SENTINEL ALERT: {AlertType} on canary {CanaryPath} | Process: {ProcessName} (PID: {ProcessId}) | Severity: {Severity}",
-            alertType, canary.FilePath, attribution?.ProcessName ?? "unknown",
-            attribution?.ProcessId.ToString() ?? "N/A", alert.Severity);
-
-        // Forward to GRID
-        _alertQueue.TryEnqueue(AlertMapper.FromCanaryAlert(alert));
+        // One INSERT, never a wait on the chain; never throws when it cannot record.
+        await auditRepo.AppendAsync("CanaryAlert", details, "CanaryAlert", alert.Id, CancellationToken.None);
 
         // Fire-and-forget genealogy enrichment for process attribution
         _ = Task.Run(async () =>

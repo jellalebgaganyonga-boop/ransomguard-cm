@@ -14,6 +14,7 @@ using RansomGuard.Agent.Core.Diagnostics;
 using RansomGuard.Agent.Core.Persistence;
 using RansomGuard.Agent.Core.Persistence.Entities;
 using RansomGuard.Agent.Core.Persistence.Repositories;
+using RansomGuard.Agent.Service;
 
 namespace RansomGuard.Agent.Tests.Diagnostics;
 
@@ -26,7 +27,11 @@ internal sealed class MonitorHarness : IDisposable
 {
     private readonly SqliteConnection _keepAlive;
 
-    public MonitorHarness()
+    /// <param name="chainInBackground">
+    /// True: the production audit pipeline (AGT-AUD-002) — record, then the background chain
+    /// writer. False: the repository chains before returning, as tools do.
+    /// </param>
+    public MonitorHarness(bool chainInBackground = false)
     {
         string db = $"file:monitor_{Guid.NewGuid():N}?mode=memory&cache=shared";
         _keepAlive = new SqliteConnection($"Data Source={db}");
@@ -36,7 +41,19 @@ internal sealed class MonitorHarness : IDisposable
         services.AddDbContext<AgentDbContext>(o => o.UseSqlite($"Data Source={db}"));
         services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
         services.AddScoped<ISentinelCanaryRepository, SentinelCanaryRepository>();
-        services.AddScoped<IAuditLogRepository>(sp => new AuditLogRepository(sp.GetRequiredService<AgentDbContext>()));
+        services.AddSingleton(Health);
+        if (chainInBackground)
+        {
+            services.AddSingleton<AuditChainWriter>();
+            services.AddSingleton<IAuditChainWriter>(sp => sp.GetRequiredService<AuditChainWriter>());
+            services.AddScoped<IAuditLogRepository>(sp => new AuditLogRepository(
+                sp.GetRequiredService<AgentDbContext>(), null, sp.GetRequiredService<IAuditChainWriter>(), Health,
+                AuditLog));
+        }
+        else
+        {
+            services.AddScoped<IAuditLogRepository>(sp => new AuditLogRepository(sp.GetRequiredService<AgentDbContext>()));
+        }
         services.AddScoped<CanaryFileService>();
         services.AddSingleton(IntegrityCheck);
         services.AddScoped<ICanaryFileService, SwitchableCanaryFileService>();
@@ -57,6 +74,48 @@ internal sealed class MonitorHarness : IDisposable
     }
 
     public ServiceProvider Provider { get; }
+
+    public AuditHealth Health { get; } = new();
+
+    public RecordingLogger<AuditLogRepository> AuditLog { get; } = new();
+
+    /// <summary>The background chain writer (only with chainInBackground).</summary>
+    public AuditChainWriter ChainWriter => Provider.GetRequiredService<AuditChainWriter>();
+
+    /// <summary>Inserts entries straight into the waiting table, in one transaction: a saturated audit.</summary>
+    public void SaturateAudit(int entries)
+    {
+        using IServiceScope scope = Provider.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AgentDbContext>();
+        DateTime now = DateTime.UtcNow;
+        db.PendingAuditEntries.AddRange(Enumerable.Range(0, entries).Select(i => new PendingAuditEntry
+        {
+            Action = "Burst",
+            Details = $"{{\"n\":{i}}}",
+            CreatedAt = now,
+        }));
+        db.SaveChanges();
+    }
+
+    public int Waiting()
+    {
+        using IServiceScope scope = Provider.CreateScope();
+        return scope.ServiceProvider.GetRequiredService<AgentDbContext>().PendingAuditEntries.Count();
+    }
+
+    public List<string> ChainedActions()
+    {
+        using IServiceScope scope = Provider.CreateScope();
+        return scope.ServiceProvider.GetRequiredService<AgentDbContext>().AuditLogs
+            .OrderBy(a => a.Sequence).Select(a => a.Action).ToList();
+    }
+
+    public async Task<bool> ChainIntactAsync()
+    {
+        using IServiceScope scope = Provider.CreateScope();
+        return await new AuditLogRepository(scope.ServiceProvider.GetRequiredService<AgentDbContext>())
+            .VerifyChainIntegrityAsync();
+    }
 
     public IServiceScopeFactory ScopeFactory => Provider.GetRequiredService<IServiceScopeFactory>();
 

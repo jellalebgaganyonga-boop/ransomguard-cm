@@ -11,6 +11,7 @@ using RansomGuard.Agent.Core.Configuration;
 using RansomGuard.Agent.Core.Diagnostics;
 using RansomGuard.Agent.Core.Persistence;
 using RansomGuard.Agent.Core.Persistence.Entities;
+using RansomGuard.Agent.Core.Persistence.Repositories;
 using RansomGuard.Agent.Core.Security.Cryptography;
 using RansomGuard.Agent.Service;
 using RansomGuard.Agent.Tests.Diagnostics;
@@ -147,6 +148,23 @@ public sealed class HeartbeatTransmissionTests : IDisposable
         beat.Disk.SystemFreeBytes.ShouldNotBeNull();
         beat.Disk.SystemFreeBytes.Value.ShouldBeGreaterThan(0);
         File.Delete(corrupt);
+    }
+
+    [Fact]
+    public async Task Audit_entries_not_recorded_are_reported_and_unknown_is_null_never_zero()
+    {
+        // No counter wired (an agent built without it): not reported, never a reassuring 0.
+        (await _heartbeat.BuildHeartbeatAsync(CancellationToken.None)).Transmission!.AuditWriteFailures.ShouldBeNull();
+
+        var health = new AuditHealth();
+        var heartbeat = new GridHeartbeatService(new Mock<IGridApiClient>().Object, _enrollment, _registry, _forwarding,
+            _provider.GetRequiredService<IServiceScopeFactory>(), _options, NullLogger<GridHeartbeatService>.Instance,
+            _time, health);
+        (await heartbeat.BuildHeartbeatAsync(CancellationToken.None)).Transmission!.AuditWriteFailures.ShouldBe(0);
+
+        health.RecordFailure();
+        health.RecordFailure();
+        (await heartbeat.BuildHeartbeatAsync(CancellationToken.None)).Transmission!.AuditWriteFailures.ShouldBe(2);
     }
 
     private static PendingAlertUpload Upload(PendingUploadStatus status, DateTime firstAttemptAt) => new()

@@ -312,21 +312,34 @@ public sealed class EntropyMonitor : BackgroundService
 
                 if (alert is not null)
                 {
-                    context.EntropyAlerts.Add(alert);
-                    await context.SaveChangesAsync(ct);
-
-                    await auditRepo.AppendAsync("EntropyAlert",
-                        $"Rule {alert.RuleId} ({alert.RuleName}): {filePath} entropy {alert.BaselineEntropy:F2} -> {alert.CurrentEntropy:F2}",
-                        "EntropyAlert", alert.Id, ct);
+                    // The GRID first (AGT-AUD-002), skipping Suppressed alerts: nothing local —
+                    // database, audit — may delay or cancel the alert.
+                    var mapped = AlertMapper.FromEntropyAlert(alert);
+                    if (mapped is not null) _alertQueue?.TryEnqueue(mapped);
 
                     _logger.LogCritical(
                         "ENTROPY ALERT: Rule {RuleId} ({RuleName}) on {FilePath} | Baseline: {Baseline:F2} Current: {Current:F2} Delta: {Delta:F2} | Severity: {Severity}",
                         alert.RuleId, alert.RuleName, filePath,
                         alert.BaselineEntropy, alert.CurrentEntropy, alert.Delta, alert.Severity);
 
-                    // Forward to GRID (skip Suppressed alerts)
-                    var mapped = AlertMapper.FromEntropyAlert(alert);
-                    if (mapped is not null) _alertQueue?.TryEnqueue(mapped);
+                    // From here the alert has left: its local record and its audit entry are
+                    // completed even during a shutdown, so a sent detection never lacks its trace.
+                    try
+                    {
+                        context.EntropyAlerts.Add(alert);
+                        await context.SaveChangesAsync(CancellationToken.None);
+                    }
+                    catch (Exception ex)
+                    {
+                        // The alert is already on its way to the GRID; the local copy is what failed.
+                        _logger.LogError(ex, "ENTROPY alert {AlertId} sent, but its local record failed", alert.Id);
+                        context.Entry(alert).State = EntityState.Detached;
+                    }
+
+                    // One INSERT, never a wait on the chain; never throws when it cannot record.
+                    await auditRepo.AppendAsync("EntropyAlert",
+                        $"Rule {alert.RuleId} ({alert.RuleName}): {filePath} entropy {alert.BaselineEntropy:F2} -> {alert.CurrentEntropy:F2}",
+                        "EntropyAlert", alert.Id, CancellationToken.None);
 
                     // Fire-and-forget genealogy enrichment for process attribution
                     _ = Task.Run(async () =>

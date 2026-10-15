@@ -108,8 +108,18 @@ public static class ServiceRegistration
         // Repositories
         services.AddScoped<IDetectionEventRepository, DetectionEventRepository>();
         services.AddScoped<IAlertRepository, AlertRepository>();
+        // Audit (AGT-AUD-002): recording is one INSERT, chaining happens in the background.
+        services.AddSingleton<AuditHealth>();
+        services.AddSingleton<AuditChainWriter>();
+        services.AddSingleton<IAuditChainWriter>(sp => sp.GetRequiredService<AuditChainWriter>());
+        services.AddHostedService(sp => sp.GetRequiredService<AuditChainWriter>());
         services.AddScoped<IAuditLogRepository>(sp =>
-            new AuditLogRepository(sp.GetRequiredService<AgentDbContext>(), auditLogSigner));
+            new AuditLogRepository(
+                sp.GetRequiredService<AgentDbContext>(),
+                auditLogSigner,
+                sp.GetRequiredService<IAuditChainWriter>(),
+                sp.GetRequiredService<AuditHealth>(),
+                sp.GetRequiredService<ILogger<AuditLogRepository>>()));
 
         // SENTINEL
         services.AddScoped<ISentinelCanaryRepository, SentinelCanaryRepository>();
