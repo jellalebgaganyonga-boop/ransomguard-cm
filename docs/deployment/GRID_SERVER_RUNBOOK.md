@@ -204,3 +204,9 @@ emporterait les sauvegardes avec lui — copiez `backups/` sur un support extern
 | `grid-api` refuse de démarrer : « GRID threat-intel signing key not found at … » | clé de signature absente de `shared/pki` | restaurer la sauvegarde hors machine ; sur un serveur neuf seulement, `init-signing-key.sh` (section 2) |
 | `grid-api` refuse de démarrer : « GRID configuration refused -- GRID_… » | variable obligatoire absente ou invalide dans `shared/.env` (ex. `GRID_JWT_SECRET_KEY`, GRID-SEC-007) | compléter `.env` avec la variable nommée, puis `deploy.sh` |
 | Serveur injoignable | VM éteinte | rallumer : la stack remonte seule |
+
+## 9. Dette d'exploitation
+
+| ID | Priorité | Constat | Action attendue |
+|----|----------|---------|-----------------|
+| OPS-001 | **Haute** — décision du propriétaire en attente | Un déploiement de juillet 2026 tourne encore avec l'ancien code : le serveur Tailscale `ubuntu2204.tail6494ba.ts.net`, et au moins un agent du 2 juillet (`1.0.0+240a191`, service `RansomGuardAgent`, constaté le 2026-10-15 sur le poste de développement, `TrustAnyCertificate: true`). Ce code renvoie la clé privée d'audit à l'enrôlement (GRID-SEC-003), garde les sessions en mémoire (GRID-SEC-004, GRID-SEC-005) et a une clé JWT par défaut (GRID-SEC-007) ; l'agent laissait son dossier de données lisible par `BUILTIN\Utilisateurs` (AGT-KEY-001). Les clés du serveur, et celles des postes enrôlés depuis juillet, sont à considérer comme exposées. Sur le poste de développement, l'ancien service est arrêté et désactivé (pas désinstallé) et son dossier de données mis de côté, fermé à SYSTEM et Administrators (`%ProgramData%\RansomGuard-CM.bak-20261015`). | Au prochain déploiement : clés neuves côté serveur (JWT, signature, PKI selon la décision), puis réenrôlement de chaque poste avec des clés neuves. On ne touche pas au serveur Tailscale avant la décision du propriétaire. |
