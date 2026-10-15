@@ -25,12 +25,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from ransomguard_grid.services.grid_signing_key_service import GridSigningKeyService
     from ransomguard_grid.services.threat_intel_aggregator import ThreatIntelAggregator
     from ransomguard_grid.services.threat_intel_package_builder import ThreatIntelPackageBuilder
-    from ransomguard_grid.services.threat_intel_sources import ThreatIntelSource
-    from ransomguard_grid.services.threat_intel_sources.alienvault_otx import AlienVaultOtxSource
-    from ransomguard_grid.services.threat_intel_sources.aws import AwsIpRangesSource
-    from ransomguard_grid.services.threat_intel_sources.gcp import GcpIpRangesSource
-    from ransomguard_grid.services.threat_intel_sources.threatfox import ThreatFoxSource
-    from ransomguard_grid.services.threat_intel_sources.tor_project import TorProjectSource
+    from ransomguard_grid.services.threat_intel_sources.catalog import build_sources
     from ransomguard_grid.workers.agent_disconnect_worker import AgentDisconnectWorker
     from ransomguard_grid.workers.threat_intel_updater_worker import ThreatIntelUpdaterWorker
 
@@ -48,14 +43,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Initialize threat intel worker
     http_client = httpx.AsyncClient(timeout=30.0)
-    sources: list[ThreatIntelSource] = [
-        TorProjectSource(http_client),
-        ThreatFoxSource(http_client),
-        AwsIpRangesSource(http_client),
-        GcpIpRangesSource(http_client),
-    ]
-    if settings.alienvault_otx_api_key:
-        sources.append(AlienVaultOtxSource(http_client, settings.alienvault_otx_api_key))
+    sources = build_sources(settings, http_client)
 
     aggregator = ThreatIntelAggregator(sources)
     builder = ThreatIntelPackageBuilder(signing_service, settings.threat_intel_packages_dir)

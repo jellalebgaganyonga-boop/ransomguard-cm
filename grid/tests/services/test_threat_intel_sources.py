@@ -42,7 +42,7 @@ async def test_threatfox_handles_json_response() -> None:
 
     transport = httpx.MockTransport(lambda req: httpx.Response(200, json=mock_data))
     async with httpx.AsyncClient(transport=transport) as client:
-        source = ThreatFoxSource(client)
+        source = ThreatFoxSource(client, "test-key")
         entries = await source.fetch()
 
     assert len(entries) == 2

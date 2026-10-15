@@ -57,6 +57,8 @@ class Settings(BaseSettings):
     # Threat intel
     threat_intel_update_interval_hours: int = Field(default=24, ge=1, le=168)
     alienvault_otx_api_key: str | None = None
+    # abuse.ch requires an Auth-Key for ThreatFox; without one the source is disabled (no call).
+    threatfox_api_key: str | None = None
 
     # Multi-tenant
     default_tenant_id: str = "default"
