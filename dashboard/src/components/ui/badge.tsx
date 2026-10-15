@@ -21,6 +21,8 @@ const badgeVariants = cva(
         high: 'border-severity-high-border bg-severity-high-subtle text-[color:var(--ref-palette-orange-30)]',
         medium: 'border-severity-medium-border bg-severity-medium-subtle text-[color:var(--ref-palette-yellow-20)]',
         low: 'border-severity-low-border bg-severity-low-subtle text-severity-low',
+        // Green: the "protected" verdict. Text green-30 on green-95 = 5.7:1 (green-50 would be 2.5:1).
+        success: 'border-success-border bg-success-subtle text-[color:var(--ref-palette-green-30)]',
         info: 'border-severity-info-border bg-severity-info-subtle text-severity-info',
         neutral: 'border-border-default bg-surface-subtle text-text-secondary',
       },

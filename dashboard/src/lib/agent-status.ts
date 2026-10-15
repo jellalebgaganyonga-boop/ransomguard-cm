@@ -13,7 +13,7 @@
 
 import type { AgentItem, AgentStatus, ProtectionState } from '@/api/agents';
 
-type BadgeVariant = 'critical' | 'high' | 'medium' | 'low' | 'info' | 'neutral';
+type BadgeVariant = 'critical' | 'high' | 'medium' | 'low' | 'info' | 'neutral' | 'success';
 
 // ── Enrolment status badge ──────────────────────────────────
 
@@ -31,10 +31,14 @@ export function agentStatusVariant(
 
 // ── Protection verdict colour ───────────────────────────────
 
-/** protected green, partial orange, unprotected red, unknown grey (decision 1 of LOT 2). */
+/**
+ * protected green, partial orange, unprotected red, unknown grey (decision 1 of LOT 2).
+ * Green is the "success" token: the severity-low token is BLUE (blue-40), and the verdict
+ * showed blue until the LOT 2 demo caught it.
+ */
 export function protectionVariant(state: ProtectionState): BadgeVariant {
   switch (state) {
-    case 'protected':   return 'low';
+    case 'protected':   return 'success';
     case 'partial':     return 'high';
     case 'unprotected': return 'critical';
     case 'unknown':     return 'neutral';
@@ -43,7 +47,7 @@ export function protectionVariant(state: ProtectionState): BadgeVariant {
 
 /** Banner background and border, per verdict (contrast checked by the axe scans of the E2E suite). */
 export const PROTECTION_BANNER_CLASS: Record<ProtectionState, string> = {
-  protected:   'border-severity-low-border bg-severity-low-subtle',
+  protected:   'border-success-border bg-success-subtle',
   partial:     'border-severity-high-border bg-severity-high-subtle',
   unprotected: 'border-severity-critical-border bg-severity-critical-subtle',
   unknown:     'border-border-default bg-surface-subtle',
