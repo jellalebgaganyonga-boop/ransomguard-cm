@@ -200,6 +200,12 @@ jobs:
           }
           "### Agent installed as a service`n`n$($out -split "`n" | Select-String 'Database examined|entries read|RESULT')" >> $env:GITHUB_STEP_SUMMARY
 
+      # Known limit: the chain writer links an entry within milliseconds, faster than this burst
+      # records them, so the kill has so far landed with 0 entries waiting (2026-10-15: twice 0,
+      # with 23 and 26 entries chained). This step proves an abrupt kill loses nothing and leaves a
+      # chain that verifies; the case "entries waiting at the moment of the crash" is proven by
+      # the in-process tests (AuditPipelineTests: 300 entries recorded, process gone before
+      # chaining, all chained first at the next start; and a chaining transaction never committed).
       - name: A process killed during an audit burst loses no entry (AGT-AUD-002)
         shell: pwsh
         run: |
