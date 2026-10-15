@@ -1,4 +1,5 @@
 using FluentValidation.Results;
+using RansomGuard.Agent.Core.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using RansomGuard.Agent.Core.Detection.IronClad;
 
@@ -55,6 +56,14 @@ public static class AgentConfigurationLoader
             {
                 errors.Add(tlsRefusal);
             }
+        }
+
+        // Read from the raw configuration: the binder ignores unknown keys, and the mere
+        // presence of this one outside Development must refuse the startup.
+        string? faultInjectionRefusal = ModuleFaultInjectionPolicy.Validate(configuration, environmentName);
+        if (faultInjectionRefusal is not null)
+        {
+            errors.Add(faultInjectionRefusal);
         }
 
         // Enum-valued settings bound outside the Agent section are validated here too: the

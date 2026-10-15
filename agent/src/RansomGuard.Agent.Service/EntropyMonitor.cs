@@ -37,6 +37,7 @@ public sealed class EntropyMonitor : BackgroundService
     private readonly IAlertForwardingQueue? _alertQueue;
     private readonly IModuleStateRegistry _moduleState;
     private readonly IModuleFailureReporter _failureReporter;
+    private readonly IModuleFaultInjector _faultInjector;
     private readonly TimeSpan _startupDelay;
     private readonly TaskCompletionSource _watcherFault = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -56,6 +57,7 @@ public sealed class EntropyMonitor : BackgroundService
     /// <param name="startupDelay">
     /// Test seam: wait before starting, for SENTINEL's deployment; null (the DI default) is 5 s.
     /// </param>
+    /// <param name="faultInjector">Development fault injection; null or the production one never stops anything.</param>
     public EntropyMonitor(
         ILogger<EntropyMonitor> logger,
         IOptionsMonitor<AgentConfiguration> config,
@@ -67,7 +69,8 @@ public sealed class EntropyMonitor : BackgroundService
         RateLimiterFactory? rateLimiterFactory = null,
         IDetectionEventBus? eventBus = null,
         IAlertForwardingQueue? alertQueue = null,
-        TimeSpan? startupDelay = null)
+        TimeSpan? startupDelay = null,
+        IModuleFaultInjector? faultInjector = null)
     {
         _logger = logger;
         _config = config.CurrentValue;
@@ -76,6 +79,7 @@ public sealed class EntropyMonitor : BackgroundService
         _calculator = calculator;
         _moduleState = moduleState;
         _failureReporter = failureReporter;
+        _faultInjector = faultInjector ?? new NoModuleFaultInjector();
         _startupDelay = startupDelay ?? TimeSpan.FromSeconds(5);
         _rateLimiter = rateLimiterFactory?.GetLimiter(RateLimiterFactory.EntropyComputation);
         _eventBus = eventBus;
@@ -162,7 +166,8 @@ public sealed class EntropyMonitor : BackgroundService
             await ModuleTaskObserver.ObserveUntilStoppedAsync(
                 stoppingToken,
                 ("consumer", consumerTask),
-                ("watchers", _watcherFault.Task));
+                ("watchers", _watcherFault.Task),
+                ("fault-injection", _faultInjector.WhenStopRequestedAsync(ModuleCode.Entropy, moduleToken)));
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {

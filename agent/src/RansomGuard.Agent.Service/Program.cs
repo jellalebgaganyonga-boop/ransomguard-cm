@@ -9,6 +9,7 @@ using RansomGuard.Agent.Core.Detection.UsbGuard;
 using RansomGuard.Agent.Core.Detection.UsbGuard.Actions;
 using RansomGuard.Agent.Core.Detection.UsbGuard.Scanning;
 using RansomGuard.Agent.Core.Detection.UsbGuard.Wmi;
+using RansomGuard.Agent.Core.Diagnostics;
 using RansomGuard.Agent.Core.Persistence;
 using RansomGuard.Agent.Core.Security;
 using RansomGuard.Agent.Core.Security.AntiTampering;
@@ -167,6 +168,12 @@ try
 
     // The detection monitors (hosted services), in start order
     ServiceRegistration.AddMonitors(builder.Services);
+
+    // Development only: stop a detector on demand, through its real failure path (LOT 2 demo).
+    if (ServiceRegistration.AddModuleFaultInjection(builder.Services, builder.Configuration, builder.Environment.EnvironmentName))
+    {
+        Log.Warning(ModuleFaultInjectionPolicy.ActiveWarning);
+    }
 
     var host = builder.Build();
 

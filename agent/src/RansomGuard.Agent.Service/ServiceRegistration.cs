@@ -2,6 +2,7 @@ using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using RansomGuard.Agent.Core.Configuration;
@@ -62,6 +63,23 @@ public static class ServiceRegistration
         services.AddHostedService<ExfilFirewallRuleCleanupService>();
 
         services.AddHostedService<Worker>();
+    }
+
+    /// <summary>
+    /// Replaces the injector with the Development one when, and only when, the host environment is
+    /// Development and Agent:Development:FaultInjection is true. Returns whether it is active.
+    /// </summary>
+    public static bool AddModuleFaultInjection(IServiceCollection services, IConfiguration configuration, string? environmentName)
+    {
+        if (!ModuleFaultInjectionPolicy.IsEnabled(configuration, environmentName))
+        {
+            return false;
+        }
+
+        services.RemoveAll<IModuleFaultInjector>();
+        services.AddSingleton<IModuleFaultInjector, DevelopmentModuleFaultInjector>(sp =>
+            new DevelopmentModuleFaultInjector(sp.GetRequiredService<ILogger<DevelopmentModuleFaultInjector>>()));
+        return true;
     }
 
     public static void ConfigureServices(IServiceCollection services, IConfiguration configuration)
@@ -142,6 +160,8 @@ public static class ServiceRegistration
         // One reporter for every module: registry, Critical log, audit — and the
         // per-minute limit on ModuleEventsLost entries.
         services.AddSingleton<IModuleFailureReporter, ModuleFailureReporter>();
+        // Never stops anything; replaced only in Development, see AddModuleFaultInjection.
+        services.AddSingleton<IModuleFaultInjector, NoModuleFaultInjector>();
         // Monotonic clock (Stopwatch) for uptime and upload ages, and timers; fakeable in tests.
         services.AddSingleton(TimeProvider.System);
 

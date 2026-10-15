@@ -44,6 +44,7 @@ public sealed class UsbDeviceMonitor : BackgroundService, IUsbDeviceMonitor
     private readonly IAlertForwardingQueue? _alertQueue;
     private readonly IModuleStateRegistry _moduleState;
     private readonly IModuleFailureReporter _failureReporter;
+    private readonly IModuleFaultInjector _faultInjector;
     private long _totalEventsProcessed;
 
     /// <summary>Number of currently connected USB devices.</summary>
@@ -63,7 +64,8 @@ public sealed class UsbDeviceMonitor : BackgroundService, IUsbDeviceMonitor
         IModuleStateRegistry moduleState,
         IModuleFailureReporter failureReporter,
         RateLimiterFactory? rateLimiterFactory = null,
-        IAlertForwardingQueue? alertQueue = null)
+        IAlertForwardingQueue? alertQueue = null,
+        IModuleFaultInjector? faultInjector = null)
     {
         _logger = logger;
         _wmiSubscriber = wmiSubscriber;
@@ -73,6 +75,7 @@ public sealed class UsbDeviceMonitor : BackgroundService, IUsbDeviceMonitor
         _config = config.CurrentValue;
         _moduleState = moduleState;
         _failureReporter = failureReporter;
+        _faultInjector = faultInjector ?? new NoModuleFaultInjector();
         _scanRateLimiter = rateLimiterFactory?.GetLimiter("usb-scan");
         _alertQueue = alertQueue;
         _eventChannel = Channel.CreateBounded<UsbConnectionEvent>(
@@ -135,7 +138,8 @@ public sealed class UsbDeviceMonitor : BackgroundService, IUsbDeviceMonitor
             await ModuleTaskObserver.ObserveUntilStoppedAsync(
                 stoppingToken,
                 ("consumer", consumerTask),
-                ("status-log", LogStatusPeriodicallyAsync(moduleToken)));
+                ("status-log", LogStatusPeriodicallyAsync(moduleToken)),
+                ("fault-injection", _faultInjector.WhenStopRequestedAsync(ModuleCode.UsbGuard, moduleToken)));
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {

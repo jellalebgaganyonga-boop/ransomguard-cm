@@ -37,6 +37,7 @@ public sealed class SentinelMonitor : BackgroundService
     private readonly IAlertForwardingQueue _alertQueue;
     private readonly IModuleStateRegistry _moduleState;
     private readonly IModuleFailureReporter _failureReporter;
+    private readonly IModuleFaultInjector _faultInjector;
     private readonly AgentConfiguration _config;
     private readonly TimeSpan _startupDelay;
     private readonly TaskCompletionSource _watcherFault = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -61,6 +62,7 @@ public sealed class SentinelMonitor : BackgroundService
     /// <param name="startupDelay">
     /// Test seam: wait before starting, for the deployment service; null (the DI default) is 2 s.
     /// </param>
+    /// <param name="faultInjector">Development fault injection; null or the production one never stops anything.</param>
     public SentinelMonitor(
         ILogger<SentinelMonitor> logger,
         IOptionsMonitor<AgentConfiguration> config,
@@ -70,7 +72,8 @@ public sealed class SentinelMonitor : BackgroundService
         IAlertForwardingQueue alertQueue,
         IModuleStateRegistry moduleState,
         IModuleFailureReporter failureReporter,
-        TimeSpan? startupDelay = null)
+        TimeSpan? startupDelay = null,
+        IModuleFaultInjector? faultInjector = null)
     {
         _logger = logger;
         _config = config.CurrentValue;
@@ -80,6 +83,7 @@ public sealed class SentinelMonitor : BackgroundService
         _alertQueue = alertQueue;
         _moduleState = moduleState;
         _failureReporter = failureReporter;
+        _faultInjector = faultInjector ?? new NoModuleFaultInjector();
         _startupDelay = startupDelay ?? TimeSpan.FromSeconds(2);
         _eventChannel = Channel.CreateBounded<CanaryFileEvent>(
             new BoundedChannelOptions(EventChannelCapacity)
@@ -163,7 +167,8 @@ public sealed class SentinelMonitor : BackgroundService
             await ModuleTaskObserver.ObserveUntilStoppedAsync(
                 stoppingToken,
                 ("consumer", consumerTask),
-                ("watchers", _watcherFault.Task));
+                ("watchers", _watcherFault.Task),
+                ("fault-injection", _faultInjector.WhenStopRequestedAsync(ModuleCode.Sentinel, moduleToken)));
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {

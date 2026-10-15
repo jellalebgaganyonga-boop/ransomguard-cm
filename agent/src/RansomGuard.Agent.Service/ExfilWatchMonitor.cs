@@ -29,6 +29,7 @@ public sealed class ExfilWatchMonitor : BackgroundService
     private readonly AgentConfiguration _config;
     private readonly IModuleStateRegistry _moduleState;
     private readonly IModuleFailureReporter _failureReporter;
+    private readonly IModuleFaultInjector _faultInjector;
     private readonly Func<bool> _isElevated;
     private readonly Channel<NetworkEvent> _eventChannel;
     private long _totalEventsProcessed;
@@ -48,6 +49,7 @@ public sealed class ExfilWatchMonitor : BackgroundService
     /// Test seam for the elevation check; null (the DI default) uses the real
     /// Windows administrator check.
     /// </param>
+    /// <param name="faultInjector">Development fault injection; null or the production one never stops anything.</param>
     public ExfilWatchMonitor(
         ILogger<ExfilWatchMonitor> logger,
         INetworkActivityMonitor networkMonitor,
@@ -56,7 +58,8 @@ public sealed class ExfilWatchMonitor : BackgroundService
         IModuleStateRegistry moduleState,
         IModuleFailureReporter failureReporter,
         IAlertForwardingQueue? alertQueue = null,
-        Func<bool>? isElevated = null)
+        Func<bool>? isElevated = null,
+        IModuleFaultInjector? faultInjector = null)
     {
         _logger = logger;
         _networkMonitor = networkMonitor;
@@ -65,6 +68,7 @@ public sealed class ExfilWatchMonitor : BackgroundService
         _config = config.CurrentValue;
         _moduleState = moduleState;
         _failureReporter = failureReporter;
+        _faultInjector = faultInjector ?? new NoModuleFaultInjector();
         _isElevated = isElevated ?? IsElevated;
         _eventChannel = Channel.CreateBounded<NetworkEvent>(
             new BoundedChannelOptions(EventChannelCapacity)
@@ -121,7 +125,8 @@ public sealed class ExfilWatchMonitor : BackgroundService
             await ModuleTaskObserver.ObserveUntilStoppedAsync(
                 stoppingToken,
                 ("consumer", consumerTask),
-                ("status-log", LogStatusPeriodicallyAsync(moduleToken)));
+                ("status-log", LogStatusPeriodicallyAsync(moduleToken)),
+                ("fault-injection", _faultInjector.WhenStopRequestedAsync(ModuleCode.ExfilWatch, moduleToken)));
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {

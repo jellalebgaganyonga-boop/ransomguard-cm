@@ -88,11 +88,19 @@ public sealed class ModuleFailureReporter : IModuleFailureReporter
         _registry.Publish(moduleCode, ModuleState.Inactive, reason);
 
         // 2. Critical, with the exception, in the local log.
-        _logger.LogCritical(exception, "{Module} stopped ({Reason}) — protection from this module is down",
+        bool injected = exception is ModuleFaultInjectedException;
+        _logger.LogCritical(exception,
+            injected
+                ? "{Module} stopped ({Reason}) by Development fault injection — protection from this module is down"
+                : "{Module} stopped ({Reason}) — protection from this module is down",
             moduleCode, reason);
 
-        // 3. The signed audit chain.
-        await AppendAuditAsync(ModuleStoppedAction, moduleCode, reason, exception, extra: null).ConfigureAwait(false);
+        // 3. The signed audit chain. fault_injection always says which it was: a provoked stop
+        //    never passes for a real failure.
+        await AppendAuditAsync(ModuleStoppedAction, moduleCode, reason, exception, extra: new()
+        {
+            ["fault_injection"] = injected,
+        }).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
