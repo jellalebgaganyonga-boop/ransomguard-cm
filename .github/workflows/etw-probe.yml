@@ -5,7 +5,8 @@
 # the session's process, the CPU of the agent as it is today on the same copy, which events
 # carry a PID and a file name, whether that PID is right, and the ETW delivery delay.
 # Measurement only: agent/tools/EtwFileIoProbe is outside RansomGuard.Agent.sln, no product code
-# depends on it. Runs on the ADR review branch only; the report is the job summary and an artifact.
+# depends on it. Runs by itself on the ADR review branch; once merged, by hand from any branch
+# (workflow_dispatch), e.g. sprint8/recovery. The report is the job summary and an artifact.
 name: ETW FileIO probe
 
 on:
