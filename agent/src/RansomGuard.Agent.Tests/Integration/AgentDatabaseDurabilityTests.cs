@@ -35,8 +35,7 @@ public sealed class AgentDatabaseDurabilityTests(ITestOutputHelper output) : IDi
         return Convert.ToString(command.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture) ?? "";
     }
 
-    [Fact]
-    public void The_agent_connection_commits_durably_synchronous_full()
+    private ServiceProvider Agent(string connectionString)
     {
         IConfiguration config = new ConfigurationBuilder()
             .AddJsonFile(Path.Combine(
@@ -45,7 +44,7 @@ public sealed class AgentDatabaseDurabilityTests(ITestOutputHelper output) : IDi
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["Agent:Server:BaseUrl"] = "https://localhost",
-                ["Agent:Database:ConnectionString"] = $"Data Source={Path.Combine(_dir, "agent.db")}",
+                ["Agent:Database:ConnectionString"] = connectionString,
                 ["Agent:Logging:LogFilePath"] = Path.Combine(_dir, "agent.log"),
             })
             .Build();
@@ -54,24 +53,60 @@ public sealed class AgentDatabaseDurabilityTests(ITestOutputHelper output) : IDi
         services.AddLogging();
         services.AddSerilog(new LoggerConfiguration().CreateLogger());
         ServiceRegistration.ConfigureServices(services, config);
-        using ServiceProvider provider = services.BuildServiceProvider();
+        return services.BuildServiceProvider();
+    }
 
-        // As Program.EnsureDatabase: the agent creates the file through its migrations.
+    private (string JournalMode, string Synchronous) OpenedByTheAgent(ServiceProvider provider)
+    {
+        // As Program.EnsureDatabase, then a later connection, as every repository opens it.
         using (IServiceScope scope = provider.CreateScope())
         {
             scope.ServiceProvider.GetRequiredService<AgentDbContext>().Database.Migrate();
         }
 
-        // A later connection of the agent, as every repository opens it.
         using IServiceScope reading = provider.CreateScope();
         var db = reading.ServiceProvider.GetRequiredService<AgentDbContext>();
-        string journalMode = Pragma(db, "journal_mode");
-        string synchronous = Pragma(db, "synchronous");
-        output.WriteLine($"AGENT DATABASE PRAGMA journal_mode={journalMode} synchronous={synchronous} (0=OFF 1=NORMAL 2=FULL 3=EXTRA)");
+        (string, string) pragmas = (Pragma(db, "journal_mode"), Pragma(db, "synchronous"));
+        output.WriteLine($"AGENT DATABASE PRAGMA journal_mode={pragmas.Item1} synchronous={pragmas.Item2} (0=OFF 1=NORMAL 2=FULL 3=EXTRA)");
+        return pragmas;
+    }
 
-        // FULL: a committed INSERT into PendingAuditEntries is on disk before AppendAsync returns,
-        // in rollback-journal mode and in WAL mode alike. NORMAL in WAL mode could lose the last
-        // commits on a power cut.
-        synchronous.ShouldBe("2", $"journal_mode={journalMode}");
+    [Fact]
+    public void The_agent_connection_runs_in_WAL_with_synchronous_full()
+    {
+        using ServiceProvider agent = Agent($"Data Source={Path.Combine(_dir, "agent.db")}");
+
+        (string journalMode, string synchronous) = OpenedByTheAgent(agent);
+
+        // FULL: a committed INSERT into PendingAuditEntries is on disk before AppendAsync returns.
+        // In WAL mode, NORMAL could lose the last commits on a power cut.
+        journalMode.ShouldBe("wal");
+        synchronous.ShouldBe("2");
+    }
+
+    [Fact]
+    public void A_database_created_without_EF_in_rollback_mode_is_put_in_WAL_by_the_agent()
+    {
+        // An existing file EF did not create (an older install, a restore): EF Core only switches
+        // to WAL when it creates the file, so only the agent's explicit setting can do it.
+        string key = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
+        string connectionString = $"Data Source={Path.Combine(_dir, "existing.db")};Password={key}";
+        using (var existing = new SqliteConnection(connectionString))
+        {
+            existing.Open();
+            using SqliteCommand command = existing.CreateCommand();
+            command.CommandText = "PRAGMA journal_mode=DELETE; CREATE TABLE Legacy (Id INTEGER PRIMARY KEY);";
+            command.ExecuteNonQuery();
+            command.CommandText = "PRAGMA journal_mode;";
+            Convert.ToString(command.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture).ShouldBe("delete");
+        }
+
+        SqliteConnection.ClearAllPools();
+        using ServiceProvider agent = Agent(connectionString);
+
+        (string journalMode, string synchronous) = OpenedByTheAgent(agent);
+
+        journalMode.ShouldBe("wal");
+        synchronous.ShouldBe("2");
     }
 }
