@@ -12,8 +12,12 @@ public sealed class IronCladOptions
     /// <summary>Communication backend: TcpMock (Sprint 5) or SerialPort (Sprint 8).</summary>
     public IronCladCommunicationMode CommunicationMode { get; init; } = IronCladCommunicationMode.TcpMock;
 
-    /// <summary>TCP endpoint for mock Arduino server (host:port).</summary>
-    public string TcpMockEndpoint { get; init; } = "localhost:9999";
+    /// <summary>
+    /// TCP endpoint for mock Arduino server (host:port). 127.0.0.1, not localhost: MockArduinoServer
+    /// listens on IPv4 only, and "localhost" tries ::1 first -- refused, retried for about 2 s on
+    /// Windows, out of a 5 s connect budget.
+    /// </summary>
+    public string TcpMockEndpoint { get; init; } = "127.0.0.1:9999";
 
     /// <summary>Serial port name for real Arduino hardware (e.g., "COM3"). Sprint 8.</summary>
     public string? SerialPortName { get; init; }

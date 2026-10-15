@@ -38,6 +38,15 @@ public sealed class TcpMockCommunicatorTests : IAsyncDisposable
     };
 
     [Fact]
+    public void The_default_endpoint_is_the_IPv4_loopback_the_mock_server_listens_on()
+    {
+        // MockArduinoServer listens on IPAddress.Loopback; "localhost" would cost ~2 s of ::1 retries.
+        string host = new IronCladOptions().TcpMockEndpoint.Split(':')[0];
+
+        Assert.Equal(IPAddress.Loopback, IPAddress.Parse(host));
+    }
+
+    [Fact]
     public async Task Connect_Without_Server_Returns_False_After_Timeout()
     {
         // Use a port that nobody is listening on
