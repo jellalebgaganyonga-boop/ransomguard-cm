@@ -13,7 +13,7 @@ import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AgentDetail } from '@/api/agents';
 import { Badge } from '@/components/ui/badge';
-import { PROTECTION_BANNER_CLASS, protectionVariant } from '@/lib/agent-status';
+import { PROTECTION_BANNER_CLASS, moduleStateVariant, protectionVariant } from '@/lib/agent-status';
 import {
   formatBytes,
   formatCount,
@@ -26,13 +26,6 @@ import {
   verdictSentence,
 } from '@/lib/agent-posture';
 import { formatDateTime, formatDistanceToNow } from '@/lib/format-date';
-
-const STATE_VARIANT: Record<string, 'low' | 'high' | 'medium' | 'neutral'> = {
-  active: 'low',
-  degraded: 'medium',
-  inactive: 'high',
-  disabled_by_config: 'neutral',
-};
 
 function Field({ label, children, title }: { label: string; children: ReactNode; title?: string }) {
   return (
@@ -118,7 +111,7 @@ export function AgentPostureSection({ agent }: { agent: AgentDetail }) {
                     <tr key={module.code}>
                       <td className="px-4 py-2 font-semibold text-text-primary">{productName(module.code)}</td>
                       <td className="px-4 py-2">
-                        <Badge variant={STATE_VARIANT[module.state] ?? 'neutral'}>
+                        <Badge variant={moduleStateVariant(module.code, module.state)}>
                           {t(`posture.stateLabel.${module.state}`, module.state)}
                         </Badge>
                       </td>

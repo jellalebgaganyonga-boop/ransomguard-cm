@@ -1,31 +1,17 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { PROTECTION_BANNER_CLASS, agentStatusVariant, isSignalLostRed, protectionVariant } from './agent-status';
+import {
+  PROTECTION_BANNER_CLASS,
+  agentStatusVariant,
+  isSignalLostRed,
+  moduleStateVariant,
+  protectionVariant,
+} from './agent-status';
 import tailwindConfig from '../../tailwind.config';
 import { createElement } from 'react';
 import { render } from '@testing-library/react';
 import { Badge } from '@/components/ui/badge';
-
-// ── agentStatusVariant ────────────────────────────────────────────────────────
-
-describe('agentStatusVariant', () => {
-  it('active → "low" (green badge)', () => {
-    expect(agentStatusVariant('active')).toBe('low');
-  });
-
-  it('provisioned → "info" (blue badge)', () => {
-    expect(agentStatusVariant('provisioned')).toBe('info');
-  });
-
-  it('disconnected → "high" (red badge)', () => {
-    expect(agentStatusVariant('disconnected')).toBe('high');
-  });
-
-  it('decommissioned → "neutral" (gray badge)', () => {
-    expect(agentStatusVariant('decommissioned')).toBe('neutral');
-  });
-});
 
 // ── protectionVariant: the colour of the server's verdict, nothing recomputed ─
 
@@ -97,5 +83,41 @@ describe('the four verdicts in colour (decision 1 of LOT 2)', () => {
     const { container } = render(createElement(Badge, { variant: protectionVariant(state) }, state));
     const badge = families(container.firstElementChild!.className);
     expect(new Set([...banner, ...badge])).toEqual(new Set([colour]));
+  });
+});
+
+const badgeColours = (variant: Parameters<typeof Badge>[0]['variant']) => {
+  const { container } = render(createElement(Badge, { variant }, 'x'));
+  return new Set(families(container.firstElementChild!.className));
+};
+
+describe('the enrolment status badge in colour', () => {
+  it.each([
+    ['active', 'green'],
+    ['provisioned', 'gray'],
+    ['disconnected', 'orange'],
+    ['decommissioned', 'gray'],
+  ] as const)('%s is %s', (status, colour) => {
+    expect(badgeColours(agentStatusVariant(status))).toEqual(new Set([colour]));
+  });
+});
+
+describe('the module state badge in colour', () => {
+  it.each([
+    ['SENTINEL', 'active', 'green'],
+    ['ENTROPY', 'active', 'green'],
+    ['USB_GUARD', 'degraded', 'orange'],
+    ['GENEALOGY', 'degraded', 'orange'],
+    ['SENTINEL', 'inactive', 'red'],
+    ['ENTROPY', 'inactive', 'red'],
+    ['EXFIL_WATCH', 'inactive', 'red'],
+    ['USB_GUARD', 'inactive', 'red'],
+    // Outside the verdict: not supposed to run, not a failure.
+    ['ANTI_TAMPERING', 'inactive', 'gray'],
+    ['GENEALOGY', 'inactive', 'gray'],
+    ['ENTROPY', 'disabled_by_config', 'gray'],
+    ['ENTROPY', 'some_future_state', 'gray'],
+  ] as const)('%s %s is %s', (code, state, colour) => {
+    expect(badgeColours(moduleStateVariant(code, state))).toEqual(new Set([colour]));
   });
 });

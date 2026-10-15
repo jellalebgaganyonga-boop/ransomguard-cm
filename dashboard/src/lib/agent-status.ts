@@ -17,15 +17,38 @@ type BadgeVariant = 'critical' | 'high' | 'medium' | 'low' | 'info' | 'neutral' 
 
 // ── Enrolment status badge ──────────────────────────────────
 
-/** Maps AgentStatus to Badge component variant. */
+/**
+ * Maps AgentStatus to Badge component variant. Active is the "success" token (green): it used
+ * severity-low, which is BLUE, until the LOT 2 demo caught it.
+ */
 export function agentStatusVariant(
   status: AgentStatus
-): 'info' | 'low' | 'high' | 'neutral' {
+): 'info' | 'success' | 'high' | 'neutral' {
   switch (status) {
-    case 'active':        return 'low';    // green (severity-low token = green)
-    case 'provisioned':   return 'info';   // blue
-    case 'disconnected':  return 'high';   // red
-    case 'decommissioned': return 'neutral';
+    case 'active':        return 'success'; // green
+    case 'provisioned':   return 'info';    // grey (severity-info = gray-50)
+    case 'disconnected':  return 'high';    // orange
+    case 'decommissioned': return 'neutral'; // grey
+  }
+}
+
+// ── Module state colour ─────────────────────────────────────
+
+/** The four detectors the GRID verdict reads (DETECTION_MODULES, grid services/agent_posture.py). */
+export const VERDICT_DETECTORS: readonly string[] = ['SENTINEL', 'ENTROPY', 'USB_GUARD', 'EXFIL_WATCH'];
+
+/**
+ * A module's state badge: active green, degraded orange, inactive red for a detector the verdict
+ * reads -- grey for a module it does not (GENEALOGY, ANTI_TAMPERING "not implemented"): showing
+ * red for a module that is not supposed to run would cry wolf. disabled_by_config is a choice,
+ * not a failure: grey (the verdict banner says what it costs). An unknown state: grey.
+ */
+export function moduleStateVariant(code: string, state: string): BadgeVariant {
+  switch (state) {
+    case 'active':   return 'success';
+    case 'degraded': return 'high';
+    case 'inactive': return VERDICT_DETECTORS.includes(code) ? 'critical' : 'neutral';
+    default:         return 'neutral';
   }
 }
 
