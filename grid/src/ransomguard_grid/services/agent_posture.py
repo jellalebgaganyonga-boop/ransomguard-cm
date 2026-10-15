@@ -99,6 +99,7 @@ TRANSMISSION_BLOCKED = "transmission_blocked"
 TRANSMISSION_UNKNOWN = "transmission_unknown"
 RESTART_LOOP = "restart_loop"
 ALERTS_REJECTED = "alerts_rejected"
+AUDIT_WRITE_FAILED = "audit_write_failed"
 
 
 @dataclass(frozen=True)
@@ -121,6 +122,7 @@ class PostureSnapshot:
     # which only compares with the server clock through the agent/server skew.
     last_upload_ok_age_seconds: int | None = None
     rejected_alerts: int | None = None
+    audit_write_failures: int | None = None
 
 
 @dataclass(frozen=True)
@@ -263,6 +265,11 @@ def _transmission_findings(posture: PostureSnapshot, uptime_now: int, now: datet
     # false yes. Null means "not reported", never 0.
     if posture.rejected_alerts is not None and posture.rejected_alerts > 0:
         findings.append((PARTIAL, ALERTS_REJECTED))
+
+    # The agent kept detecting but could not record some audit entries (disk full, database
+    # locked): the signed trail has holes. Not a protection loss, a forensic one -- partial.
+    if posture.audit_write_failures is not None and posture.audit_write_failures > 0:
+        findings.append((PARTIAL, AUDIT_WRITE_FAILED))
 
     return findings
 

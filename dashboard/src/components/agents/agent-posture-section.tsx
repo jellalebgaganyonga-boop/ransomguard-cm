@@ -162,6 +162,7 @@ export function AgentPostureSection({ agent }: { agent: AgentDetail }) {
                     : t('posture.none')}
                 </Field>
                 <Field label={t('posture.field.rejectedAlerts')}>{formatCount(t, posture.rejected_alerts)}</Field>
+                <Field label={t('posture.field.auditWriteFailures')}>{formatCount(t, posture.audit_write_failures)}</Field>
               </dl>
             </div>
 

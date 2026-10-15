@@ -24,6 +24,7 @@ function posture(overrides: Partial<AgentPosture> = {}): AgentPosture {
     last_upload_age_seconds: 120,
     last_upload_error_code: 'HTTP_422',
     rejected_alerts: null,
+    audit_write_failures: null,
     modules: [
       { code: 'SENTINEL', state: 'active', reason_code: null, changed_at: '2026-10-11T08:00:00Z' },
       { code: 'EXFIL_WATCH', state: 'inactive', reason_code: 'admin_rights_missing', changed_at: '2026-10-11T08:00:00Z' },
@@ -116,6 +117,7 @@ describe('AgentPostureSection', () => {
         system_free_bytes: null,
         db_volume_free_bytes: null,
         rejected_alerts: null,
+        audit_write_failures: null,
         last_upload_ok_at: null,
         last_upload_age_seconds: null,
       }),

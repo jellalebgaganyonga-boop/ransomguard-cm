@@ -282,6 +282,7 @@ async def _agent_items(db: AsyncSession, tenant_id: str, agents: list[Agent]) ->
                 last_upload_age_seconds=last_upload_age_seconds(state, now) if state else None,
                 last_upload_error_code=posture.last_upload_error_code,
                 rejected_alerts=posture.rejected_alerts,
+                audit_write_failures=posture.audit_write_failures,
                 modules=[
                     ModuleStatusItem(code=m.module_code, state=m.state, reason_code=m.reason_code, changed_at=m.changed_at)
                     for m in ordered

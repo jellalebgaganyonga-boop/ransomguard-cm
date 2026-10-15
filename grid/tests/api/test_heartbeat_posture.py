@@ -119,6 +119,22 @@ async def test_rejected_alerts_is_stored(
     assert (posture.rejected_alerts, posture.last_upload_ok_age_seconds) == (3, 42)
 
 
+@pytest.mark.asyncio
+async def test_audit_write_failures_is_stored_and_absent_means_not_reported(
+    client: AsyncClient, db_session: AsyncSession, test_cert_serial: str, test_cert_pem: str,
+) -> None:
+    _, agent = await _setup(db_session, test_cert_serial)
+
+    assert await _beat(client, agent, test_cert_pem, _v2(transmission={"pending_alerts": 0})) == 200
+    [posture] = await _rows(db_session, AgentPosture, agent.id)
+    assert posture.audit_write_failures is None  # an older agent: not reported, not 0
+
+    body = _v2(transmission={"pending_alerts": 0, "audit_write_failures": 4})
+    assert await _beat(client, agent, test_cert_pem, body) == 200
+    await db_session.refresh(posture)
+    assert posture.audit_write_failures == 4
+
+
 # ── Transitions: one row per change, not per beat ──
 
 @pytest.mark.asyncio

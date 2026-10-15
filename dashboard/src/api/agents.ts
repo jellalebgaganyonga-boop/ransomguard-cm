@@ -79,6 +79,8 @@ export const AgentPostureSchema = z.object({
   last_upload_age_seconds: z.number().int().nonnegative().nullable(),
   last_upload_error_code: z.string().nullable(),
   rejected_alerts: z.number().int().nonnegative().nullable(),
+  // AGT-AUD-002: audit entries the agent could not record since it started; null = not reported.
+  audit_write_failures: z.number().int().nonnegative().nullable(),
   modules: z.array(ModuleStatusSchema),
 });
 export type AgentPosture = z.infer<typeof AgentPostureSchema>;

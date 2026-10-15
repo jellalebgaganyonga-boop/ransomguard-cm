@@ -181,7 +181,7 @@ describe('every code the GRID can send has a French and an English label', () =>
   ];
   const verdictReasons = [
     'never_connected', 'agent_update_required', 'starting', 'no_detector_active', 'transmission_blocked',
-    'transmission_unknown', 'restart_loop',
+    'transmission_unknown', 'restart_loop', 'audit_write_failed',
   ];
   const states = ['active', 'inactive', 'disabled_by_config', 'degraded'];
 

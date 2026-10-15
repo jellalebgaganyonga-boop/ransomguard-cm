@@ -80,6 +80,7 @@ class AgentPostureItem(BaseModel):
     last_upload_age_seconds: int | None
     last_upload_error_code: str | None
     rejected_alerts: int | None
+    audit_write_failures: int | None
     modules: list[ModuleStatusItem]
 
 

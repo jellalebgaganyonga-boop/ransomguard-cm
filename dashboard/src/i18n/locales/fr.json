@@ -435,7 +435,8 @@
       "no_detector_active": "aucun détecteur actif",
       "transmission_blocked": "transmission des alertes bloquée",
       "transmission_unknown": "État de la transmission inconnu",
-      "restart_loop": "Redémarrages répétés de l'agent"
+      "restart_loop": "Redémarrages répétés de l'agent",
+      "audit_write_failed": "journal d'audit incomplet : entrées non enregistrées"
     },
     "sentence": {
       "verdictWithReason": "{verdict} — {reason}",
@@ -484,6 +485,7 @@
       "lastUpload": "Dernière transmission réussie",
       "lastUploadError": "Dernière erreur",
       "rejectedAlerts": "Alertes rejetées par le serveur (24 h)",
+      "auditWriteFailures": "Entrées d'audit non enregistrées (depuis le démarrage)",
       "agentVersion": "Version de l'agent",
       "osVersion": "Version de Windows",
       "systemFree": "Espace libre — volume système",

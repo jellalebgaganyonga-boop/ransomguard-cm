@@ -72,6 +72,9 @@ class HeartbeatTransmission(BaseModel):
     last_upload_error_code: str | None = Field(default=None, max_length=50, pattern=r"^[A-Za-z0-9_]+$")
     # Alerts the GRID refused (400/422), over the agent's last 24 h.
     rejected_alerts: int | None = Field(default=None, ge=0)
+    # Audit entries the agent could not record since it started (AGT-AUD-002): the detection
+    # went on, the trace did not. Null = not reported, never 0.
+    audit_write_failures: int | None = Field(default=None, ge=0)
 
 
 class HeartbeatModule(BaseModel):

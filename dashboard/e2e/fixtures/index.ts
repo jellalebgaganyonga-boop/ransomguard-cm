@@ -124,6 +124,7 @@ export const MOCK_AGENT = {
     last_upload_age_seconds: 60,
     last_upload_error_code: null,
     rejected_alerts: null,
+    audit_write_failures: null,
     modules: [
       { code: 'SENTINEL', state: 'active', reason_code: null, changed_at: MOCK_MODULE_CHANGED_AT },
       { code: 'ENTROPY', state: 'active', reason_code: null, changed_at: MOCK_MODULE_CHANGED_AT },

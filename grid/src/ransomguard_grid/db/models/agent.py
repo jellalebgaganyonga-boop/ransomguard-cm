@@ -98,6 +98,8 @@ class AgentPosture(Base):
     last_upload_error_code: Mapped[str | None] = mapped_column(String(50), nullable=True)
     # Alerts the GRID refused (400/422) over the agent's last 24 h; null = not reported.
     rejected_alerts: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Audit entries the agent could not record since it started (AGT-AUD-002); null = not reported.
+    audit_write_failures: Mapped[int | None] = mapped_column(Integer, nullable=True)
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     def __repr__(self) -> str:

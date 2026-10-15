@@ -435,7 +435,8 @@
       "no_detector_active": "no detector active",
       "transmission_blocked": "alert transmission blocked",
       "transmission_unknown": "Transmission status unknown",
-      "restart_loop": "Agent restarting repeatedly"
+      "restart_loop": "Agent restarting repeatedly",
+      "audit_write_failed": "audit log incomplete: entries not recorded"
     },
     "sentence": {
       "verdictWithReason": "{verdict} — {reason}",
@@ -484,6 +485,7 @@
       "lastUpload": "Last successful transmission",
       "lastUploadError": "Last error",
       "rejectedAlerts": "Alerts rejected by the server (24 h)",
+      "auditWriteFailures": "Audit entries not recorded (since start)",
       "agentVersion": "Agent version",
       "osVersion": "Windows version",
       "systemFree": "Free space — system volume",

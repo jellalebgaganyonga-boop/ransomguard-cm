@@ -41,6 +41,7 @@ def _posture(
     last_ok_ago: timedelta | None = timedelta(seconds=40),
     last_ok_age: int | None = None,
     rejected: int | None = None,
+    audit_failures: int | None = None,
     schema_version: int = 2,
 ) -> PostureSnapshot:
     return PostureSnapshot(
@@ -52,6 +53,7 @@ def _posture(
         last_upload_ok_at=None if last_ok_ago is None else NOW - last_ok_ago,
         last_upload_ok_age_seconds=last_ok_age,
         rejected_alerts=rejected,
+        audit_write_failures=audit_failures,
     )
 
 
@@ -178,6 +180,17 @@ def test_rejected_alerts_is_partial() -> None:
 @pytest.mark.parametrize("rejected", [0, None])
 def test_zero_or_unreported_rejected_alerts_is_protected(rejected: int | None) -> None:
     assert _verdict(_posture(rejected=rejected)).state == PROTECTED
+
+
+def test_audit_entries_not_recorded_is_partial() -> None:
+    # AGT-AUD-002: the agent kept detecting, but its signed trail has holes.
+    verdict = _verdict(_posture(audit_failures=1))
+    assert (verdict.state, verdict.reason_codes) == (PARTIAL, ["audit_write_failed"])
+
+
+@pytest.mark.parametrize("failures", [0, None])
+def test_zero_or_unreported_audit_failures_is_protected(failures: int | None) -> None:
+    assert _verdict(_posture(audit_failures=failures)).state == PROTECTED
 
 
 # ── Row 3: partial, signal lost 5-60 min ──

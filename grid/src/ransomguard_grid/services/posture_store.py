@@ -62,6 +62,7 @@ async def record_heartbeat(db: AsyncSession, agent: Agent, body: HeartbeatReques
     posture.last_upload_ok_age_seconds = transmission.last_upload_ok_age_seconds if transmission else None
     posture.last_upload_error_code = transmission.last_upload_error_code if transmission else None
     posture.rejected_alerts = transmission.rejected_alerts if transmission else None
+    posture.audit_write_failures = transmission.audit_write_failures if transmission else None
 
     if body.schema_version < 2:
         return
@@ -214,4 +215,5 @@ def snapshot(posture: AgentPosture, modules: Sequence[AgentModuleStatus]) -> Pos
         last_upload_ok_at=posture.last_upload_ok_at,
         last_upload_ok_age_seconds=posture.last_upload_ok_age_seconds,
         rejected_alerts=posture.rejected_alerts,
+        audit_write_failures=posture.audit_write_failures,
     )
