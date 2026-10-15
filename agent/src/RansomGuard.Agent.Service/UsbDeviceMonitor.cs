@@ -43,6 +43,7 @@ public sealed class UsbDeviceMonitor : BackgroundService, IUsbDeviceMonitor
     private readonly IOperationRateLimiter? _scanRateLimiter;
     private readonly IAlertForwardingQueue? _alertQueue;
     private readonly IModuleStateRegistry _moduleState;
+    private readonly IModuleFailureReporter _failureReporter;
     private long _totalEventsProcessed;
 
     /// <summary>Number of currently connected USB devices.</summary>
@@ -60,6 +61,7 @@ public sealed class UsbDeviceMonitor : BackgroundService, IUsbDeviceMonitor
         IServiceScopeFactory scopeFactory,
         IOptionsMonitor<AgentConfiguration> config,
         IModuleStateRegistry moduleState,
+        IModuleFailureReporter failureReporter,
         RateLimiterFactory? rateLimiterFactory = null,
         IAlertForwardingQueue? alertQueue = null)
     {
@@ -70,6 +72,7 @@ public sealed class UsbDeviceMonitor : BackgroundService, IUsbDeviceMonitor
         _scopeFactory = scopeFactory;
         _config = config.CurrentValue;
         _moduleState = moduleState;
+        _failureReporter = failureReporter;
         _scanRateLimiter = rateLimiterFactory?.GetLimiter("usb-scan");
         _alertQueue = alertQueue;
         _eventChannel = Channel.CreateBounded<UsbConnectionEvent>(
@@ -84,59 +87,55 @@ public sealed class UsbDeviceMonitor : BackgroundService, IUsbDeviceMonitor
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         bool reachedActive = false;
+        bool subscribersStarted = false;
+        Task? consumerTask = null;
+
+        // Every task of the module runs on this token, so that after a failure
+        // nothing keeps running unseen.
+        using var moduleCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+        CancellationToken moduleToken = moduleCts.Token;
+
         try
         {
-        if (_config.UsbGuard is null || !_config.UsbGuard.Enabled)
-        {
-            _logger.LogInformation("USB GUARD module is disabled");
-            _moduleState.Publish(ModuleCode.UsbGuard, ModuleState.DisabledByConfig, ModuleReasonCode.DisabledByConfig);
-            return;
-        }
-
-        // Strict + empty whitelist: warn at startup, do not block (A5).
-        UsbOperatingMode startupMode = ResolveOperatingMode();
-        try
-        {
-            await using var startupScope = _scopeFactory.CreateAsyncScope();
-            await UsbGuardStartupCheck.WarnIfStrictWithEmptyWhitelistAsync(
-                startupMode,
-                startupScope.ServiceProvider.GetRequiredService<IUsbWhitelistService>(),
-                _logger,
-                stoppingToken);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            // The whitelist service itself could not be built (e.g. database unavailable).
-            _logger.LogWarning(ex, UsbGuardStartupCheck.UnreadableWhitelistWarning);
-        }
-
-        // Start WMI subscribers
-        _wmiSubscriber.Start(_eventChannel.Writer, stoppingToken);
-
-        // Start consumer task
-        Task consumerTask = ConsumeEventsAsync(stoppingToken);
-
-        _logger.LogInformation("USB GUARD monitor active (mode: {Mode})", startupMode);
-        var (postureState, postureReason) = UsbGuardStartupCheck.RunningPosture(startupMode);
-        _moduleState.Publish(ModuleCode.UsbGuard, postureState, postureReason);
-        reachedActive = true;
-
-        // Heartbeat
-        using var heartbeat = new PeriodicTimer(TimeSpan.FromSeconds(60));
-        try
-        {
-            while (await heartbeat.WaitForNextTickAsync(stoppingToken))
+            if (_config.UsbGuard is null || !_config.UsbGuard.Enabled)
             {
-                _logger.LogInformation(
-                    "USB GUARD heartbeat | Connected: {Connected} | Events processed: {Events}",
-                    ConnectedDeviceCount, TotalEventsProcessed);
+                _logger.LogInformation("USB GUARD module is disabled");
+                _moduleState.Publish(ModuleCode.UsbGuard, ModuleState.DisabledByConfig, ModuleReasonCode.DisabledByConfig);
+                return;
             }
-        }
-        catch (OperationCanceledException) { }
 
-        _eventChannel.Writer.TryComplete();
-        await consumerTask;
-        await _wmiSubscriber.StopAsync();
+            // Strict + empty whitelist: warn at startup, do not block (A5).
+            UsbOperatingMode startupMode = ResolveOperatingMode();
+            try
+            {
+                await using var startupScope = _scopeFactory.CreateAsyncScope();
+                await UsbGuardStartupCheck.WarnIfStrictWithEmptyWhitelistAsync(
+                    startupMode,
+                    startupScope.ServiceProvider.GetRequiredService<IUsbWhitelistService>(),
+                    _logger,
+                    stoppingToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // The whitelist service itself could not be built (e.g. database unavailable).
+                _logger.LogWarning(ex, UsbGuardStartupCheck.UnreadableWhitelistWarning);
+            }
+
+            // Start WMI subscribers
+            _wmiSubscriber.Start(_eventChannel.Writer, moduleToken);
+            subscribersStarted = true;
+
+            consumerTask = ConsumeEventsAsync(moduleToken);
+
+            _logger.LogInformation("USB GUARD monitor active (mode: {Mode})", startupMode);
+            var (postureState, postureReason) = UsbGuardStartupCheck.RunningPosture(startupMode);
+            _moduleState.Publish(ModuleCode.UsbGuard, postureState, postureReason);
+            reachedActive = true;
+
+            await ModuleTaskObserver.ObserveUntilStoppedAsync(
+                stoppingToken,
+                ("consumer", consumerTask),
+                ("status-log", LogStatusPeriodicallyAsync(moduleToken)));
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
@@ -144,11 +143,57 @@ public sealed class UsbDeviceMonitor : BackgroundService, IUsbDeviceMonitor
         }
         catch (Exception ex)
         {
-            // Publish the real state and do NOT rethrow: one module crashing must
-            // not take the host — and all other protection — down with it.
-            _moduleState.Publish(ModuleCode.UsbGuard, ModuleState.Inactive,
-                reachedActive ? ModuleReasonCode.StoppedUnexpectedly : ModuleReasonCode.InitFailed);
-            _logger.LogError(ex, "USB GUARD monitor stopped unexpectedly");
+            // Swallowed on purpose: one module going down must not take the host —
+            // and every other module — with it. The reporter leaves the three
+            // traces: registry state, Critical log, audit entry.
+            await _failureReporter.ReportStoppedAsync(ModuleCode.UsbGuard, reachedActive, ex);
+        }
+        finally
+        {
+            await StopModuleAsync(moduleCts, consumerTask, subscribersStarted);
+        }
+    }
+
+    private async Task LogStatusPeriodicallyAsync(CancellationToken ct)
+    {
+        using var heartbeat = new PeriodicTimer(TimeSpan.FromSeconds(60));
+        while (await heartbeat.WaitForNextTickAsync(ct))
+        {
+            _logger.LogInformation(
+                "USB GUARD heartbeat | Connected: {Connected} | Events processed: {Events}",
+                ConnectedDeviceCount, TotalEventsProcessed);
+        }
+    }
+
+    /// <summary>Stops every source and task of the module; best effort, never throws.</summary>
+    private async Task StopModuleAsync(CancellationTokenSource moduleCts, Task? consumerTask, bool subscribersStarted)
+    {
+        _eventChannel.Writer.TryComplete();
+        await moduleCts.CancelAsync();
+
+        if (consumerTask is not null)
+        {
+            try
+            {
+                await consumerTask;
+            }
+            catch (Exception ex)
+            {
+                // Cancelled by the stop above, or already reported as the failure.
+                _logger.LogDebug(ex, "USB GUARD consumer ended during stop");
+            }
+        }
+
+        if (subscribersStarted)
+        {
+            try
+            {
+                await _wmiSubscriber.StopAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "USB GUARD: WMI subscribers did not stop cleanly");
+            }
         }
     }
 

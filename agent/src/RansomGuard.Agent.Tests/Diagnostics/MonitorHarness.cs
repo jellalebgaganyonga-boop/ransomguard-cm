@@ -76,7 +76,8 @@ internal sealed class MonitorHarness : IDisposable
     public static string MissingFolder() => Path.Combine(Path.GetTempPath(), $"rg_missing_{Guid.NewGuid():N}");
 
     public static IOptionsMonitor<AgentConfiguration> Config(
-        string[] watchPaths, SentinelOptions? sentinel = null, EntropyOptions? entropy = null)
+        string[] watchPaths, SentinelOptions? sentinel = null, EntropyOptions? entropy = null,
+        UsbGuardOptions? usbGuard = null)
     {
         var config = new AgentConfiguration
         {
@@ -87,6 +88,7 @@ internal sealed class MonitorHarness : IDisposable
             Logging = new LoggingOptions { MinimumLevel = "Warning", LogFilePath = "test.log" },
             Sentinel = sentinel,
             Entropy = entropy,
+            UsbGuard = usbGuard,
         };
         var monitor = new Mock<IOptionsMonitor<AgentConfiguration>>();
         monitor.Setup(m => m.CurrentValue).Returns(config);
