@@ -41,7 +41,6 @@ permissions:
   contents: read
 
 env:
-  AGENT_VERSION: '0.3.0'
   NODE_VERSION: '20'
   DOTNET_VERSION: '8.0.x'
 
@@ -90,6 +89,8 @@ jobs:
     needs: guard
     if: ${{ !inputs.skip_agent_package }}
     runs-on: windows-latest
+    outputs:
+      version: ${{ steps.zip.outputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -99,15 +100,6 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      # install.ps1 downloads a file whose name embeds the version. A silent
-      # mismatch would publish a package no endpoint is able to fetch.
-      - name: Version guard
-        shell: bash
-        run: |
-          declared=$(grep -oP '\$AgentVersion\s*=\s*"\K[^"]+' agent/install.ps1)
-          echo "install.ps1=$declared workflow=$AGENT_VERSION"
-          test "$declared" = "$AGENT_VERSION"
-
       # Self-contained: endpoints are clinical workstations and must not be
       # required to have a .NET runtime installed.
       - name: Publish self-contained (win-x64)
@@ -115,11 +107,16 @@ jobs:
           dotnet publish agent/src/RansomGuard.Agent.Service/RansomGuard.Agent.Service.csproj
           -c Release -r win-x64 --self-contained true -o publish/agent
 
+      # The package name carries no version (install.ps1 fetches a stable name); the version is
+      # the published assembly's, read here for the summary, as install.ps1 reads it on the endpoint.
       - name: Zip package
+        id: zip
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force packages | Out-Null
-          $zip = "packages/RansomGuard-Agent-v$env:AGENT_VERSION-win-x64.zip"
+          $version = [Diagnostics.FileVersionInfo]::GetVersionInfo((Resolve-Path publish/agent/RansomGuard.Agent.Service.dll)).ProductVersion
+          "version=$version" >> $env:GITHUB_OUTPUT
+          $zip = "packages/RansomGuard-Agent-win-x64.zip"
           Compress-Archive -Path publish/agent/* -DestinationPath $zip -Force
           $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
           "$hash  $(Split-Path $zip -Leaf)" | Out-File -Encoding ascii "$zip.sha256"
@@ -230,6 +227,6 @@ jobs:
             echo "| item | value |"
             echo "|---|---|"
             echo "| commit | \`${{ github.event.workflow_run.head_sha || github.sha }}\` |"
-            echo "| agent package | ${{ needs.package-agent.result == 'success' && env.AGENT_VERSION || 'unchanged' }} |"
+            echo "| agent package | ${{ needs.package-agent.result == 'success' && needs.package-agent.outputs.version || 'unchanged' }} |"
             echo "| result | ${{ job.status }} |"
           } >> "$GITHUB_STEP_SUMMARY"

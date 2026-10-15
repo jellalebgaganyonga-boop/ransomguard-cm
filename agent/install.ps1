@@ -69,14 +69,15 @@ if (-not $underProgramFiles) {
 }
 
 $ErrorActionPreference = "Stop"
-$AgentVersion = "0.3.0"
 $ServiceName = "RansomGuardAgent"
-$PackageUrl = "https://${GridServer}:8443/agent/RansomGuard-Agent-v${AgentVersion}-win-x64.zip"
+# No version in this script: the package has a stable name, and the version shown is read from
+# the agent assembly once extracted (step 3). A constant here said 0.3.0 long after it was false.
+$PackageUrl = "https://${GridServer}:8443/agent/RansomGuard-Agent-win-x64.zip"
 $DataDir = "C:\ProgramData\RansomGuard-CM"
 
 Write-Host ""
 Write-Host "=====================================================" -ForegroundColor Cyan
-Write-Host "  RansomGuard-CM Agent Installer v${AgentVersion}" -ForegroundColor Cyan
+Write-Host "  RansomGuard-CM Agent Installer" -ForegroundColor Cyan
 Write-Host "=====================================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -140,6 +141,16 @@ Expand-Archive -Path $tempZip -DestinationPath $InstallPath -Force
 Remove-Item $tempZip -Force
 
 Write-Host "  Extracted $(Get-ChildItem $InstallPath -Recurse -File | Measure-Object | Select-Object -ExpandProperty Count) files" -ForegroundColor Green
+
+# The version installed: the agent assembly's informational version, the one the agent reports
+# to the GRID at enrollment and in every heartbeat (AgentVersion.Current).
+$agentAssembly = Join-Path $InstallPath "RansomGuard.Agent.Service.dll"
+if (-not (Test-Path $agentAssembly)) {
+    Write-Host "ERROR: the package has no agent assembly (RansomGuard.Agent.Service.dll)." -ForegroundColor Red
+    exit 1
+}
+$AgentVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($agentAssembly).ProductVersion
+Write-Host "  Agent version: $AgentVersion" -ForegroundColor Green
 
 # ── Step 4: Configure appsettings.json ──────────────────────
 Write-Host "[4/6] Configuring agent with OTP..." -ForegroundColor Yellow
@@ -209,6 +220,7 @@ if ($svc.Status -eq "Running") {
     Write-Host "=====================================================" -ForegroundColor Green
     Write-Host ""
     Write-Host "  Service:    $ServiceName (Running)" -ForegroundColor White
+    Write-Host "  Version:    $AgentVersion" -ForegroundColor White
     Write-Host "  Install:    $InstallPath" -ForegroundColor White
     Write-Host "  Data:       $DataDir" -ForegroundColor White
     Write-Host "  Logs:       $DataDir\logs\" -ForegroundColor White
