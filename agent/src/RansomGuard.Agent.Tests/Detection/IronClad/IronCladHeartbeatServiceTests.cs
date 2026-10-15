@@ -5,36 +5,49 @@ using RansomGuard.Agent.Core.Detection.IronClad;
 using RansomGuard.Agent.Core.Detection.IronClad.Communication;
 using RansomGuard.Agent.Core.Detection.IronClad.Models;
 using RansomGuard.Agent.Service;
+using RansomGuard.Agent.Tests.Diagnostics;
 
 namespace RansomGuard.Agent.Tests.Detection.IronClad;
 
+/// <summary>
+/// The IronClad liveness monitor, on a clock the test moves by hand: no fixed wait, so the result
+/// never depends on how loaded the machine is (the previous version waited real seconds and
+/// failed once in 21 runs of the suite under load).
+/// </summary>
 public sealed class IronCladHeartbeatServiceTests
 {
     private readonly ILogger<IronCladHeartbeatService> _logger = NullLogger<IronCladHeartbeatService>.Instance;
+    private readonly ManualTimeProvider _time = new();
+
+    private IronCladHeartbeatService Service(TestCommunicator comm, int timeoutSeconds, ILogger<IronCladHeartbeatService>? logger = null) =>
+        new(comm, Options.Create(new IronCladOptions
+        {
+            Enabled = true,
+            HeartbeatIntervalSeconds = 1,
+            HeartbeatTimeoutSeconds = timeoutSeconds
+        }), logger ?? _logger, _time);
+
+    /// <summary>One check of the monitor: wait until it is parked on its tick, then fire it.</summary>
+    private async Task TickAsync(TimeSpan by)
+    {
+        await Eventually.HoldsAsync(() => _time.ActiveTimers > 0, "the monitor waiting on its next tick");
+        _time.Advance(by);
+    }
 
     [Fact]
     public async Task Heartbeat_Received_Resets_Miss_Counter()
     {
         var comm = new TestCommunicator();
-        var opts = Options.Create(new IronCladOptions
-        {
-            Enabled = true,
-            HeartbeatIntervalSeconds = 1,
-            HeartbeatTimeoutSeconds = 5
-        });
-
-        using var service = new IronCladHeartbeatService(comm, opts, _logger);
+        using var service = Service(comm, timeoutSeconds: 5);
         using var cts = new CancellationTokenSource();
+        await service.StartAsync(cts.Token);
 
-        var execTask = service.StartAsync(cts.Token);
-        await Task.Delay(100); // Let service start
+        await TickAsync(TimeSpan.FromSeconds(1.5));
+        await Eventually.HoldsAsync(() => service.ConsecutiveMissed == 1, "one missed heartbeat");
 
-        // Simulate heartbeat
         comm.RaiseHeartbeat(TimeSpan.FromMilliseconds(10));
-        await Task.Delay(100);
 
         Assert.Equal(0, service.ConsecutiveMissed);
-
         await cts.CancelAsync();
     }
 
@@ -42,23 +55,38 @@ public sealed class IronCladHeartbeatServiceTests
     public async Task Missed_Heartbeats_Increment_Counter()
     {
         var comm = new TestCommunicator();
-        var opts = Options.Create(new IronCladOptions
-        {
-            Enabled = true,
-            HeartbeatIntervalSeconds = 1,
-            HeartbeatTimeoutSeconds = 10
-        });
-
-        using var service = new IronCladHeartbeatService(comm, opts, _logger);
+        using var service = Service(comm, timeoutSeconds: 10);
         using var cts = new CancellationTokenSource();
+        await service.StartAsync(cts.Token);
 
-        _ = Task.Run(() => service.StartAsync(cts.Token));
+        for (int missed = 1; missed <= 3; missed++)
+        {
+            await TickAsync(TimeSpan.FromSeconds(1.5));
+            int expected = missed;
+            await Eventually.HoldsAsync(() => service.ConsecutiveMissed == expected, $"{expected} missed heartbeats");
+        }
 
-        // Wait for 3 heartbeat intervals without sending heartbeats
-        await Task.Delay(3500);
+        await cts.CancelAsync();
+    }
 
-        Assert.True(service.ConsecutiveMissed >= 2, $"Expected >= 2 missed, got {service.ConsecutiveMissed}");
+    [Fact]
+    public async Task A_heartbeat_within_the_interval_is_not_a_miss()
+    {
+        var comm = new TestCommunicator();
+        using var service = Service(comm, timeoutSeconds: 10);
+        using var cts = new CancellationTokenSource();
+        await service.StartAsync(cts.Token);
 
+        for (int i = 0; i < 3; i++)
+        {
+            await Eventually.HoldsAsync(() => _time.ActiveTimers > 0, "the monitor waiting on its next tick");
+            _time.Advance(TimeSpan.FromSeconds(0.6));
+            comm.RaiseHeartbeat(TimeSpan.FromMilliseconds(5)); // the device answers in time
+            _time.Advance(TimeSpan.FromSeconds(0.6));          // the check: 0.6 s since the heartbeat
+        }
+
+        await Eventually.HoldsAsync(() => _time.ActiveTimers > 0, "the monitor waiting on its next tick");
+        Assert.Equal(0, service.ConsecutiveMissed);
         await cts.CancelAsync();
     }
 
@@ -66,25 +94,38 @@ public sealed class IronCladHeartbeatServiceTests
     public async Task Reconnection_Resets_Counter()
     {
         var comm = new TestCommunicator();
-        var opts = Options.Create(new IronCladOptions
-        {
-            Enabled = true,
-            HeartbeatIntervalSeconds = 1,
-            HeartbeatTimeoutSeconds = 30
-        });
-
-        using var service = new IronCladHeartbeatService(comm, opts, _logger);
+        using var service = Service(comm, timeoutSeconds: 30);
         using var cts = new CancellationTokenSource();
+        await service.StartAsync(cts.Token);
 
-        _ = Task.Run(() => service.StartAsync(cts.Token));
-        await Task.Delay(2500); // Let some heartbeats be missed
+        await TickAsync(TimeSpan.FromSeconds(1.5));
+        await TickAsync(TimeSpan.FromSeconds(1.5));
+        await Eventually.HoldsAsync(() => service.ConsecutiveMissed == 2, "two missed heartbeats");
 
-        // Now simulate heartbeat (reconnection)
-        comm.RaiseHeartbeat(TimeSpan.FromMilliseconds(5));
-        await Task.Delay(100);
+        comm.RaiseHeartbeat(TimeSpan.FromMilliseconds(5)); // reconnection
 
         Assert.Equal(0, service.ConsecutiveMissed);
+        await cts.CancelAsync();
+    }
 
+    [Fact]
+    public async Task No_heartbeat_past_the_timeout_raises_one_critical_alert()
+    {
+        var comm = new TestCommunicator();
+        var log = new RecordingLogger<IronCladHeartbeatService>();
+        using var service = Service(comm, timeoutSeconds: 5, log);
+        using var cts = new CancellationTokenSource();
+        await service.StartAsync(cts.Token);
+
+        for (int i = 0; i < 4; i++)
+        {
+            await TickAsync(TimeSpan.FromSeconds(1.5)); // 6 s without a heartbeat
+        }
+
+        await Eventually.HoldsAsync(() => log.Entries.Any(e => e.Level == LogLevel.Critical), "the Critical alert");
+        await TickAsync(TimeSpan.FromSeconds(1.5));
+        await Eventually.HoldsAsync(() => service.ConsecutiveMissed == 5, "the fifth check done");
+        Assert.Equal(1, log.Entries.Count(e => e.Level == LogLevel.Critical)); // raised once, not every tick
         await cts.CancelAsync();
     }
 

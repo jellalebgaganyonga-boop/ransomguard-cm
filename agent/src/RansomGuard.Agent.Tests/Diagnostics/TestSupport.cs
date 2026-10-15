@@ -25,6 +25,12 @@ internal sealed class ManualTimeProvider : TimeProvider
         lock (_gate) return _utcNow;
     }
 
+    /// <summary>Timers currently waiting to fire: a loop is parked on its next tick.</summary>
+    public int ActiveTimers
+    {
+        get { lock (_gate) return _timers.Count(t => t.DueAt is not null); }
+    }
+
     /// <summary>Moves the wall clock only (an NTP correction, a user changing the time).</summary>
     public void SetWallClock(DateTimeOffset utcNow)
     {
