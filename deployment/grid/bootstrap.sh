@@ -63,6 +63,18 @@ fi
 # without one (GRID-KEY-001). Never overwrites an existing key.
 bash "$SHARED_DIR/pki/init-signing-key.sh" "$SHARED_DIR/pki"
 
+# grid-api runs as uid 1000 (deployment/grid/Dockerfile, user ransomguard) and reads the
+# signing key, which stays chmod 600: it must be owned by uid 1000, not by the account running
+# this script -- it only worked when that account happened to be uid 1000. The pki folder is
+# chmod 700 above: group 1000 gets traverse only (710), so grid-api reaches its key without
+# being able to list the folder or read the other keys (ca.key, server.key stay 600).
+SIGNING_KEY="$SHARED_DIR/pki/threat-intel-ed25519.key"
+as_root() { "$@" 2>/dev/null || sudo "$@"; }
+as_root chown 1000:1000 "$SIGNING_KEY"
+as_root chmod 600 "$SIGNING_KEY"
+as_root chgrp 1000 "$SHARED_DIR/pki"
+as_root chmod 710 "$SHARED_DIR/pki"
+
 # ── 2. Secrets ────────────────────────────────────────────────────
 if [ -f "$SHARED_DIR/.env" ]; then
     echo "[skip] .env already exists -- secrets left untouched"
