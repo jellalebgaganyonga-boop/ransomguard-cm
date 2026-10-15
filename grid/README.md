@@ -140,3 +140,11 @@ pytest --cov=src --cov-report=term -v
 - **Worker lifespan tests**: Not added as separate test file (worker tested via service tests)
 - **Docker E2E tests**: Manual validation only (docker not available in pytest CI)
 - **Redis integration**: sessions and enrollment OTPs are in Redis (GRID-SEC-004, GRID-SEC-005, GRID-ENR-001); the in-process rate limiter is still per worker.
+- **GRID-PST-001 — a deliberate restart counts as a restart loop** (seen in the LOT 2 demo,
+  2026-10-15). The posture rule counts every restart: 3 within 60 min remove the start-up grace
+  and give `partial` / `restart_loop` (`services/agent_posture.py`, `is_restart`). An
+  administrator who restarts the service three times in a few minutes gets the same verdict as an
+  agent that crashes in a loop — the demo showed it after three scenario switches, until the
+  window expired. Lead, not implemented: on a clean stop the agent sends a last heartbeat
+  announcing it (`stopping`), and the GRID counts only the restarts with no announced clean stop.
+  A crash, a kill or a power cut sends nothing, so they still count.
