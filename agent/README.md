@@ -59,6 +59,13 @@ On each workstation, before running `install.ps1`, as an administrator:
    An error here means the root is not trusted or the GRID's host name is not in its
    certificate; the agent would refuse it the same way.
 
+Checking a GRID from Windows with `curl.exe --cacert ca.crt` fails with `(60) schannel: the
+revocation status is unknown`: the curl shipped with Windows (Schannel) does use `--cacert`,
+but it also checks revocation, and the development PKI publishes no CRL. That error is not a
+trust failure. `--ssl-no-revoke` skips the revocation check only (the chain is still validated
+against `ca.crt`: without `--cacert` the same command fails with `SEC_E_UNTRUSTED_ROOT`); for
+development checks only.
+
 A root in `LocalMachine\Root` is trusted for every TLS connection of the machine, not only
 the GRID: whoever holds `ca.key` could impersonate any site to that workstation. Keep
 `ca.key` offline. Whether the installer should rather pin this root for the agent alone is
