@@ -210,5 +210,8 @@ agent/**/RansomGuard-Agent-*.zip
 
 # Development PKI material generated locally
 deployment/grid/pki/*.srl
+# The threat-intel public key is generated next to its private key by init-signing-key.sh, one
+# pair per GRID: a committed one is the key of whoever committed it, wrong for every other GRID.
+deployment/grid/pki/*.key.pub
 dashboard/pki/
 .claude/settings.local.json
