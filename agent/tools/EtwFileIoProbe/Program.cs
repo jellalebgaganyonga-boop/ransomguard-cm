@@ -30,6 +30,7 @@ string mode = args.Length > 0 ? args[0] : "measure";
 return mode switch
 {
     "writer" => Writer.Run(args[1], int.Parse(args[2], CultureInfo.InvariantCulture)),
+    "reader" => ConcurrentReader.Run(args[1]),
     "no-admin" => NoAdmin.Run(),
     "measure" => Measure.Run(args),
     _ => Usage(),
@@ -164,6 +165,45 @@ internal static class Writer
     }
 }
 
+/// <summary>
+/// The concurrent reader (ADR-025, correction A): opens every canary for reading, in a loop,
+/// sharing everything -- as an antivirus, the Windows indexer or a backup does. Its opens are
+/// Creates too: they must never attribute.
+/// </summary>
+internal static class ConcurrentReader
+{
+    public static int Run(string root)
+    {
+        string canaries = Path.Combine(root, "canaries");
+        var buffer = new byte[4096];
+        try
+        {
+            while (true)
+            {
+                foreach (string file in Directory.EnumerateFiles(canaries))
+                {
+                    try
+                    {
+                        using var stream = new FileStream(file, FileMode.Open, FileAccess.Read,
+                            FileShare.ReadWrite | FileShare.Delete);
+                        _ = stream.Read(buffer, 0, buffer.Length);
+                    }
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                    {
+                        // renamed or deleted under us
+                    }
+                }
+
+                Thread.Sleep(5);
+            }
+        }
+        catch (DirectoryNotFoundException)
+        {
+            return 0;
+        }
+    }
+}
+
 /// <summary>What happens without administrator rights (B.2 point 5).</summary>
 internal static class NoAdmin
 {
@@ -213,7 +253,7 @@ internal sealed class PhaseStats
     // Per FileIO event type: how many carry a resolved file name.
     public readonly Dictionary<string, long> WithName = new(StringComparer.Ordinal);
     // Mutating operations on the canaries (Write/Delete/Rename/SetInfo): the writer's PID or not.
-    public readonly Dictionary<string, (long Correct, long System, long Missing, long Other)> CanaryPid = new(StringComparer.Ordinal);
+    public readonly Dictionary<string, Dictionary<string, long>> CanaryPid = new(StringComparer.Ordinal);
     public long HeldWrites;            // writes on a handle opened BEFORE the session
     public long HeldWritesNamed;       // ... whose file name was resolved
     public readonly List<double> DeliveryMs = [];
@@ -223,7 +263,10 @@ internal sealed class PhaseStats
     public string WriterSummary = "";
     public long Flushes;
     // Pattern 7, memory-mapped writes: every operation on the mapped canaries, by PID class.
-    public readonly Dictionary<string, (long Correct, long System, long Missing, long Other)> MappedPid = new(StringComparer.Ordinal);
+    public readonly Dictionary<string, Dictionary<string, long>> MappedPid = new(StringComparer.Ordinal);
+    // Correction A: every Create on a canary, by disposition (raw NT value = CreateOptions >> 24,
+    // and TraceEvent's reading of it) and by PID class.
+    public readonly Dictionary<string, Dictionary<string, long>> CreateByDisposition = new(StringComparer.Ordinal);
     // 2b: the writer's start time as the Process/Start event gives it, and as the OS gives it.
     public DateTime? WriterStartFromEtw;
     public DateTime? WriterStartFromOs;
@@ -249,6 +292,9 @@ internal static class Measure
 
     private static PhaseStats? _current;
     private static int _writerPid;
+    private static int _readerPid = -1;
+    private static int _agentPid = -1;
+    private static readonly string[] PidClasses = ["writer", "reader", "agent", "System (4)", "none (<= 0)", "other"];
     private static DateTime _writerStartOs;
     // Process start times seen in the session (Process/Start), by PID.
     private static readonly ConcurrentDictionary<int, DateTime> ProcessStarts = new();
@@ -259,6 +305,7 @@ internal static class Measure
     {
         int seconds = IntArg(args, "--seconds") ?? 60;
         int? agentPid = IntArg(args, "--agent-pid");
+        _agentPid = agentPid ?? -1;
         string? reportPath = StringArg(args, "--report");
 
         if (TraceEventSession.IsElevated() != true)
@@ -359,6 +406,17 @@ internal static class Measure
             _writerStartOs = writer.StartTime; // GetProcessTimes: what an immediate read would give
         }
 
+        Process? reader = null;
+        if (copy)
+        {
+            reader = Process.Start(new ProcessStartInfo(Environment.ProcessPath!)
+            {
+                ArgumentList = { "reader", Work.Root },
+                UseShellExecute = false,
+            })!;
+            _readerPid = reader.Id;
+        }
+
         while (clock.Elapsed.TotalSeconds < seconds)
         {
             Thread.Sleep(500);
@@ -373,6 +431,13 @@ internal static class Measure
         {
             stats.WriterSummary = writer.StandardOutput.ReadToEnd().Trim();
             writer.WaitForExit();
+        }
+
+        if (reader is not null)
+        {
+            reader.Kill();
+            reader.WaitForExit();
+            reader.Dispose();
         }
 
         Interlocked.Exchange(ref _current, null);
@@ -428,7 +493,16 @@ internal static class Measure
         };
 
         KernelTraceEventParser k = source.Kernel;
-        k.FileIOCreate += e => Named("Create", e.FileName, e.ProcessID, mutating: false);
+        k.FileIOCreate += e =>
+        {
+            Named("Create", e.FileName, e.ProcessID, mutating: false);
+            if (_current is { Phase: "copy" } s && IsCanary(e.FileName))
+            {
+                uint raw = Convert.ToUInt32(e.PayloadByName("CreateOptions"), CultureInfo.InvariantCulture);
+                string disposition = $"{raw >> 24} ({e.CreateDisposition})";
+                Tally(s.CreateByDisposition, disposition, e.ProcessID);
+            }
+        };
         k.FileIORead += e => Named("Read", e.FileName, e.ProcessID, mutating: false);
         k.FileIOWrite += e =>
         {
@@ -451,15 +525,31 @@ internal static class Measure
         k.ProcessStart += e => ProcessStarts[e.ProcessID] = e.TimeStamp;
     }
 
-    private static void Count(Dictionary<string, (long Correct, long System, long Missing, long Other)> table, string op, int pid)
+    private static string PidClass(int pid) => pid switch
     {
-        (long correct, long system, long missing, long other) = table.GetValueOrDefault(op);
-        if (pid == _writerPid) correct++;
-        else if (pid == 4) system++;
-        else if (pid <= 0) missing++;
-        else other++;
-        table[op] = (correct, system, missing, other);
+        4 => "System (4)",
+        <= 0 => "none (<= 0)",
+        _ when pid == _writerPid => "writer",
+        _ when pid == _readerPid => "reader",
+        _ when pid == _agentPid => "agent",
+        _ => "other",
+    };
+
+    private static void Tally(Dictionary<string, Dictionary<string, long>> table, string row, int pid)
+    {
+        if (!table.TryGetValue(row, out Dictionary<string, long>? counts))
+        {
+            counts = new Dictionary<string, long>(StringComparer.Ordinal);
+            table[row] = counts;
+        }
+
+        string pidClass = PidClass(pid);
+        counts[pidClass] = counts.GetValueOrDefault(pidClass) + 1;
     }
+
+    private static bool IsCanary(string fileName) =>
+        fileName.StartsWith(Work.Canaries, StringComparison.OrdinalIgnoreCase)
+        && !string.Equals(fileName, _heldPath, StringComparison.OrdinalIgnoreCase);
 
     private static void Named(string op, string fileName, int pid, bool mutating)
     {
@@ -477,11 +567,11 @@ internal static class Measure
 
         if (Path.GetFileName(fileName).StartsWith(Work.MappedPrefix, StringComparison.OrdinalIgnoreCase))
         {
-            Count(s.MappedPid, op, pid); // every operation: the Create/Open may carry the right PID
+            Tally(s.MappedPid, op, pid); // every operation
             return;
         }
 
-        if (mutating) Count(s.CanaryPid, op, pid);
+        if (mutating) Tally(s.CanaryPid, op, pid);
     }
 
     /// <summary>Cost of the canary filter alone, per event, on the names actually seen.</summary>
@@ -547,24 +637,11 @@ internal static class Measure
             }
 
             sb.AppendLine();
-            sb.AppendLine("Mutating operations on the canaries, by the PID the event carries (writer = the process that did it):");
-            sb.AppendLine();
-            sb.AppendLine("| Operation | Writer's PID (correct) | System (4) | None (<= 0) | Another PID (wrong) |");
-            sb.AppendLine("|---|---|---|---|---|");
-            foreach ((string op, (long c, long sys, long none, long other)) in s.CanaryPid.OrderBy(p => p.Key, StringComparer.Ordinal))
-            {
-                sb.AppendLine($"| {op} | {c} | {sys} | {none} | {other} |");
-            }
+            Pivot(sb, "Mutating operations on the canaries, by the PID the event carries (writer = the process that did it; reader = the concurrent reader):", "Operation", s.CanaryPid);
+            Pivot(sb, "Creates (opens) on every canary, by disposition -- raw NT value (CreateOptions >> 24) and TraceEvent's name -- and by PID:", "Disposition", s.CreateByDisposition);
 
             sb.AppendLine();
-            sb.AppendLine("Pattern 7, memory-mapped rewrite of a canary: every operation on the mapped canaries, by PID:");
-            sb.AppendLine();
-            sb.AppendLine("| Operation | Writer's PID (correct) | System (4) | None (<= 0) | Another PID (wrong) |");
-            sb.AppendLine("|---|---|---|---|---|");
-            foreach ((string op, (long c, long sys, long none, long other)) in s.MappedPid.OrderBy(p => p.Key, StringComparer.Ordinal))
-            {
-                sb.AppendLine($"| {op} | {c} | {sys} | {none} | {other} |");
-            }
+            Pivot(sb, "Pattern 7, memory-mapped rewrite of a canary: every operation on the mapped canaries, by PID:", "Operation", s.MappedPid);
 
             sb.AppendLine();
             sb.AppendLine($"Handle opened before the session, written during it: {s.HeldWrites} writes seen, {s.HeldWritesNamed} with the file name resolved.");
@@ -580,6 +657,20 @@ internal static class Measure
 
         sb.AppendLine($"Canary filter (directory prefix + exact lookup), per event, on the names seen: {filterNs:F0} ns.");
         return sb.ToString();
+    }
+
+    private static void Pivot(StringBuilder sb, string title, string rowName, Dictionary<string, Dictionary<string, long>> table)
+    {
+        sb.AppendLine(title);
+        sb.AppendLine();
+        sb.AppendLine($"| {rowName} | " + string.Join(" | ", PidClasses) + " |");
+        sb.AppendLine("|---|" + string.Concat(Enumerable.Repeat("---|", PidClasses.Length)));
+        foreach ((string row, Dictionary<string, long> counts) in table.OrderBy(p => p.Key, StringComparer.Ordinal))
+        {
+            sb.AppendLine($"| {row} | " + string.Join(" | ", PidClasses.Select(c => counts.GetValueOrDefault(c).ToString(CultureInfo.InvariantCulture))) + " |");
+        }
+
+        sb.AppendLine();
     }
 
     private static double Percentile(List<double> values, double p)
