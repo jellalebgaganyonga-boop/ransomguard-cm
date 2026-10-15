@@ -13,8 +13,10 @@
 //
 // It only touches files it creates under %TEMP%\rg-etw-probe, deleted at the end.
 
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
+using System.IO.MemoryMappedFiles;
 using System.Text;
 using Microsoft.Diagnostics.Tracing;
 using Microsoft.Diagnostics.Tracing.Parsers;
@@ -73,9 +75,20 @@ internal static class Work
         {
             File.WriteAllText(Path.Combine(Canaries, $"canary_{i:D2}.txt"), $"canary {i}\n" + new string('x', 4096));
         }
+
+        for (int i = 0; i < MappedCount; i++)
+        {
+            random.NextBytes(buffer);
+            File.WriteAllBytes(MappedPath(i), buffer);
+        }
     }
 
     public static string CanaryPath(int i) => Path.Combine(Canaries, $"canary_{i:D2}.txt");
+
+    public const int MappedCount = 5;
+    public const string MappedPrefix = "mapped_";
+
+    public static string MappedPath(int i) => Path.Combine(Canaries, $"{MappedPrefix}{i:D2}.txt");
 
     /// <summary>Deletes what the probe created; the root stays.</summary>
     public static void Clean()
@@ -100,7 +113,7 @@ internal static class Writer
         string destination = Path.Combine(root, "destination");
         string canaries = Path.Combine(root, "canaries");
         var deadline = Stopwatch.StartNew();
-        long copies = 0, rewrites = 0, renames = 0, deletes = 0;
+        long copies = 0, rewrites = 0, renames = 0, deletes = 0, mappedWrites = 0;
         int pass = 0;
         string[] files = Directory.GetFiles(source);
         while (deadline.Elapsed.TotalSeconds < seconds)
@@ -111,6 +124,22 @@ internal static class Writer
                 copies++;
                 if (deadline.Elapsed.TotalSeconds >= seconds) break;
             }
+
+            // Pattern 7: rewrite a canary through a memory-mapped view, as some ransomware does. The
+            // pages reach the disk as paging I/O: which PID does ETW give those writes?
+            string mapped = Path.Combine(canaries, $"{Work.MappedPrefix}{pass % Work.MappedCount:D2}.txt");
+            using (var file = MemoryMappedFile.CreateFromFile(mapped, FileMode.Open, null, 0, MemoryMappedFileAccess.ReadWrite))
+            using (var view = file.CreateViewAccessor(0, 0, MemoryMappedFileAccess.ReadWrite))
+            {
+                for (long i = 0; i < view.Capacity; i += 512)
+                {
+                    view.Write(i, (byte)(view.ReadByte(i) ^ 0x5A));
+                }
+
+                view.Flush();
+            }
+
+            mappedWrites++;
 
             string canary = Path.Combine(canaries, $"canary_{pass % Work.CanaryCount:D2}.txt");
             if (File.Exists(canary))
@@ -130,7 +159,7 @@ internal static class Writer
             pass++;
         }
 
-        Console.WriteLine($"copies={copies} rewrites={rewrites} renames={renames} deletes={deletes} passes={pass}");
+        Console.WriteLine($"copies={copies} rewrites={rewrites} renames={renames} deletes={deletes} mapped={mappedWrites} passes={pass}");
         return 0;
     }
 }
@@ -192,21 +221,37 @@ internal sealed class PhaseStats
     public double? AgentCpuSeconds;
     public int EventsLost;
     public string WriterSummary = "";
+    public long Flushes;
+    // Pattern 7, memory-mapped writes: every operation on the mapped canaries, by PID class.
+    public readonly Dictionary<string, (long Correct, long System, long Missing, long Other)> MappedPid = new(StringComparer.Ordinal);
+    // 2b: the writer's start time as the Process/Start event gives it, and as the OS gives it.
+    public DateTime? WriterStartFromEtw;
+    public DateTime? WriterStartFromOs;
 }
 
 internal static class Measure
 {
     private const string SessionName = "RansomGuard-EtwProbe-FileIO";
 
-    private static readonly (string Name, KernelTraceEventParser.Keywords Keywords)[] Configs =
+    private const KernelTraceEventParser.Keywords Chosen =
+        KernelTraceEventParser.Keywords.FileIOInit | KernelTraceEventParser.Keywords.DiskFileIO;
+
+    // The keyword sets of the first run (FileIOInit alone, +FileIO) are in ADR-025; this run measures
+    // the chosen set, its Flush() cadence (delivery delay against CPU), and the Process keyword
+    // that gives the (PID, process start time) pair.
+    private static readonly (string Name, KernelTraceEventParser.Keywords Keywords, int FlushMs)[] Configs =
     [
-        ("FileIOInit", KernelTraceEventParser.Keywords.FileIOInit),
-        ("FileIOInit+DiskFileIO", KernelTraceEventParser.Keywords.FileIOInit | KernelTraceEventParser.Keywords.DiskFileIO),
-        ("FileIOInit+FileIO+DiskFileIO", KernelTraceEventParser.Keywords.FileIOInit | KernelTraceEventParser.Keywords.FileIO | KernelTraceEventParser.Keywords.DiskFileIO),
+        ("FileIOInit+DiskFileIO", Chosen, 0),
+        ("FileIOInit+DiskFileIO, Flush 250 ms", Chosen, 250),
+        ("FileIOInit+DiskFileIO, Flush 100 ms", Chosen, 100),
+        ("FileIOInit+DiskFileIO+Process", Chosen | KernelTraceEventParser.Keywords.Process, 0),
     ];
 
     private static PhaseStats? _current;
     private static int _writerPid;
+    private static DateTime _writerStartOs;
+    // Process start times seen in the session (Process/Start), by PID.
+    private static readonly ConcurrentDictionary<int, DateTime> ProcessStarts = new();
     private static readonly List<string> SeenNames = [];
     private static string _heldPath = "";
 
@@ -234,14 +279,32 @@ internal static class Measure
         results.Add(RunPhase("none (baseline)", "rest", seconds, agentPid, held, copy: false));
         results.Add(RunPhase("none (baseline)", "copy", seconds, agentPid, held, copy: true));
 
-        foreach ((string name, KernelTraceEventParser.Keywords keywords) in Configs)
+        foreach ((string name, KernelTraceEventParser.Keywords keywords, int flushMs) in Configs)
         {
             using var session = new TraceEventSession(SessionName) { BufferSizeMB = 64, StopOnDispose = true };
             session.EnableKernelProvider(keywords);
+            ProcessStarts.Clear();
             Subscribe(session.Source);
             var processing = new Thread(() => session.Source.Process()) { IsBackground = true };
             processing.Start();
             Thread.Sleep(2000); // let the session settle (rundown) before measuring
+
+            // Flush() on a timer of this process: its CPU is counted in the probe's.
+            long flushes = 0;
+            using Timer? flusher = flushMs > 0
+                ? new Timer(_ =>
+                {
+                    try
+                    {
+                        session.Flush();
+                        Interlocked.Increment(ref flushes);
+                    }
+                    catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or InvalidOperationException)
+                    {
+                        // the session is stopping
+                    }
+                }, null, flushMs, flushMs)
+                : null;
 
             // EventsLost is cumulative and only readable while the session runs.
             PhaseStats rest = RunPhase(name, "rest", seconds, agentPid, held, copy: false);
@@ -249,7 +312,16 @@ internal static class Measure
             PhaseStats copy = RunPhase(name, "copy", seconds, agentPid, held, copy: true);
             int lostAtEnd = Lost(session);
             copy.EventsLost = lostAtEnd < 0 || rest.EventsLost < 0 ? -1 : lostAtEnd - rest.EventsLost;
+            flusher?.Dispose();
+            Thread.Sleep(1500); // the writer's last events and its Process/Start
             Interlocked.Exchange(ref _current, null);
+            rest.Flushes = copy.Flushes = Interlocked.Read(ref flushes);
+            if ((keywords & KernelTraceEventParser.Keywords.Process) != 0)
+            {
+                copy.WriterStartFromEtw = ProcessStarts.TryGetValue(_writerPid, out DateTime seen) ? seen : null;
+                copy.WriterStartFromOs = _writerStartOs;
+            }
+
             session.Stop();
             processing.Join(TimeSpan.FromSeconds(10));
             results.Add(rest);
@@ -284,6 +356,7 @@ internal static class Measure
                 UseShellExecute = false,
             })!;
             _writerPid = writer.Id;
+            _writerStartOs = writer.StartTime; // GetProcessTimes: what an immediate read would give
         }
 
         while (clock.Elapsed.TotalSeconds < seconds)
@@ -375,6 +448,17 @@ internal static class Measure
         k.FileIOSetInfo += e => Named("SetInfo", e.FileName, e.ProcessID, mutating: true);
         k.FileIOCleanup += e => Named("Cleanup", e.FileName, e.ProcessID, mutating: false);
         k.FileIOClose += e => Named("Close", e.FileName, e.ProcessID, mutating: false);
+        k.ProcessStart += e => ProcessStarts[e.ProcessID] = e.TimeStamp;
+    }
+
+    private static void Count(Dictionary<string, (long Correct, long System, long Missing, long Other)> table, string op, int pid)
+    {
+        (long correct, long system, long missing, long other) = table.GetValueOrDefault(op);
+        if (pid == _writerPid) correct++;
+        else if (pid == 4) system++;
+        else if (pid <= 0) missing++;
+        else other++;
+        table[op] = (correct, system, missing, other);
     }
 
     private static void Named(string op, string fileName, int pid, bool mutating)
@@ -387,16 +471,17 @@ internal static class Measure
             if (SeenNames.Count < 200_000) SeenNames.Add(fileName);
         }
 
-        if (!mutating || s.Phase != "copy" || fileName.Length == 0) return;
+        if (s.Phase != "copy" || fileName.Length == 0) return;
         if (!fileName.StartsWith(Work.Canaries, StringComparison.OrdinalIgnoreCase)) return;
         if (string.Equals(fileName, _heldPath, StringComparison.OrdinalIgnoreCase)) return;
 
-        (long correct, long system, long missing, long other) = s.CanaryPid.GetValueOrDefault(op);
-        if (pid == _writerPid) correct++;
-        else if (pid == 4) system++;
-        else if (pid <= 0) missing++;
-        else other++;
-        s.CanaryPid[op] = (correct, system, missing, other);
+        if (Path.GetFileName(fileName).StartsWith(Work.MappedPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            Count(s.MappedPid, op, pid); // every operation: the Create/Open may carry the right PID
+            return;
+        }
+
+        if (mutating) Count(s.CanaryPid, op, pid);
     }
 
     /// <summary>Cost of the canary filter alone, per event, on the names actually seen.</summary>
@@ -433,14 +518,14 @@ internal static class Measure
         sb.AppendLine();
         sb.AppendLine($"{seconds} s per phase. CPU as % of one core (and of the whole machine).");
         sb.AppendLine();
-        sb.AppendLine("| Keywords | Phase | Events/s (all) | Probe CPU | Agent CPU | Events lost | Delivery delay p50 / p95 (ms) |");
-        sb.AppendLine("|---|---|---|---|---|---|---|");
+        sb.AppendLine("| Keywords | Phase | Events/s (all) | Probe CPU | Agent CPU | Events lost | Delivery delay p50 / p95 (ms) | Flushes |");
+        sb.AppendLine("|---|---|---|---|---|---|---|---|");
         foreach (PhaseStats s in results)
         {
             double probe = s.ProbeCpuSeconds / s.Seconds * 100;
             string agent = s.AgentCpuSeconds is double a ? $"{a / s.Seconds * 100:F1} % ({a / s.Seconds * 100 / Environment.ProcessorCount:F2} %)" : "n/a";
             string delivery = s.DeliveryMs.Count == 0 ? "--" : $"{Percentile(s.DeliveryMs, 0.5):F0} / {Percentile(s.DeliveryMs, 0.95):F0}";
-            sb.AppendLine($"| {s.Config} | {s.Phase} | {s.AllEvents / s.Seconds:N0} | {probe:F1} % ({probe / Environment.ProcessorCount:F2} %) | {agent} | {s.EventsLost} | {delivery} |");
+            sb.AppendLine($"| {s.Config} | {s.Phase} | {s.AllEvents / s.Seconds:N0} | {probe:F1} % ({probe / Environment.ProcessorCount:F2} %) | {agent} | {s.EventsLost} | {delivery} | {s.Flushes} |");
         }
 
         sb.AppendLine();
@@ -472,7 +557,24 @@ internal static class Measure
             }
 
             sb.AppendLine();
+            sb.AppendLine("Pattern 7, memory-mapped rewrite of a canary: every operation on the mapped canaries, by PID:");
+            sb.AppendLine();
+            sb.AppendLine("| Operation | Writer's PID (correct) | System (4) | None (<= 0) | Another PID (wrong) |");
+            sb.AppendLine("|---|---|---|---|---|");
+            foreach ((string op, (long c, long sys, long none, long other)) in s.MappedPid.OrderBy(p => p.Key, StringComparer.Ordinal))
+            {
+                sb.AppendLine($"| {op} | {c} | {sys} | {none} | {other} |");
+            }
+
+            sb.AppendLine();
             sb.AppendLine($"Handle opened before the session, written during it: {s.HeldWrites} writes seen, {s.HeldWritesNamed} with the file name resolved.");
+            if (s.WriterStartFromOs is DateTime os)
+            {
+                sb.AppendLine(s.WriterStartFromEtw is DateTime etw
+                    ? $"Writer start time: Process/Start {etw:HH:mm:ss.fff}, OS (GetProcessTimes) {os:HH:mm:ss.fff}, difference {(etw - os).TotalMilliseconds:F1} ms."
+                    : $"Writer start time: no Process/Start event seen for PID {_writerPid}; OS {os:HH:mm:ss.fff}.");
+            }
+
             sb.AppendLine();
         }
 
