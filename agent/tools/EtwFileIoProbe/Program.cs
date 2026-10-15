@@ -243,12 +243,15 @@ internal static class Measure
             processing.Start();
             Thread.Sleep(2000); // let the session settle (rundown) before measuring
 
+            // EventsLost is cumulative and only readable while the session runs.
             PhaseStats rest = RunPhase(name, "rest", seconds, agentPid, held, copy: false);
+            rest.EventsLost = Lost(session);
             PhaseStats copy = RunPhase(name, "copy", seconds, agentPid, held, copy: true);
+            int lostAtEnd = Lost(session);
+            copy.EventsLost = lostAtEnd < 0 || rest.EventsLost < 0 ? -1 : lostAtEnd - rest.EventsLost;
             Interlocked.Exchange(ref _current, null);
             session.Stop();
             processing.Join(TimeSpan.FromSeconds(10));
-            rest.EventsLost = copy.EventsLost = session.EventsLost;
             results.Add(rest);
             results.Add(copy);
         }
@@ -303,8 +306,20 @@ internal static class Measure
         stats.Seconds = clock.Elapsed.TotalSeconds;
         stats.ProbeCpuSeconds = Cpu(self) - probeStart;
         stats.AgentCpuSeconds = agent is null || agent.HasExited ? null : Cpu(agent) - agentStart;
-        Console.WriteLine($"  {config,-30} {phase,-5} events {stats.AllEvents,10:N0}  probe CPU {stats.ProbeCpuSeconds:F2} s");
+        Console.WriteLine($"  {config,-30} {phase,-5} events {stats.AllEvents,10:N0}  probe CPU {stats.ProbeCpuSeconds:F2} s  agent CPU {(stats.AgentCpuSeconds is double a ? $"{a:F2} s" : "n/a")}");
         return stats;
+    }
+
+    private static int Lost(TraceEventSession session)
+    {
+        try
+        {
+            return session.EventsLost;
+        }
+        catch (System.Runtime.InteropServices.COMException)
+        {
+            return -1; // unreadable: reported as such, never as 0
+        }
     }
 
     /// <summary>The agent under measurement; null (reported "n/a") if it is not running.</summary>
