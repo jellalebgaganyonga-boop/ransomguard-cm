@@ -17,8 +17,10 @@ on:
   pull_request:
     branches: [main]
   # A review branch is validated in full before sprint8/recovery fast-forwards onto it.
+  # Every push of every branch, like the E2E: a branch about to be merged never depends on
+  # a manual run (fix/** branches used to need workflow_dispatch).
   push:
-    branches: ['review/**']
+    branches: ['**']
 
 permissions:
   contents: read
