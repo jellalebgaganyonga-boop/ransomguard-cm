@@ -214,7 +214,6 @@ public sealed class AgentConfigurationValidatorTests
         {
             Id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
             Hostname = "TEST-HOST",
-            Version = "0.3.0"
         },
         Detection = new DetectionOptions
         {

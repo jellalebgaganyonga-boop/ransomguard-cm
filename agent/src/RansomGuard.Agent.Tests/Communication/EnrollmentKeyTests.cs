@@ -65,7 +65,7 @@ public sealed class EnrollmentKeyTests : IDisposable
     {
         var config = new AgentConfiguration
         {
-            Identity = new AgentIdentityOptions { Id = "test-agent", Hostname = "TEST", Version = "0.4.0" },
+            Identity = new AgentIdentityOptions { Id = "test-agent", Hostname = "TEST" },
             Server = new ServerOptions { BaseUrl = "https://grid.test", EnrollmentOtp = "RG-CAM-2026-X7K9P3" },
             Detection = new DetectionOptions { WatchPaths = [] },
             Database = new DatabaseOptions { ConnectionString = $"Data Source={Path.Combine(_dir, "agent.db")}" },

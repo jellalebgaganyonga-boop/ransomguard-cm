@@ -50,7 +50,7 @@ public sealed class HeartbeatTransmissionTests : IDisposable
 
         var config = new AgentConfiguration
         {
-            Identity = new AgentIdentityOptions { Id = "test-agent", Hostname = "TEST", Version = "1.0.0" },
+            Identity = new AgentIdentityOptions { Id = "test-agent", Hostname = "TEST" },
             Server = new ServerOptions { BaseUrl = "https://localhost" },
             Detection = new DetectionOptions { WatchPaths = [] },
             Database = new DatabaseOptions { ConnectionString = $"Data Source={Path.GetTempPath()}rg_hb_{Guid.NewGuid():N}.db" },
@@ -165,6 +165,14 @@ public sealed class HeartbeatTransmissionTests : IDisposable
         health.RecordFailure();
         health.RecordFailure();
         (await heartbeat.BuildHeartbeatAsync(CancellationToken.None)).Transmission!.AuditWriteFailures.ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task The_heartbeat_reports_the_version_of_the_running_build()
+    {
+        HeartbeatRequest beat = await _heartbeat.BuildHeartbeatAsync(CancellationToken.None);
+
+        beat.AgentVersion.ShouldBe(AgentVersion.Current); // never a setting (the demo showed 0.3.0)
     }
 
     private static PendingAlertUpload Upload(PendingUploadStatus status, DateTime firstAttemptAt) => new()

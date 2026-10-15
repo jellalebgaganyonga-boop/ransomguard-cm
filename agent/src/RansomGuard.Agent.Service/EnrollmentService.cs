@@ -81,7 +81,7 @@ public sealed class EnrollmentService : BackgroundService
                     Hostname = Environment.MachineName,
                     Fqdn = $"{Environment.MachineName}.local",
                     OsVersion = Environment.OSVersion.ToString(),
-                    AgentVersion = _config.Identity.Version,
+                    AgentVersion = AgentVersion.Current,
                     HardwareFingerprint = GenerateHardwareFingerprint(),
                     // GRID-SEC-003: the GRID verifies our audit chain with OUR key; it never makes one.
                     Ed25519PublicKeyB64 = _auditLogSigner.GetPublicKeyBase64(),

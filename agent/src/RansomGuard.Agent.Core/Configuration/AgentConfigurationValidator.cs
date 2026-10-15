@@ -55,7 +55,6 @@ public sealed class AgentIdentityOptionsValidator : AbstractValidator<AgentIdent
             .WithMessage("Agent.Id must be a valid GUID or 'auto-generated-on-first-run'.");
 
         RuleFor(x => x.Hostname).NotEmpty();
-        RuleFor(x => x.Version).NotEmpty();
     }
 }
 

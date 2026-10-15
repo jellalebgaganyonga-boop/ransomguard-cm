@@ -140,7 +140,7 @@ internal sealed class MonitorHarness : IDisposable
     {
         var config = new AgentConfiguration
         {
-            Identity = new AgentIdentityOptions { Id = "test-agent", Hostname = "TEST", Version = "1.0.0" },
+            Identity = new AgentIdentityOptions { Id = "test-agent", Hostname = "TEST" },
             Server = new ServerOptions { BaseUrl = "https://localhost" },
             Detection = new DetectionOptions { WatchPaths = watchPaths },
             Database = new DatabaseOptions { ConnectionString = "Data Source=:memory:" },

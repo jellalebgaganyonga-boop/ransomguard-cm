@@ -172,7 +172,7 @@ public sealed class GridHeartbeatService : BackgroundService
         return new HeartbeatRequest
         {
             AgentUptimeSeconds = uptimeSeconds,
-            AgentVersion = _config.Identity.Version,
+            AgentVersion = AgentVersion.Current,
             OsVersion = Environment.OSVersion.ToString(),
             ThreatIntelVersion = null,
             LastDetectionAt = _forwarding.LastDetectionAtUtc,

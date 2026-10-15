@@ -55,7 +55,7 @@ public sealed class Worker : BackgroundService
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("RansomGuard-CM Agent v{Version} starting", _config.Identity.Version);
+        _logger.LogInformation("RansomGuard-CM Agent v{Version} starting", AgentVersion.Current);
 
         Task persistenceTask = ConsumeEventsAsync(stoppingToken);
 

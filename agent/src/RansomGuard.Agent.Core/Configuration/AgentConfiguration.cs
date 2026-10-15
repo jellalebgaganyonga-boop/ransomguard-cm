@@ -142,11 +142,8 @@ public sealed record AgentIdentityOptions
     [Required]
     public required string Hostname { get; init; }
 
-    /// <summary>
-    /// Current agent version following SemVer.
-    /// </summary>
-    [Required]
-    public required string Version { get; init; }
+    // No Version here: the version reported is the one of the build that runs
+    // (AgentVersion.Current), never a setting someone forgets to update.
 }
 
 /// <summary>

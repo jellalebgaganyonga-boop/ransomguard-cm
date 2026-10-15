@@ -126,7 +126,6 @@ public sealed class AgentHostTests : IDisposable
     {
         ["Agent:Identity:Id"] = "auto-generated-on-first-run",
         ["Agent:Identity:Hostname"] = "AUTO",
-        ["Agent:Identity:Version"] = "0.3.0",
         ["Agent:Detection:WatchPaths:0"] = @"C:\Temp",
         ["Agent:Server:BaseUrl"] = baseUrl,
     };

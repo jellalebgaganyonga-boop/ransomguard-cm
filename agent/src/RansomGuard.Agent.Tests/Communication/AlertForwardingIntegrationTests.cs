@@ -369,7 +369,7 @@ public sealed class AlertForwardingIntegrationTests : IDisposable
         // Build minimal valid AgentConfiguration for EnrollmentStateManager + EnrollmentService
         var config = new AgentConfiguration
         {
-            Identity = new AgentIdentityOptions { Id = "test-agent", Hostname = "TEST", Version = "1.0.0" },
+            Identity = new AgentIdentityOptions { Id = "test-agent", Hostname = "TEST" },
             Server = new ServerOptions { BaseUrl = "https://localhost" },
             Detection = new DetectionOptions { WatchPaths = [] },
             Database = new DatabaseOptions { ConnectionString = $"Data Source={Path.GetTempPath()}ransomguard_test_{Guid.NewGuid()}.db" },
