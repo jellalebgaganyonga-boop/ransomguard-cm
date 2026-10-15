@@ -188,6 +188,14 @@ jobs:
       - name: Build
         run: dotnet build RansomGuard.Agent.sln -c Release --no-restore
 
+      # The EF model must match the migrations: a model change without its migration would
+      # ship a schema the code does not expect (the AGT-AUD-002 migration was written by hand).
+      # EF Core 8 offers this as a CLI command; the HasPendingModelChanges() API is EF Core 9.
+      - name: EF model matches the migrations
+        run: |
+          dotnet tool install --global dotnet-ef --version 8.0.31
+          dotnet ef migrations has-pending-model-changes --project RansomGuard.Agent.Core --startup-project RansomGuard.Agent.Core --configuration Release --no-build
+
       - name: Tests
         # Stress tests are wall-clock sensitive and flake on shared runners;
         # they run in the nightly workflow instead.
