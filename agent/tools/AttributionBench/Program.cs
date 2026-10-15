@@ -64,10 +64,12 @@ Task consumer = Task.Run(async () =>
 
         if (consumerDelayMs > 0) await Task.Delay(consumerDelayMs);
         IReadOnlyList<ProcessAttribution> holders = restartManager.GetProcessesLockingFile(evt.Path);
+        // Check 1: the independent reference query, right after the production one.
+        ReferenceResult reference = ReferenceRestartManager.Holders(evt.Path);
         ProcessAttribution? offender = holders
             .OrderByDescending(p => p.StartTime ?? DateTime.MinValue) // as SentinelMonitor
             .FirstOrDefault();
-        tcs.TrySetResult(new Attempt(evt.Kind, evt.SeenAt, holders.Count, offender?.ProcessId));
+        tcs.TrySetResult(new Attempt(evt.Kind, evt.SeenAt, holders.Count, offender?.ProcessId, reference));
     }
 });
 
@@ -108,6 +110,29 @@ Pattern[] patterns =
     }),
 ];
 
+// Check 2: the owner-thread probe. The bench queries the Restart Manager about a file from the
+// thread that holds it open for writing. If neither query sees the bench here, the environment
+// (rights, session, file location) is blind and any 0 % below is meaningless.
+const int OwnerProbes = 5;
+int ownerSeenByProduction = 0, ownerSeenByReference = 0;
+var ownerReferenceErrors = new List<int>();
+string ownerProbe = Path.Combine(dir, "owner_thread_probe.txt");
+for (int i = 0; i < OwnerProbes; i++)
+{
+    using var held = new FileStream(ownerProbe, FileMode.Create, FileAccess.Write, FileShare.Read);
+    held.Write(RandomNumberGenerator.GetBytes(4096));
+    held.Flush();
+    if (restartManager.GetProcessesLockingFile(ownerProbe).Any(p => p.ProcessId == benchPid)) ownerSeenByProduction++;
+    ReferenceResult owner = ReferenceRestartManager.Holders(ownerProbe);
+    if (owner.Failed) ownerReferenceErrors.Add(owner.Error);
+    else if (owner.Pids.Contains(benchPid)) ownerSeenByReference++;
+}
+
+File.Delete(ownerProbe);
+Console.WriteLine($"Check 2, owner-thread probe (handle held by this thread): production saw the bench {ownerSeenByProduction}/{OwnerProbes}, reference {ownerSeenByReference}/{OwnerProbes}"
+    + (ownerReferenceErrors.Count > 0 ? $", reference errors {string.Join(",", ownerReferenceErrors)}" : ""));
+Console.WriteLine();
+
 var results = new List<PatternResult>();
 foreach (Pattern pattern in patterns)
 {
@@ -146,6 +171,9 @@ foreach (Pattern pattern in patterns)
         }
 
         Attempt attempt = tcs.Task.Result;
+        if (attempt.Reference.Failed) outcome.ReferenceErrors++;
+        else if (attempt.Reference.Pids.Count > 0 && attempt.Holders == 0) outcome.OnlyReferenceFound++;
+        else if (attempt.Reference.Pids.Count == 0 && attempt.Holders > 0) outcome.OnlyProductionFound++;
         outcome.EventVsRelease.Add((attempt.SeenAt - handleReleased).TotalMilliseconds);
         if (attempt.Holders > 1) outcome.MoreThanOneHolder++;
         if (attempt.OffenderPid is null) { Console.Write('.'); outcome.NotAttributed++; }
@@ -181,6 +209,22 @@ foreach (PatternResult r in results)
     Console.WriteLine($"  pattern {r.Pattern.Number}: median {median} ms   before-close {beforeClose}/{r.EventVsRelease.Count}   no event {r.NoEvent}   action failed {r.ActionFailures.Count}");
 }
 
+Console.WriteLine();
+Console.WriteLine("Check 1, reference Restart Manager query (independent of the production wrapper), per event:");
+foreach (PatternResult r in results)
+{
+    Console.WriteLine($"  pattern {r.Pattern.Number}: only the reference found a holder {r.OnlyReferenceFound}   only production {r.OnlyProductionFound}   reference API errors {r.ReferenceErrors}");
+}
+
+int onlyReference = results.Sum(r => r.OnlyReferenceFound);
+int referenceErrors = results.Sum(r => r.ReferenceErrors);
+bool instrumentValid = ownerSeenByReference == OwnerProbes && ownerSeenByProduction == OwnerProbes
+    && onlyReference == 0 && referenceErrors == 0;
+Console.WriteLine();
+Console.WriteLine(instrumentValid
+    ? "Instrument checks 1 and 2: PASSED -- the production wrapper sees what Windows sees, and the environment is not blind."
+    : $"Instrument checks 1 and 2: FAILED -- owner probe production {ownerSeenByProduction}/{OwnerProbes}, reference {ownerSeenByReference}/{OwnerProbes}; only-reference events {onlyReference}; reference errors {referenceErrors}. The figures below do not measure the agent.");
+
 int decisive = results.Where(r => r.Pattern.Number is 3 or 5 or 6).Sum(r => r.CorrectPid);
 int decisiveTotal = 3 * iterations;
 double decisiveRate = decisiveTotal == 0 ? 0 : 100.0 * decisive / decisiveTotal;
@@ -192,7 +236,7 @@ Console.WriteLine(decisiveRate switch
     >= 50 => "  -> threshold 50-80%: ship, and start ETW FileIO immediately after",
     _ => "  -> threshold < 50%: attribution misses the real attacks",
 });
-return 0;
+return instrumentValid ? 0 : 4;
 
 static string Rate(int part, int total) => total == 0 ? "n/a" : $"{100.0 * part / total:0}%";
 
@@ -215,7 +259,7 @@ static byte[] EncryptOwnTestData(byte[] plain)
 
 internal sealed record WatcherEvent(string Path, string Kind, DateTime SeenAt);
 
-internal sealed record Attempt(string Kind, DateTime SeenAt, int Holders, int? OffenderPid);
+internal sealed record Attempt(string Kind, DateTime SeenAt, int Holders, int? OffenderPid, ReferenceResult Reference);
 
 internal sealed record Pattern(int Number, string Name, string ExpectedEvent, Func<string, Task> Act);
 
@@ -227,6 +271,9 @@ internal sealed class PatternResult(Pattern pattern)
     public int NotAttributed { get; set; }
     public int NoEvent { get; set; }
     public int MoreThanOneHolder { get; set; }
+    public int OnlyReferenceFound { get; set; }
+    public int OnlyProductionFound { get; set; }
+    public int ReferenceErrors { get; set; }
     public List<double> EventVsRelease { get; } = [];
     public List<string> ActionFailures { get; } = [];
 }

@@ -115,23 +115,30 @@ go out without a process (debt AGT-ATTR-001 in `agent/README.md`).
 A 0 % is suspect by nature: it can be a property of the agent or a defect of
 the bench. The run of 2026-09-30 rested on four independent checks of the
 instrument (report of 2026-10-01, "validation de l'instrument"). **This rebuilt
-bench carries only the fourth.**
+bench carries checks 1, 2 and 4** (checks 1 and 2 rebuilt on 2026-10-15,
+AGT-BENCH-001); check 3 is not rebuilt.
 
 | # | Check | What it rules out | Result on 2026-09-30 | In this bench |
 |---|---|---|---|---|
-| 1 | **Reference call.** For every event, the production `RestartManagerHelper.GetProcessesLockingFile` compared with a by-the-book Restart Manager sequence written independently (`RmStartSession`, `RmRegisterResources`, `RmGetList` twice — `ERROR_MORE_DATA` to size the array, then fill — `RmEndSession`). | A defect in the production wrapper that would leave the agent blind where Windows is not. | 0 events out of 120 where only the reference call found a holder. | **Not rebuilt** (AGT-BENCH-001) |
-| 2 | **Owner-thread probe.** The writer queries the Restart Manager about its own file from its own thread, while it still holds the handle. | That the Restart Manager cannot see the bench's process at all on this machine (rights, session, file location) — a 0 caused by the environment. | The holder is seen (1 holder) while the handle is held. | **Not rebuilt** (AGT-BENCH-001) |
+| 1 | **Reference call.** For every event, the production `RestartManagerHelper.GetProcessesLockingFile` compared with a by-the-book Restart Manager sequence written independently (`RmStartSession`, `RmRegisterResources`, `RmGetList` twice — `ERROR_MORE_DATA` to size the array, then fill — `RmEndSession`). | A defect in the production wrapper that would leave the agent blind where Windows is not. | 0 events out of 120 where only the reference call found a holder. | **Rebuilt** (`ReferenceRestartManager.cs`), run on every event |
+| 2 | **Owner-thread probe.** The writer queries the Restart Manager about its own file from its own thread, while it still holds the handle. | That the Restart Manager cannot see the bench's process at all on this machine (rights, session, file location) — a 0 caused by the environment. | The holder is seen (1 holder) while the handle is held. | **Rebuilt**, 5 probes before the patterns, production and reference |
 | 3 | **Restart Manager in isolation**, outside the watcher pipeline, queried 0, 250, 1 000 and 3 000 ms after the file is opened. | That the Restart Manager is unreliable on this machine whatever the timing. | 6 / 6 at every cadence. | **Not rebuilt** (AGT-BENCH-001) — a separate experiment of the original, not counted among the two checks named in `c57449c` |
 | 4 | **Event arrival** relative to the moment the writer releases the handle. | Explains every failure by timing. | Median 0 ms on every pattern. | **Rebuilt**, printed at the end of each run |
 
-What the rebuilt bench shows on its own (2026-10-08): the production query,
-made when the watcher event is consumed, never names the writer, and the event
-arrives when the handle is released. **It does not rule out, by itself, that
-the production wrapper or the machine is blind**: that part of the conclusion
-rests on checks 1–3 of the original run, which can no longer be replayed.
-Checks 1 and 2 (and 3) are to be rebuilt before this bench measures the move to
-ETW attribution: an "after" figure is only comparable to a "before" figure
-produced by the same, fully checked instrument.
+The run of 2026-10-15 (development machine, `-- 20 10`), with checks 1 and 2:
+
+- check 2, owner-thread probe: production saw the bench **5/5**, reference **5/5**;
+- check 1, reference query on every event: **0** events where only the reference
+  found a holder, 0 where only production did, **0** API errors;
+- **0 / 120**, 0 / 60 on patterns 3, 5 and 6; event arrival median 0 ms.
+
+So the "before" figure now rests on the instrument itself, not on the original
+run: the production wrapper sees what Windows sees, the machine is not blind,
+and the writer is still never named. The bench prints the verdict of both
+checks and exits 4 when either fails: an "after" figure (ETW attribution) is
+only comparable to a "before" figure produced by this same, checked instrument.
+Check 3 (Restart Manager in isolation at fixed cadences) adds nothing once the
+owner-thread probe passes, and is not rebuilt.
 
 ## Provenance
 
