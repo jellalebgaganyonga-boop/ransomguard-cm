@@ -27,7 +27,9 @@ public sealed class TcpMockCommunicatorTests : IAsyncDisposable
 
     private static IronCladOptions MakeOptions(int port) => new()
     {
-        TcpMockEndpoint = $"localhost:{port}",
+        // 127.0.0.1, not localhost: the listener is IPv4 only, and on Windows "localhost" tries ::1
+        // first -- refused, retried for ~2 s -- which tipped the 5 s connect timeout on busy runners.
+        TcpMockEndpoint = $"127.0.0.1:{port}",
         RelayCount = 4,
         CommandTimeoutSeconds = 5,
         HeartbeatIntervalSeconds = 60, // high to avoid interference in short tests
@@ -41,7 +43,7 @@ public sealed class TcpMockCommunicatorTests : IAsyncDisposable
         // Use a port that nobody is listening on
         var options = new IronCladOptions
         {
-            TcpMockEndpoint = "localhost:59999",
+            TcpMockEndpoint = "127.0.0.1:59999",
             RelayCount = 4,
             CommandTimeoutSeconds = 5,
             HeartbeatIntervalSeconds = 60,
@@ -237,7 +239,7 @@ public sealed class TcpMockCommunicatorTests : IAsyncDisposable
 
             var options = new IronCladOptions
             {
-                TcpMockEndpoint = $"localhost:{port}",
+                TcpMockEndpoint = $"127.0.0.1:{port}",
                 RelayCount = 4,
                 CommandTimeoutSeconds = 5,
                 HeartbeatIntervalSeconds = 1,
