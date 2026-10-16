@@ -37,6 +37,14 @@ public sealed class ThrottleProcessAction : IExfilAction
         long bytesPerSecond = Math.Max(1, finding.BytesTransferred / 3600);
         long throttleBitsPerSecond = Math.Max(8000, bytesPerSecond * 8 / 10); // 10% floor of 1 KB/s
 
+        // Trace before the command (AGT-AUD-002): the intent is recorded — one durable INSERT,
+        // no wait on the chain — before the endpoint is changed, then the real result.
+        await _auditLog.AppendAsync(
+            "ExfilThrottleIntent",
+            $"Process={finding.ProcessName} (PID {finding.ProcessId}), ThrottleBps={throttleBitsPerSecond}",
+            entityType: "ExfilFinding",
+            cancellationToken: CancellationToken.None);
+
         bool applied = _throttler.ApplyThrottle(
             finding.ProcessId, finding.ProcessName, throttleBitsPerSecond);
 
@@ -47,7 +55,7 @@ public sealed class ThrottleProcessAction : IExfilAction
             applied ? "ExfilThrottle" : "ExfilThrottleFailed",
             details,
             entityType: "ExfilFinding",
-            cancellationToken: ct);
+            cancellationToken: CancellationToken.None);
 
         if (applied)
             _logger.LogWarning("EXFIL ACTION [Throttle]: {Details}", details);

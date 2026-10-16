@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -14,27 +15,28 @@ namespace RansomGuard.Agent.Service;
 /// Runs once on startup to reconcile stored device state with actual device state.
 /// If FailSafeRestoreOnDisconnect is true and agent had crashed mid-cut,
 /// restores ports that should not be cut.
+/// <para>
+/// Registered as a hosted service, i.e. a singleton: the scoped repository and action engine
+/// (both on the DbContext) are resolved in a scope per reconciliation, never captured.
+/// </para>
 /// </summary>
 public sealed class IronCladStateReconciliationService : IHostedService
 {
     private readonly IIronCladCommunicator _communicator;
     private readonly IronCladOptions _options;
-    private readonly IIronCladDeviceStateRepository _stateRepo;
-    private readonly IIronCladActionEngine _actionEngine;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<IronCladStateReconciliationService> _logger;
 
     /// <summary>Initializes the reconciliation service.</summary>
     public IronCladStateReconciliationService(
         IIronCladCommunicator communicator,
         IOptions<IronCladOptions> options,
-        IIronCladDeviceStateRepository stateRepo,
-        IIronCladActionEngine actionEngine,
+        IServiceScopeFactory scopeFactory,
         ILogger<IronCladStateReconciliationService> logger)
     {
         _communicator = communicator;
         _options = options.Value;
-        _stateRepo = stateRepo;
-        _actionEngine = actionEngine;
+        _scopeFactory = scopeFactory;
         _logger = logger;
     }
 
@@ -58,7 +60,11 @@ public sealed class IronCladStateReconciliationService : IHostedService
 
         try
         {
-            await ReconcileAsync(cancellationToken).ConfigureAwait(false);
+            await using var scope = _scopeFactory.CreateAsyncScope();
+            await ReconcileAsync(
+                scope.ServiceProvider.GetRequiredService<IIronCladDeviceStateRepository>(),
+                scope.ServiceProvider.GetRequiredService<IIronCladActionEngine>(),
+                cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -69,9 +75,10 @@ public sealed class IronCladStateReconciliationService : IHostedService
     /// <inheritdoc />
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
-    private async Task ReconcileAsync(CancellationToken ct)
+    private async Task ReconcileAsync(
+        IIronCladDeviceStateRepository stateRepo, IIronCladActionEngine actionEngine, CancellationToken ct)
     {
-        var storedStates = await _stateRepo.GetCurrentStatesAsync(ct).ConfigureAwait(false);
+        var storedStates = await stateRepo.GetCurrentStatesAsync(ct).ConfigureAwait(false);
         var health = await _communicator.CheckHealthAsync(ct).ConfigureAwait(false);
 
         if (health.PortStates.Count == 0)
@@ -95,7 +102,7 @@ public sealed class IronCladStateReconciliationService : IHostedService
                     portNumber, storedState, actualStateStr);
 
                 // Update stored state to match actual device
-                await _stateRepo.UpdateStateAsync(new IronCladDeviceState
+                await stateRepo.UpdateStateAsync(new IronCladDeviceState
                 {
                     Id = Guid.NewGuid(),
                     PortNumber = portNumber,
@@ -115,7 +122,7 @@ public sealed class IronCladStateReconciliationService : IHostedService
                 _logger.LogWarning("FailSafe: restoring {Count} cut ports after agent restart: {Ports}",
                     cutPorts.Count, string.Join(", ", cutPorts));
 
-                await _actionEngine.RestoreAllPortsAsync("FailSafe restore after agent restart", ct)
+                await actionEngine.RestoreAllPortsAsync("FailSafe restore after agent restart", ct)
                     .ConfigureAwait(false);
             }
         }

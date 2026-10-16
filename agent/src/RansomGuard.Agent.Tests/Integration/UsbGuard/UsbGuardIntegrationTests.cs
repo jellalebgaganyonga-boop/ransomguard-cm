@@ -14,6 +14,7 @@ using RansomGuard.Agent.Core.Detection.UsbGuard.Models;
 using RansomGuard.Agent.Core.Detection.UsbGuard.Scanning;
 using RansomGuard.Agent.Core.Persistence;
 using RansomGuard.Agent.Core.Persistence.Entities;
+using RansomGuard.Agent.Core.Persistence.Repositories;
 using Shouldly;
 
 namespace RansomGuard.Agent.Tests.Integration.UsbGuard;
@@ -54,6 +55,9 @@ public sealed class UsbGuardIntegrationTests : IDisposable
             opt.UseSqlite($"Data Source={Path.Combine(_testDir, "di_test.db")}"));
         services.AddLogging();
         services.AddSingleton<IEntropyCalculator, EntropyCalculator>();
+        // The USB action engine writes every outcome to the audit log (as in ServiceRegistration).
+        services.AddScoped<IAuditLogRepository>(sp =>
+            new AuditLogRepository(sp.GetRequiredService<AgentDbContext>()));
 
         // USB GUARD services
         services.AddScoped<IUsbWhitelistService>(sp =>
@@ -79,6 +83,7 @@ public sealed class UsbGuardIntegrationTests : IDisposable
         sp.GetRequiredService<IUsbWhitelistService>().ShouldNotBeNull();
         sp.GetRequiredService<IUsbContentScanner>().ShouldNotBeNull();
         sp.GetRequiredService<IUsbActionEngine>().ShouldNotBeNull();
+        sp.GetRequiredService<IAuditLogRepository>().ShouldNotBeNull();
         sp.GetRequiredService<IMagicByteValidator>().ShouldNotBeNull();
         sp.GetRequiredService<AgentDbContext>().ShouldNotBeNull();
 
@@ -147,14 +152,16 @@ public sealed class UsbGuardIntegrationTests : IDisposable
     public async Task BootableUsb_TriggersImmediateBlockAction()
     {
         var device = CreateTestDevice(null) with { IsBootable = true };
-        var actionEngine = new UsbActionEngine(new Mock<ILogger<UsbActionEngine>>().Object);
+        var actionEngine = new UsbActionEngine(new Mock<ILogger<UsbActionEngine>>().Object, new Mock<IAuditLogRepository>().Object);
 
         var result = await actionEngine.ExecuteAsync(
             device, ScanSeverity.Critical, UsbOperatingMode.Strict,
             "Bootable USB blocked by policy");
 
         result.ActionType.ShouldBe(UsbActionType.BlockAndEject);
-        result.Success.ShouldBeTrue();
+        // No IronClad here: the software block is selected but not implemented.
+        result.Success.ShouldBeFalse();
+        result.ReasonCode.ShouldBe(UsbActionReasonCode.NotImplemented);
     }
 
     // Test 5: High severity scan triggers action and fires genealogy enrichment
@@ -162,7 +169,7 @@ public sealed class UsbGuardIntegrationTests : IDisposable
     public async Task HighSeverityScan_TriggersAction_AndPersistsAlert()
     {
         var device = CreateTestDevice(null);
-        var actionEngine = new UsbActionEngine(new Mock<ILogger<UsbActionEngine>>().Object);
+        var actionEngine = new UsbActionEngine(new Mock<ILogger<UsbActionEngine>>().Object, new Mock<IAuditLogRepository>().Object);
 
         // Execute action for critical finding
         var actionResult = await actionEngine.ExecuteAsync(
@@ -170,7 +177,9 @@ public sealed class UsbGuardIntegrationTests : IDisposable
             "Malicious PE disguised as PDF");
 
         actionResult.ActionType.ShouldBe(UsbActionType.ReadOnlyUsb);
-        actionResult.Success.ShouldBeTrue();
+        // ReadOnly is selected but not implemented: nothing was done to the device.
+        actionResult.Success.ShouldBeFalse();
+        actionResult.ReasonCode.ShouldBe(UsbActionReasonCode.NotImplemented);
 
         // Persist alert
         var alert = new UsbAlert
@@ -288,7 +297,7 @@ public sealed class UsbGuardIntegrationTests : IDisposable
         await _context.SaveChangesAsync();
 
         // Action engine
-        var actionEngine = new UsbActionEngine(new Mock<ILogger<UsbActionEngine>>().Object);
+        var actionEngine = new UsbActionEngine(new Mock<ILogger<UsbActionEngine>>().Object, new Mock<IAuditLogRepository>().Object);
         var actionResult = await actionEngine.ExecuteAsync(
             device, scanReport.OverallSeverity, UsbOperatingMode.Strict,
             "PE disguised as PDF");

@@ -32,7 +32,7 @@ Cameroon, like the rest of sub-Saharan Africa, faces a wave of cybercriminal att
 > *"Before RansomGuard, we were at the mercy of the first ransomware that came along. We were afraid of every USB key plugged in by staff. Today, the system detects, isolates, backs up, and sends us a report in French — without us needing to intervene. It's exactly what we needed."*
 > — Dr Mballa, Director, Yaoundé Central Hospital
 
-**How it works.** A lightweight agent installs on every Windows workstation in the hospital — including older Windows 7 SP1 machines coupled with medical equipment. A Linux server centralizes supervision. When a ransomware attack is detected — even one never seen before — RansomGuard automatically isolates the infected workstation from the network within 3 seconds, triggers an emergency backup to a physically isolated disk (IRONCLAD technology), and generates a bilingual PDF report for the director. The doctor arriving the next morning doesn't discover a disaster — they discover a report.
+**How it works.** A lightweight agent installs on the hospital's Windows 10 and Windows 11 workstations. Older Windows 7 machines coupled with medical equipment are not covered today: the agent runs on .NET 8, which does not support Windows 7. A Linux server centralizes supervision. When a ransomware attack is detected — even one never seen before — RansomGuard automatically isolates the infected workstation from the network within 3 seconds, triggers an emergency backup to a physically isolated disk (IRONCLAD technology), and generates a bilingual PDF report for the director. The doctor arriving the next morning doesn't discover a disaster — they discover a report.
 
 **The price factor.** Where a solution like CrowdStrike costs USD 35,000 per year for an average hospital, RansomGuard-CM is available starting at FCFA 850,000 per year (approximately USD 1,400) for a 50-workstation hospital. Payable via Mobile Money through MTN MoMo and Orange Money.
 
@@ -130,7 +130,7 @@ Five concrete innovations:
 - Mastery of low-level Windows development (ETW, WMI) for the agent
 - Mastery of applied cryptography (Ed25519, AES-256-GCM)
 - Hardware integration capability (Arduino GPIO for IRONCLAD)
-- Mastery of embedded Machine Learning (Isolation Forest on Windows 7)
+- Mastery of embedded Machine Learning (Isolation Forest on the endpoint, Windows 10/11; a Windows 7 agent would be a separate product, to be decided before Sprint 11)
 - Microsoft-trusted code signing capability
 
 ---

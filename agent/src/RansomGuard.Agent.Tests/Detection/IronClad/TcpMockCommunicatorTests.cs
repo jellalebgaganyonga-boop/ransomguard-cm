@@ -27,7 +27,9 @@ public sealed class TcpMockCommunicatorTests : IAsyncDisposable
 
     private static IronCladOptions MakeOptions(int port) => new()
     {
-        TcpMockEndpoint = $"localhost:{port}",
+        // 127.0.0.1, not localhost: the listener is IPv4 only, and on Windows "localhost" tries ::1
+        // first -- refused, retried for ~2 s -- which tipped the 5 s connect timeout on busy runners.
+        TcpMockEndpoint = $"127.0.0.1:{port}",
         RelayCount = 4,
         CommandTimeoutSeconds = 5,
         HeartbeatIntervalSeconds = 60, // high to avoid interference in short tests
@@ -36,12 +38,21 @@ public sealed class TcpMockCommunicatorTests : IAsyncDisposable
     };
 
     [Fact]
+    public void The_default_endpoint_is_the_IPv4_loopback_the_mock_server_listens_on()
+    {
+        // MockArduinoServer listens on IPAddress.Loopback; "localhost" would cost ~2 s of ::1 retries.
+        string host = new IronCladOptions().TcpMockEndpoint.Split(':')[0];
+
+        Assert.Equal(IPAddress.Loopback, IPAddress.Parse(host));
+    }
+
+    [Fact]
     public async Task Connect_Without_Server_Returns_False_After_Timeout()
     {
         // Use a port that nobody is listening on
         var options = new IronCladOptions
         {
-            TcpMockEndpoint = "localhost:59999",
+            TcpMockEndpoint = "127.0.0.1:59999",
             RelayCount = 4,
             CommandTimeoutSeconds = 5,
             HeartbeatIntervalSeconds = 60,
@@ -237,7 +248,7 @@ public sealed class TcpMockCommunicatorTests : IAsyncDisposable
 
             var options = new IronCladOptions
             {
-                TcpMockEndpoint = $"localhost:{port}",
+                TcpMockEndpoint = $"127.0.0.1:{port}",
                 RelayCount = 4,
                 CommandTimeoutSeconds = 5,
                 HeartbeatIntervalSeconds = 1,

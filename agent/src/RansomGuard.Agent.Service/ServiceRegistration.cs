@@ -2,9 +2,11 @@ using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using RansomGuard.Agent.Core.Configuration;
+using RansomGuard.Agent.Core.Diagnostics;
 using RansomGuard.Agent.Core.Detection;
 using RansomGuard.Agent.Core.Detection.Entropy;
 using RansomGuard.Agent.Core.Detection.Genealogy;
@@ -16,6 +18,7 @@ using RansomGuard.Agent.Core.Detection.ExfilWatch.Rules;
 using RansomGuard.Agent.Core.Detection.IndicatorRemoval;
 using RansomGuard.Agent.Core.Detection.ThreatIntel;
 using RansomGuard.Agent.Core.Detection.UsbGuard;
+using RansomGuard.Agent.Core.Communication;
 using RansomGuard.Agent.Core.Detection.IronClad;
 using RansomGuard.Agent.Core.Detection.IronClad.Actions;
 using RansomGuard.Agent.Core.Detection.IronClad.Communication;
@@ -40,6 +43,45 @@ public static class ServiceRegistration
     /// <summary>
     /// Registers all RansomGuard agent services into the DI container.
     /// </summary>
+    /// <summary>
+    /// Registers the detection monitors as hosted services, in start order. Kept here rather
+    /// than in Program.cs so the full set of agent services can be built in tests, with scope
+    /// validation, exactly as the agent builds them.
+    /// </summary>
+    public static void AddMonitors(IServiceCollection services)
+    {
+        // SENTINEL deployment runs before Worker to ensure canaries exist
+        services.AddHostedService<SentinelDeploymentService>();
+        services.AddHostedService<SentinelMonitor>();
+        services.AddHostedService<EntropyMonitor>();
+
+        // USB GUARD monitor
+        services.AddHostedService<UsbDeviceMonitor>();
+
+        // EXFIL WATCH monitor + firewall rule cleanup
+        services.AddHostedService<ExfilWatchMonitor>();
+        services.AddHostedService<ExfilFirewallRuleCleanupService>();
+
+        services.AddHostedService<Worker>();
+    }
+
+    /// <summary>
+    /// Replaces the injector with the Development one when, and only when, the host environment is
+    /// Development and Agent:Development:FaultInjection is true. Returns whether it is active.
+    /// </summary>
+    public static bool AddModuleFaultInjection(IServiceCollection services, IConfiguration configuration, string? environmentName)
+    {
+        if (!ModuleFaultInjectionPolicy.IsEnabled(configuration, environmentName))
+        {
+            return false;
+        }
+
+        services.RemoveAll<IModuleFaultInjector>();
+        services.AddSingleton<IModuleFaultInjector, DevelopmentModuleFaultInjector>(sp =>
+            new DevelopmentModuleFaultInjector(sp.GetRequiredService<ILogger<DevelopmentModuleFaultInjector>>()));
+        return true;
+    }
+
     public static void ConfigureServices(IServiceCollection services, IConfiguration configuration)
     {
         // Bind configuration
@@ -49,17 +91,17 @@ public static class ServiceRegistration
         // FluentValidation
         services.AddSingleton<IValidator<AgentConfiguration>, AgentConfigurationValidator>();
 
+        // One source: the bound AgentConfiguration (validated once by AgentConfigurationLoader
+        // in Program.cs). No raw read with its own ?? fallback: defaults live on the options.
+        AgentConfiguration agentConfig = configuration.GetSection(AgentConfiguration.SectionName).Get<AgentConfiguration>()
+            ?? throw new InvalidOperationException($"The '{AgentConfiguration.SectionName}' configuration section is missing.");
+
         // Database
-        var dbConnectionString = configuration
-            .GetSection("Agent:Database:ConnectionString")
-            .Value ?? "Data Source=agent.db";
-        dbConnectionString = EnvironmentVariableResolver.ResolvePath(dbConnectionString);
+        string dbConnectionString = EnvironmentVariableResolver.ResolvePath(agentConfig.Database.ConnectionString);
 
         SQLitePCL.Batteries_V2.Init();
 
-        string keyDir = EnvironmentVariableResolver.ResolvePath(
-            configuration.GetSection("Agent:Database:KeyDirectory").Value
-            ?? "%ProgramData%\\RansomGuard-CM\\keys");
+        string keyDir = EnvironmentVariableResolver.ResolvePath(agentConfig.Database.KeyDirectory);
 
         var dbKeyManager = new DatabaseKeyManager(keyDir,
             Microsoft.Extensions.Logging.Abstractions.NullLogger<DatabaseKeyManager>.Instance);
@@ -69,15 +111,19 @@ public static class ServiceRegistration
             ? dbConnectionString
             : $"{dbConnectionString};Password={dbKey}";
 
+        // Durability (AGT-AUD-002): a recorded audit entry is one committed INSERT into
+        // PendingAuditEntries, chained later. It survives a power cut only if the commit is
+        // flushed to disk. journal_mode=WAL and synchronous=FULL are set explicitly on every
+        // connection (AgentConnectionSettings) — no silent default: WAL used to come from EF
+        // Core creating the file, FULL from the SQLCipher build. In WAL mode, synchronous MUST
+        // stay FULL: NORMAL may lose the last commits on a power cut. Never lower it;
+        // AgentDatabaseDurabilityTests fails if either changes.
         services.AddDbContext<AgentDbContext>(options =>
-            options.UseSqlite(encryptedConnectionString));
+            options.UseSqlite(encryptedConnectionString).AddInterceptors(new AgentConnectionSettings()));
 
-        // Deduplicator
-        var deduplicationWindowMs = configuration
-            .GetSection("Agent:Detection:DeduplicationWindowMs")
-            .Get<int>();
-        if (deduplicationWindowMs <= 0) deduplicationWindowMs = 500;
-        services.AddSingleton<IFileEventDeduplicator>(new FileEventDeduplicator(deduplicationWindowMs));
+        // Deduplicator (DetectionOptions default 500 ms, validated range 50-5000)
+        services.AddSingleton<IFileEventDeduplicator>(
+            new FileEventDeduplicator(agentConfig.Detection.DeduplicationWindowMs));
 
         // Ed25519 audit signer
         var auditLogSigner = new AuditLogSigner(keyDir,
@@ -87,8 +133,18 @@ public static class ServiceRegistration
         // Repositories
         services.AddScoped<IDetectionEventRepository, DetectionEventRepository>();
         services.AddScoped<IAlertRepository, AlertRepository>();
+        // Audit (AGT-AUD-002): recording is one INSERT, chaining happens in the background.
+        services.AddSingleton<AuditHealth>();
+        services.AddSingleton<AuditChainWriter>();
+        services.AddSingleton<IAuditChainWriter>(sp => sp.GetRequiredService<AuditChainWriter>());
+        services.AddHostedService(sp => sp.GetRequiredService<AuditChainWriter>());
         services.AddScoped<IAuditLogRepository>(sp =>
-            new AuditLogRepository(sp.GetRequiredService<AgentDbContext>(), auditLogSigner));
+            new AuditLogRepository(
+                sp.GetRequiredService<AgentDbContext>(),
+                auditLogSigner,
+                sp.GetRequiredService<IAuditChainWriter>(),
+                sp.GetRequiredService<AuditHealth>(),
+                sp.GetRequiredService<ILogger<AuditLogRepository>>()));
 
         // SENTINEL
         services.AddScoped<ISentinelCanaryRepository, SentinelCanaryRepository>();
@@ -98,11 +154,23 @@ public static class ServiceRegistration
         // Rate limiting
         services.AddSingleton<RateLimiterFactory>();
 
+        // Runtime module-state registry: each module publishes its real state here
+        // and the heartbeat reads it, instead of deriving status from config.
+        services.AddSingleton<IModuleStateRegistry, InMemoryModuleStateRegistry>();
+        // One reporter for every module: registry, Critical log, audit — and the
+        // per-minute limit on ModuleEventsLost entries.
+        services.AddSingleton<IModuleFailureReporter, ModuleFailureReporter>();
+        // Never stops anything; replaced only in Development, see AddModuleFaultInjection.
+        services.AddSingleton<IModuleFaultInjector, NoModuleFaultInjector>();
+        // Monotonic clock (Stopwatch) for uptime and upload ages, and timers; fakeable in tests.
+        services.AddSingleton(TimeProvider.System);
+
         // Cross-module event bus
         services.AddSingleton<IDetectionEventBus, InMemoryDetectionEventBus>();
 
         // EXFIL WATCH — Network baseline
         services.AddScoped<INetworkBaselineService, NetworkBaselineService>();
+        services.AddSingleton<INetworkActivityMonitor, EtwNetworkCapture>();
 
         // EXFIL WATCH — Threat intelligence (loaded from embedded JSON data)
         services.AddSingleton<ThreatIntelDataLoader>();
@@ -155,6 +223,9 @@ public static class ServiceRegistration
         // IRONCLAD
         AddIronCladServices(services, configuration);
 
+        // GRID server communication
+        AddGridServices(services);
+
         // Anti-tampering
         services.AddSingleton<IAgentProtector, AgentProtector>();
         services.AddSingleton<RegistryWatcher>();
@@ -196,6 +267,44 @@ public static class ServiceRegistration
     }
 
     /// <summary>
+    /// Registers GRID server communication services (HttpClient, enrollment, heartbeat, command polling).
+    /// </summary>
+    public static void AddGridServices(IServiceCollection services)
+    {
+        services.AddHttpClient(GridApiClient.HttpClientName, client =>
+        {
+            client.DefaultRequestHeaders.Add("Accept", "application/json");
+        }).ConfigurePrimaryHttpMessageHandler(sp =>
+        {
+            var config = sp.GetRequiredService<IOptions<AgentConfiguration>>().Value;
+            var handler = new HttpClientHandler();
+
+            // Dev mode: trust self-signed server certificates
+            if (config.Server.TrustAnyCertificate)
+            {
+                handler.ServerCertificateCustomValidationCallback =
+                    HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
+            }
+
+            return handler;
+        });
+
+        services.AddSingleton<GridApiClient>();
+        services.AddSingleton<IGridApiClient>(sp => sp.GetRequiredService<GridApiClient>());
+        services.AddSingleton<EnrollmentStateManager>();
+        services.AddSingleton<EnrollmentService>();
+        services.AddHostedService(sp => sp.GetRequiredService<EnrollmentService>());
+        services.AddSingleton<GridHeartbeatService>();
+        services.AddHostedService(sp => sp.GetRequiredService<GridHeartbeatService>());
+        services.AddHostedService<GridCommandService>();
+
+        // Alert forwarding (the bridge: agent detections → GRID dashboard)
+        services.AddSingleton<AlertForwardingService>();
+        services.AddSingleton<IAlertForwardingQueue>(sp => sp.GetRequiredService<AlertForwardingService>());
+        services.AddHostedService(sp => sp.GetRequiredService<AlertForwardingService>());
+    }
+
+    /// <summary>
     /// Registers IronClad hardware response module services.
     /// Conditionally registers MockArduinoServer only in TcpMock mode.
     /// </summary>
@@ -203,6 +312,9 @@ public static class ServiceRegistration
     {
         services.Configure<IronCladOptions>(configuration.GetSection("IronClad"));
 
+        // Documented fallback, kept on purpose: an absent IronClad section means the module is
+        // off (IronCladOptions.Enabled defaults to false), which is the safe state. Its
+        // CommunicationMode, when present, is validated by AgentConfigurationLoader.
         var ironCladOptions = configuration.GetSection("IronClad").Get<IronCladOptions>() ?? new IronCladOptions();
 
         // Communicators
@@ -225,3 +337,4 @@ public static class ServiceRegistration
         services.AddHostedService<IronCladStateReconciliationService>();
     }
 }
+

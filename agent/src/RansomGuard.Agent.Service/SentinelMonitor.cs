@@ -3,9 +3,11 @@ using System.Threading.Channels;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using RansomGuard.Agent.Core.Configuration;
+using RansomGuard.Agent.Core.Diagnostics;
 using RansomGuard.Agent.Core.Detection;
 using RansomGuard.Agent.Core.Detection.Genealogy;
 using RansomGuard.Agent.Core.Detection.Sentinel;
+using RansomGuard.Agent.Core.Communication;
 using RansomGuard.Agent.Core.Persistence.Entities;
 using RansomGuard.Agent.Core.Persistence.Repositories;
 
@@ -20,11 +22,28 @@ public sealed class SentinelMonitor : BackgroundService
 {
     private const int EventChannelCapacity = 10_000;
 
+    /// <summary>
+    /// Consecutive failed integrity checks after which SENTINEL reads degraded /
+    /// integrity_check_failing. One failure (a locked database, a transient I/O error)
+    /// must not change the state; a persistent one must show — but never by switching
+    /// off the real-time watchers, which still catch a canary being touched.
+    /// </summary>
+    public const int MaxConsecutiveIntegrityCheckFailures = 5;
+
     private readonly ILogger<SentinelMonitor> _logger;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IFileEventDeduplicator _deduplicator;
     private readonly RestartManagerHelper _restartManager;
+    private readonly IAlertForwardingQueue _alertQueue;
+    private readonly IModuleStateRegistry _moduleState;
+    private readonly IModuleFailureReporter _failureReporter;
+    private readonly IModuleFaultInjector _faultInjector;
     private readonly AgentConfiguration _config;
+    private readonly TimeSpan _startupDelay;
+    private readonly TaskCompletionSource _watcherFault = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly object _healthGate = new();
+    private bool _stopped;
+    private bool _integrityCheckFailing;
     private readonly List<FileSystemWatcher> _watchers = [];
     private readonly Channel<CanaryFileEvent> _eventChannel;
     private readonly ConcurrentDictionary<string, RegenerationStats> _regenTracking = new();
@@ -32,18 +51,40 @@ public sealed class SentinelMonitor : BackgroundService
     /// <summary>
     /// Initializes the SENTINEL monitor.
     /// </summary>
+    /// <param name="logger">Logger.</param>
+    /// <param name="config">Agent configuration.</param>
+    /// <param name="scopeFactory">Scope factory for per-event services.</param>
+    /// <param name="deduplicator">File event deduplicator.</param>
+    /// <param name="restartManager">Process attribution through the Restart Manager.</param>
+    /// <param name="alertQueue">Queue forwarding alerts to the GRID.</param>
+    /// <param name="moduleState">Runtime module-state registry.</param>
+    /// <param name="failureReporter">Reports the module going down.</param>
+    /// <param name="startupDelay">
+    /// Test seam: wait before starting, for the deployment service; null (the DI default) is 2 s.
+    /// </param>
+    /// <param name="faultInjector">Development fault injection; null or the production one never stops anything.</param>
     public SentinelMonitor(
         ILogger<SentinelMonitor> logger,
         IOptionsMonitor<AgentConfiguration> config,
         IServiceScopeFactory scopeFactory,
         IFileEventDeduplicator deduplicator,
-        RestartManagerHelper restartManager)
+        RestartManagerHelper restartManager,
+        IAlertForwardingQueue alertQueue,
+        IModuleStateRegistry moduleState,
+        IModuleFailureReporter failureReporter,
+        TimeSpan? startupDelay = null,
+        IModuleFaultInjector? faultInjector = null)
     {
         _logger = logger;
         _config = config.CurrentValue;
         _scopeFactory = scopeFactory;
         _deduplicator = deduplicator;
         _restartManager = restartManager;
+        _alertQueue = alertQueue;
+        _moduleState = moduleState;
+        _failureReporter = failureReporter;
+        _faultInjector = faultInjector ?? new NoModuleFaultInjector();
+        _startupDelay = startupDelay ?? TimeSpan.FromSeconds(2);
         _eventChannel = Channel.CreateBounded<CanaryFileEvent>(
             new BoundedChannelOptions(EventChannelCapacity)
             {
@@ -55,56 +96,224 @@ public sealed class SentinelMonitor : BackgroundService
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        SentinelOptions? sentinel = _config.Sentinel;
-        if (sentinel is null || !sentinel.Enabled)
+        bool reachedActive = false;
+        Task? consumerTask = null;
+        Task? pollingTask = null;
+
+        // Every task of the module runs on this token, so that after a failure
+        // nothing keeps running unseen (no orphaned polling loop, no consumer).
+        using var moduleCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+        CancellationToken moduleToken = moduleCts.Token;
+
+        try
         {
+            SentinelOptions? sentinel = _config.Sentinel;
+            if (sentinel is null || !sentinel.Enabled)
+            {
+                _moduleState.Publish(ModuleCode.Sentinel, ModuleState.DisabledByConfig, ModuleReasonCode.DisabledByConfig);
+                return;
+            }
+
+            // Wait for deployment service to finish
+            await Task.Delay(_startupDelay, stoppingToken);
+
+            consumerTask = ConsumeEventsAsync(moduleToken);
+
+            // Set up real-time FileSystemWatcher per canary directory
+            string[] resolvedDirs = EnvironmentVariableResolver.ResolvePaths(sentinel.WatchDirectories);
+            foreach (string dir in resolvedDirs)
+            {
+                if (!Directory.Exists(dir))
+                {
+                    _logger.LogWarning("SENTINEL: folder {Directory} does not exist and is not watched", dir);
+                    continue;
+                }
+
+                var watcher = new FileSystemWatcher(dir)
+                {
+                    NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite | NotifyFilters.Size,
+                    IncludeSubdirectories = false,
+                    EnableRaisingEvents = true
+                };
+
+                watcher.Changed += (_, e) => EnqueueEvent(e.FullPath, CanaryAlertType.CanaryModified, e.ChangeType);
+                watcher.Deleted += (_, e) => EnqueueEvent(e.FullPath, CanaryAlertType.CanaryDeleted, e.ChangeType);
+                watcher.Renamed += (_, e) => EnqueueEvent(e.OldFullPath, CanaryAlertType.CanaryRenamed, e.ChangeType);
+                watcher.Error += OnWatcherError;
+
+                _watchers.Add(watcher);
+            }
+
+            // Zero watcher is not "active": it is a blind detector (under LocalSystem,
+            // %USERPROFILE% resolves to the system profile and the folders do not exist).
+            if (_watchers.Count == 0)
+            {
+                _logger.LogError("SENTINEL watches nothing: none of the {Count} configured folders exists",
+                    resolvedDirs.Length);
+                _moduleState.Publish(ModuleCode.Sentinel, ModuleState.Inactive, ModuleReasonCode.NoWatchDirectory);
+                return;
+            }
+
+            _logger.LogInformation("SENTINEL monitor active — real-time watchers on {DirCount} directories, polling every {IntervalMs}ms",
+                _watchers.Count, sentinel.CheckIntervalMs);
+            _moduleState.Publish(ModuleCode.Sentinel, ModuleState.Active);
+            reachedActive = true;
+
+            // The periodic check is not observed as fatal: its failures degrade the
+            // module (integrity_check_failing) and it never ends on its own before shutdown.
+            pollingTask = PollIntegrityAsync(sentinel.CheckIntervalMs, moduleToken);
+
+            // Only the real-time path going down stops SENTINEL (stopped_unexpectedly).
+            await ModuleTaskObserver.ObserveUntilStoppedAsync(
+                stoppingToken,
+                ("consumer", consumerTask),
+                ("watchers", _watcherFault.Task),
+                ("fault-injection", _faultInjector.WhenStopRequestedAsync(ModuleCode.Sentinel, moduleToken)));
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Normal shutdown.
+        }
+        catch (Exception ex)
+        {
+            // From here on the polling loop may no longer publish a state: the module is down.
+            lock (_healthGate)
+            {
+                _stopped = true;
+            }
+
+            // Swallowed on purpose: one module going down must not take the host —
+            // and every other module — with it. The reporter leaves the three
+            // traces: registry state, Critical log, audit entry.
+            await _failureReporter.ReportStoppedAsync(ModuleCode.Sentinel, reachedActive, ex);
+        }
+        finally
+        {
+            await StopModuleAsync(moduleCts, consumerTask, pollingTask);
+        }
+    }
+
+    /// <summary>
+    /// Runs the periodic integrity check. After <see cref="MaxConsecutiveIntegrityCheckFailures"/>
+    /// failures in a row SENTINEL reads degraded / integrity_check_failing; the first
+    /// successful check brings it back to active. The watchers and the consumer keep
+    /// running throughout. Ends only on cancellation.
+    /// </summary>
+    private async Task PollIntegrityAsync(int intervalMs, CancellationToken ct)
+    {
+        int consecutiveFailures = 0;
+        while (true)
+        {
+            await Task.Delay(intervalMs, ct);
+            try
+            {
+                await PeriodicIntegrityCheckAsync(ct);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                consecutiveFailures++;
+                if (consecutiveFailures == MaxConsecutiveIntegrityCheckFailures)
+                {
+                    _logger.LogError(ex,
+                        "SENTINEL integrity check failed {Count} times in a row — degraded, real-time watchers still running",
+                        consecutiveFailures);
+                    SetIntegrityCheckFailing(true);
+                }
+                else
+                {
+                    _logger.LogWarning(ex, "SENTINEL integrity check failed ({Count} in a row); retrying next cycle",
+                        consecutiveFailures);
+                }
+
+                continue;
+            }
+
+            if (consecutiveFailures >= MaxConsecutiveIntegrityCheckFailures)
+            {
+                _logger.LogInformation("SENTINEL integrity check succeeded again after {Count} failures — active",
+                    consecutiveFailures);
+            }
+
+            consecutiveFailures = 0;
+            SetIntegrityCheckFailing(false);
+        }
+    }
+
+    /// <summary>
+    /// Publishes degraded / active for the integrity check, never after the module has
+    /// stopped: a check succeeding after the watchers died must not bring back "active".
+    /// </summary>
+    private void SetIntegrityCheckFailing(bool failing)
+    {
+        lock (_healthGate)
+        {
+            if (_stopped || _integrityCheckFailing == failing)
+            {
+                return;
+            }
+
+            _integrityCheckFailing = failing;
+            if (failing)
+            {
+                _moduleState.Publish(ModuleCode.Sentinel, ModuleState.Degraded, ModuleReasonCode.IntegrityCheckFailing);
+            }
+            else
+            {
+                _moduleState.Publish(ModuleCode.Sentinel, ModuleState.Active);
+            }
+        }
+    }
+
+    /// <summary>
+    /// A watcher reports an error. A buffer overflow loses events but the watcher
+    /// keeps running; any other error means it has stopped and SENTINEL is blind.
+    /// </summary>
+    private void OnWatcherError(object sender, ErrorEventArgs e)
+    {
+        Exception error = e.GetException();
+        if (error is InternalBufferOverflowException)
+        {
+            // ReportEventsLostAsync never throws, and writes at most once a minute.
+            _ = _failureReporter.ReportEventsLostAsync(ModuleCode.Sentinel, error);
             return;
         }
 
-        // Wait for deployment service to finish
-        await Task.Delay(2000, stoppingToken);
+        _watcherFault.TrySetException(error);
+    }
 
-        // Start channel consumer
-        Task consumerTask = ConsumeEventsAsync(stoppingToken);
-
-        // Set up real-time FileSystemWatcher per canary directory
-        string[] resolvedDirs = EnvironmentVariableResolver.ResolvePaths(sentinel.WatchDirectories);
-        foreach (string dir in resolvedDirs)
-        {
-            if (!Directory.Exists(dir)) continue;
-
-            var watcher = new FileSystemWatcher(dir)
-            {
-                NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite | NotifyFilters.Size,
-                IncludeSubdirectories = false,
-                EnableRaisingEvents = true
-            };
-
-            watcher.Changed += (_, e) => EnqueueEvent(e.FullPath, CanaryAlertType.CanaryModified, e.ChangeType);
-            watcher.Deleted += (_, e) => EnqueueEvent(e.FullPath, CanaryAlertType.CanaryDeleted, e.ChangeType);
-            watcher.Renamed += (_, e) => EnqueueEvent(e.OldFullPath, CanaryAlertType.CanaryRenamed, e.ChangeType);
-
-            _watchers.Add(watcher);
-        }
-
-        _logger.LogInformation("SENTINEL monitor active — real-time watchers on {DirCount} directories, polling every {IntervalMs}ms",
-            _watchers.Count, sentinel.CheckIntervalMs);
-
-        // Periodic polling loop
-        while (!stoppingToken.IsCancellationRequested)
-        {
-            await Task.Delay(sentinel.CheckIntervalMs, stoppingToken);
-            await PeriodicIntegrityCheckAsync(stoppingToken);
-        }
-
-        // Cleanup
-        _eventChannel.Writer.TryComplete();
-        await consumerTask;
-
+    /// <summary>Stops every source and task of the module; best effort, never throws.</summary>
+    private async Task StopModuleAsync(CancellationTokenSource moduleCts, Task? consumerTask, Task? pollingTask)
+    {
         foreach (FileSystemWatcher watcher in _watchers)
         {
             watcher.EnableRaisingEvents = false;
             watcher.Dispose();
+        }
+
+        _watchers.Clear();
+        _eventChannel.Writer.TryComplete();
+        await moduleCts.CancelAsync();
+
+        foreach ((string name, Task? task) in new[] { ("consumer", consumerTask), ("integrity-polling", pollingTask) })
+        {
+            if (task is null)
+            {
+                continue;
+            }
+
+            try
+            {
+                await task;
+            }
+            catch (Exception ex)
+            {
+                // Cancelled by the stop above, or already reported as the failure.
+                _logger.LogDebug(ex, "SENTINEL {Task} ended during stop", name);
+            }
         }
     }
 
@@ -251,6 +460,14 @@ public sealed class SentinelMonitor : BackgroundService
             OffendingProcessPath = attribution?.ExecutablePath
         };
 
+        // The GRID first (AGT-AUD-002): nothing local — database, audit — may delay or cancel
+        // the alert. The forwarding queue persists it itself if the GRID is unreachable.
+        _alertQueue.TryEnqueue(AlertMapper.FromCanaryAlert(alert));
+        _logger.LogCritical(
+            "SENTINEL ALERT: {AlertType} on canary {CanaryPath} | Process: {ProcessName} (PID: {ProcessId}) | Severity: {Severity}",
+            alertType, canary.FilePath, attribution?.ProcessName ?? "unknown",
+            attribution?.ProcessId.ToString() ?? "N/A", alert.Severity);
+
         canary.Status = alertType switch
         {
             CanaryAlertType.CanaryModified => CanaryStatus.Modified,
@@ -258,20 +475,27 @@ public sealed class SentinelMonitor : BackgroundService
             CanaryAlertType.CanaryRenamed => CanaryStatus.Renamed,
             _ => CanaryStatus.Compromised
         };
-        await canaryRepo.UpdateAsync(canary, cancellationToken);
-        await canaryRepo.AddAlertAsync(alert, cancellationToken);
+        // From here the alert has left: its local record and its audit entry are completed even
+        // during a shutdown, so a sent detection never lacks its trace.
+        try
+        {
+            await canaryRepo.UpdateAsync(canary, CancellationToken.None);
+            await canaryRepo.AddAlertAsync(alert, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            // The alert is already on its way to the GRID; the local copy is what failed.
+            _logger.LogError(ex, "SENTINEL alert {AlertId} sent, but its local record failed", alert.Id);
+        }
 
         string details = $"Canary alert: {alertType} on {canary.FilePath}";
         if (attribution is not null)
         {
             details += $" by process {attribution.ProcessName} (PID: {attribution.ProcessId})";
         }
-        await auditRepo.AppendAsync("CanaryAlert", details, "CanaryAlert", alert.Id, cancellationToken);
 
-        _logger.LogCritical(
-            "SENTINEL ALERT: {AlertType} on canary {CanaryPath} | Process: {ProcessName} (PID: {ProcessId}) | Severity: {Severity}",
-            alertType, canary.FilePath, attribution?.ProcessName ?? "unknown",
-            attribution?.ProcessId.ToString() ?? "N/A", alert.Severity);
+        // One INSERT, never a wait on the chain; never throws when it cannot record.
+        await auditRepo.AppendAsync("CanaryAlert", details, "CanaryAlert", alert.Id, CancellationToken.None);
 
         // Fire-and-forget genealogy enrichment for process attribution
         _ = Task.Run(async () =>

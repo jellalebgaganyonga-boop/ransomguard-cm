@@ -8,9 +8,22 @@ namespace RansomGuard.Agent.Core.Persistence.Repositories;
 public interface IAuditLogRepository
 {
     /// <summary>
-    /// Appends a new audit log entry with hash chain integrity.
+    /// Records an audit entry: one INSERT into the waiting table, durable when this returns.
+    /// It is chained (hashed, signed, ordered) afterwards, by the chain writer.
     /// </summary>
+    /// <remarks>
+    /// Never makes the caller wait for the chain, and never throws when the entry cannot be
+    /// recorded (disk full, database locked): that is logged Critical and counted in
+    /// <see cref="AuditHealth"/>, and the detection or action that called goes on (AGT-AUD-002).
+    /// Without a chain writer (tools, tests) the entries are chained before this returns.
+    /// </remarks>
     Task AppendAsync(string action, string details, string? entityType = null, Guid? entityId = null, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Chains every waiting entry, in insertion order, by batches of one transaction each.
+    /// Returns the number of entries chained.
+    /// </summary>
+    Task<int> ChainPendingAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Retrieves the most recent audit log entry.

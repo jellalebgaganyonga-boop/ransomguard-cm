@@ -1,10 +1,12 @@
-"""All 21 GRID database models re-exported for Alembic autogenerate."""
+"""All 23 GRID database models re-exported for Alembic autogenerate."""
 
 from ransomguard_grid.db.models.agent import (  # noqa: F401
     Agent,
     AgentCertificate,
     AgentConfiguration,
-    AgentHeartbeat,
+    AgentModuleStatus,
+    AgentPosture,
+    AgentPostureChange,
 )
 from ransomguard_grid.db.models.alerts import (  # noqa: F401
     Alert,
@@ -13,6 +15,11 @@ from ransomguard_grid.db.models.alerts import (  # noqa: F401
     AlertDetail,
     AlertStatusChange,
     AuditLog,
+)
+from ransomguard_grid.db.models.notifications import (  # noqa: F401
+    NotificationDelivery,
+    NotificationPreference,
+    UserActionLog,
 )
 from ransomguard_grid.db.models.operations import (  # noqa: F401
     CommandQueue,
@@ -34,8 +41,10 @@ from ransomguard_grid.db.models.threat_intel import (  # noqa: F401
 
 __all__ = [
     "Tenant", "User", "Role", "UserRole", "Session",
-    "Agent", "AgentCertificate", "AgentConfiguration", "AgentHeartbeat",
+    "Agent", "AgentCertificate", "AgentConfiguration",
+    "AgentPosture", "AgentModuleStatus", "AgentPostureChange",
     "Alert", "AlertDetail", "AlertArtifact", "AuditLog", "AlertCorrelation", "AlertStatusChange",
     "ThreatIntelVersion", "ThreatIntelPackage", "AgentThreatIntelVersion",
     "CommandQueue", "CommandResponse", "SystemLog",
+    "NotificationDelivery", "NotificationPreference", "UserActionLog",
 ]

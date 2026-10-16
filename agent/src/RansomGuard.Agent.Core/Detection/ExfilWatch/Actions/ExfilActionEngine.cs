@@ -151,6 +151,9 @@ public sealed class ExfilActionEngine : IExfilActionEngine
     {
         try
         {
+            // The timeout covers the action only: the actions record their audit entries with
+            // CancellationToken.None, one INSERT that never waits for the chain (AGT-AUD-002).
+            // A slow audit can no longer pass for a failed action and trigger a fallback.
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             timeoutCts.CancelAfter(ActionTimeout);
 
@@ -171,7 +174,7 @@ public sealed class ExfilActionEngine : IExfilActionEngine
                 "ExfilActionTimeout",
                 $"Action={action.ActionName}, Timeout={ActionTimeout.TotalSeconds}s",
                 entityType: "ExfilFinding",
-                cancellationToken: ct);
+                cancellationToken: CancellationToken.None);
 
             await ApplyFallback(action, finding, ct);
         }
@@ -183,7 +186,7 @@ public sealed class ExfilActionEngine : IExfilActionEngine
                 "ExfilActionError",
                 $"Action={action.ActionName}, Error={ex.Message}",
                 entityType: "ExfilFinding",
-                cancellationToken: ct);
+                cancellationToken: CancellationToken.None);
 
             await ApplyFallback(action, finding, ct);
         }

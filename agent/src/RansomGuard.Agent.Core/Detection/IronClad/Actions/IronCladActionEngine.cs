@@ -143,27 +143,17 @@ public sealed class IronCladActionEngine : IIronCladActionEngine
         var commandId = Guid.NewGuid();
         var eventId = Guid.NewGuid();
 
-        // Audit log BEFORE sending command (forensic preservation)
-        try
-        {
-            await _auditLog.AppendAsync(
-                $"IronClad:{action}",
-                $"Port={parameter} Justification={justification}",
-                "IronCladEvent",
-                eventId,
-                cancellationToken).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            _logger.Error(ex, "Failed to write audit log for IronClad action {Action}", action);
-            return new IronCladActionResult
-            {
-                IsSuccess = false,
-                Outcome = IronCladActionOutcome.AuditLogFailure,
-                Message = "Audit log write failed — action aborted for forensic integrity",
-                ElapsedTime = sw.Elapsed
-            };
-        }
+        // Trace BEFORE the command (forensic preservation), without blocking it (AGT-AUD-002):
+        // the intent is one durable INSERT that never waits for the chain. An entry that cannot
+        // be recorded (disk full) is logged Critical and counted in the heartbeat, and the cut
+        // goes ahead: during an attack, isolating the port matters more than its trace. (The
+        // engine used to abort the cut, with AuditLogFailure, when the audit failed.)
+        await _auditLog.AppendAsync(
+            $"IronClad:{action}",
+            $"Port={parameter} Justification={justification}",
+            "IronCladEvent",
+            eventId,
+            CancellationToken.None).ConfigureAwait(false);
 
         // Build and send command
         var command = new IronCladCommand
@@ -248,6 +238,15 @@ public sealed class IronCladActionEngine : IIronCladActionEngine
         {
             _logger.Error(ex, "Failed to persist IronClad event");
         }
+
+        // The real result, after the command: the intent alone does not say whether the port
+        // was cut.
+        await _auditLog.AppendAsync(
+            $"IronClad:{action}:Result",
+            $"Port={parameter} Outcome={outcome}",
+            "IronCladEvent",
+            eventId,
+            CancellationToken.None).ConfigureAwait(false);
 
         if (outcome == IronCladActionOutcome.Success)
         {

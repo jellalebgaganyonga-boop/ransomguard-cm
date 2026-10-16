@@ -130,7 +130,8 @@ async def test_only_admin_can_update_roles(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_admin_cannot_self_demote(client: AsyncClient) -> None:
-    """Tenant admin cannot remove their own admin role (anti-brick)."""
+    """The only tenant admin cannot remove their own admin role (anti-brick): as the last active
+    administrator of the tenant, 409 (GRID-SEC-002)."""
     env = await _setup_rbac_env()
     token = await _login(client, env["tenant_code"], env["admin_email"])
 
@@ -139,5 +140,5 @@ async def test_admin_cannot_self_demote(client: AsyncClient) -> None:
         json={"role_names": ["security_analyst"]},
         headers={"Authorization": f"Bearer {token}"},
     )
-    assert resp.status_code == 400
-    assert "yourself" in resp.json()["detail"].lower()
+    assert resp.status_code == 409
+    assert "last active administrator" in resp.json()["detail"].lower()

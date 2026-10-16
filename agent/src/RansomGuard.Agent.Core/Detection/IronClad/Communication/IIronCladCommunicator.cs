@@ -4,7 +4,7 @@ namespace RansomGuard.Agent.Core.Detection.IronClad.Communication;
 
 /// <summary>
 /// Abstraction for communication with the IronClad relay controller.
-/// Sprint 5: TCP mock (localhost:9999). Sprint 8: SerialPort to real Arduino.
+/// Sprint 5: TCP mock (127.0.0.1:9999). Sprint 8: SerialPort to real Arduino.
 /// </summary>
 public interface IIronCladCommunicator : IAsyncDisposable
 {

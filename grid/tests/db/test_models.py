@@ -1,33 +1,50 @@
 """Tests for SQLAlchemy models — imports, constraints, enums."""
 
-import pytest
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from sqlalchemy import text
+import pytest
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ransomguard_grid.db.models import (
-    Agent, AgentCertificate, AgentConfiguration, AgentHeartbeat,
-    Alert, AlertArtifact, AlertCorrelation, AlertDetail, AlertStatusChange, AuditLog,
-    CommandQueue, CommandResponse, SystemLog,
-    Role, Session, Tenant, User, UserRole,
-    ThreatIntelVersion, ThreatIntelPackage, AgentThreatIntelVersion,
+    Agent,
+    AgentCertificate,
+    AgentConfiguration,
+    AgentModuleStatus,
+    AgentPosture,
+    AgentPostureChange,
+    AgentThreatIntelVersion,
+    Alert,
+    AlertArtifact,
+    AlertCorrelation,
+    AlertDetail,
+    AlertStatusChange,
+    AuditLog,
+    CommandQueue,
+    CommandResponse,
+    Role,
+    Session,
+    SystemLog,
+    Tenant,
+    ThreatIntelPackage,
+    ThreatIntelVersion,
+    User,
+    UserRole,
 )
-from ransomguard_grid.db.models.enums import TenantStatus, Severity, AlertStatus
+from ransomguard_grid.db.models.enums import Severity, TenantStatus
 
 
-def test_all_21_models_import_successfully() -> None:
-    """All 21 model classes should be importable."""
+def test_all_23_models_import_successfully() -> None:
+    """All 23 model classes should be importable (agent_heartbeats replaced by the 3 posture tables)."""
     models = [
         Tenant, User, Role, UserRole, Session,
-        Agent, AgentCertificate, AgentConfiguration, AgentHeartbeat,
+        Agent, AgentCertificate, AgentConfiguration, AgentPosture, AgentModuleStatus, AgentPostureChange,
         Alert, AlertDetail, AlertArtifact, AuditLog, AlertCorrelation, AlertStatusChange,
         ThreatIntelVersion, ThreatIntelPackage, AgentThreatIntelVersion,
         CommandQueue, CommandResponse, SystemLog,
     ]
-    assert len(models) == 21
+    assert len(models) == 23
     for m in models:
         assert hasattr(m, "__tablename__")
 

@@ -3,9 +3,9 @@
 from datetime import UTC, datetime
 from uuid import uuid4
 
+import jwt
 import pytest
 from httpx import AsyncClient
-from jose import jwt  # type: ignore[import-untyped]
 
 from ransomguard_grid.core.security import hash_password
 from ransomguard_grid.db.models.agent import Agent
@@ -29,6 +29,7 @@ async def _create_two_tenants() -> dict[str, str]:
 
             # Ensure role exists (idempotent)
             from sqlalchemy import select
+
             from ransomguard_grid.db.models.tenant_user import Role as RoleModel
             existing_role = (await session.execute(select(RoleModel).where(RoleModel.name == "tenant_admin"))).scalar_one_or_none()
             if not existing_role:
@@ -119,9 +120,9 @@ async def test_jwt_tampering_rejected(client: AsyncClient) -> None:
     setup = await _create_two_tenants()
     token_a = await _login(client, setup["tenant_a_code"], setup["user_a_email"])
 
-    payload = jwt.decode(token_a, "dummy", options={"verify_signature": False}, algorithms=["HS256"])
+    payload = jwt.decode(token_a, options={"verify_signature": False})
     payload["tenant_id"] = setup["tenant_b_id"]
-    tampered = jwt.encode(payload, "wrong_secret", algorithm="HS256")
+    tampered = jwt.encode(payload, "wrong-secret-also-at-least-32-characters", algorithm="HS256")
 
     resp = await client.get("/api/v1/dashboard/alerts", headers={"Authorization": f"Bearer {tampered}"})
     assert resp.status_code == 401
@@ -196,3 +197,107 @@ async def test_cross_tenant_metrics_isolated(client: AsyncClient) -> None:
     data = resp.json()
     assert data["total_agents"] == 1  # Only tenant A's agent
     assert data["alerts_24h"] == 1  # Only tenant A's alert
+
+
+@pytest.mark.asyncio
+async def test_alert_shows_its_own_agent_hostname(client: AsyncClient) -> None:
+    """HOST: the alert carries the hostname of its agent, joined within the tenant."""
+    setup = await _create_two_tenants()
+    token_a = await _login(client, setup["tenant_a_code"], setup["user_a_email"])
+    headers = {"Authorization": f"Bearer {token_a}"}
+
+    listed = await client.get("/api/v1/dashboard/alerts", headers=headers)
+    item = next(a for a in listed.json()["items"] if a["id"] == setup["alert_a_id"])
+    assert item["agent_hostname"] == "pc-a"
+
+    detail = await client.get(f"/api/v1/dashboard/alerts/{setup['alert_a_id']}", headers=headers)
+    assert detail.json()["agent_hostname"] == "pc-a"
+
+
+@pytest.mark.asyncio
+async def test_alert_pointing_at_another_tenants_agent_does_not_leak_its_hostname(client: AsyncClient) -> None:
+    """HOST: the join is on agent_id AND tenant_id. An alert of tenant A whose agent_id
+    designates an agent of tenant B must not return B's hostname."""
+    setup = await _create_two_tenants()
+    rogue_alert_id = str(uuid4())
+    async with _test_session_factory() as session:
+        session.add(Alert(
+            id=rogue_alert_id, tenant_id=setup["tenant_a_id"], agent_id=setup["agent_b_id"],
+            client_message_id=f"rogue-{uuid4().hex[:6]}", alert_type="USB", severity=Severity.High,
+            status=AlertStatus.New, detected_at=datetime.now(UTC), summary="Alert of A pointing at B's agent",
+        ))
+        await session.commit()
+
+    token_a = await _login(client, setup["tenant_a_code"], setup["user_a_email"])
+    headers = {"Authorization": f"Bearer {token_a}"}
+
+    listed = await client.get("/api/v1/dashboard/alerts", headers=headers)
+    item = next(a for a in listed.json()["items"] if a["id"] == rogue_alert_id)
+    assert item["agent_hostname"] is None
+
+    detail = await client.get(f"/api/v1/dashboard/alerts/{rogue_alert_id}", headers=headers)
+    assert detail.status_code == 200
+    assert detail.json()["agent_hostname"] is None
+
+
+@pytest.mark.asyncio
+async def test_alert_carries_its_module_code(client: AsyncClient) -> None:
+    """MODULE: the API exposes a stable module code; an unmapped alert_type is UNKNOWN, never empty."""
+    setup = await _create_two_tenants()
+    token_a = await _login(client, setup["tenant_a_code"], setup["user_a_email"])
+
+    listed = await client.get("/api/v1/dashboard/alerts", headers={"Authorization": f"Bearer {token_a}"})
+    item = next(a for a in listed.json()["items"] if a["id"] == setup["alert_a_id"])
+    assert item["alert_type"] == "USB"  # test data, not an agent type
+    assert item["module"] == "UNKNOWN"
+
+
+async def _store_posture(agent_id: str, tenant_id: str, module_state: str) -> None:
+    """A posture as a heartbeat stores it, written directly (tenant_id chosen by the test)."""
+    from ransomguard_grid.db.models.agent import AgentModuleStatus, AgentPosture
+
+    now = datetime.now(UTC)
+    async with _test_session_factory() as session:
+        session.add(AgentPosture(
+            agent_id=agent_id, tenant_id=tenant_id, schema_version=2, agent_uptime_seconds=3600,
+            pending_alerts=0, received_at=now,
+        ))
+        session.add(AgentModuleStatus(
+            id=str(uuid4()), tenant_id=tenant_id, agent_id=agent_id, module_code="SENTINEL",
+            state=module_state, reason_code=None, changed_at=now, updated_at=now,
+        ))
+        agent = await session.get(Agent, agent_id)
+        assert agent is not None
+        agent.last_heartbeat_at = now
+        await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_user_a_cannot_read_tenant_b_agent_posture(client: AsyncClient) -> None:
+    """POSTURE: the posture of tenant B's agent is never readable from tenant A."""
+    setup = await _create_two_tenants()
+    await _store_posture(setup["agent_b_id"], setup["tenant_b_id"], "active")
+    token_a = await _login(client, setup["tenant_a_code"], setup["user_a_email"])
+    headers = {"Authorization": f"Bearer {token_a}"}
+
+    detail = await client.get(f"/api/v1/dashboard/agents/{setup['agent_b_id']}", headers=headers)
+    assert detail.status_code == 404
+
+    listed = await client.get("/api/v1/dashboard/agents", headers=headers)
+    assert setup["agent_b_id"] not in {a["id"] for a in listed.json()["items"]}
+
+
+@pytest.mark.asyncio
+async def test_a_posture_row_of_another_tenant_never_reaches_the_agent_page(client: AsyncClient) -> None:
+    """POSTURE: postures are read on agent_id AND tenant_id. A posture row carrying tenant B
+    attached to A's agent must not be shown to A (defence in depth, as for HOST)."""
+    setup = await _create_two_tenants()
+    await _store_posture(setup["agent_a_id"], setup["tenant_b_id"], "active")
+    token_a = await _login(client, setup["tenant_a_code"], setup["user_a_email"])
+    headers = {"Authorization": f"Bearer {token_a}"}
+
+    detail = await client.get(f"/api/v1/dashboard/agents/{setup['agent_a_id']}", headers=headers)
+
+    assert detail.status_code == 200
+    assert detail.json()["posture"] is None
+    assert detail.json()["reason_codes"] == ["agent_update_required"]

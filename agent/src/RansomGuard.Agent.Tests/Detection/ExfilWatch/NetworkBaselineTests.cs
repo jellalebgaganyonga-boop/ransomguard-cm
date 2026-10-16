@@ -243,6 +243,43 @@ public sealed class NetworkBaselineTests : IDisposable
     }
 
     [Fact]
+    public async Task Known_Dimension_Is_Found_Among_1000_Metrics()
+    {
+        // Insert baseline first
+        var baseline = await _service.GetOrCreateBaselineAsync("global", CancellationToken.None);
+
+        // Bulk insert 1000 metrics
+        for (int i = 0; i < 1000; i++)
+        {
+            _context.NetworkBaselineMetrics.Add(new NetworkBaselineMetric
+            {
+                Id = Guid.NewGuid(),
+                NetworkBaselineId = baseline.Id,
+                MetricType = BaselineMetricType.ProcessNetworkVolume,
+                Dimension = $"process_{i}.exe",
+                HourlyAverageBytes = 1000 * i,
+                HourlyStdDevBytes = 100,
+                DailyAverageBytes = 24000 * i,
+                HourlyPatternJson = "[]",
+                WeeklyPatternJson = "[]",
+                FirstSeenAt = DateTime.UtcNow.AddDays(-5),
+                LastUpdatedAt = DateTime.UtcNow,
+                ObservationCount = 100,
+                ConfidenceScore = 0.8
+            });
+        }
+        await _context.SaveChangesAsync();
+
+        var result = await _service.IsKnownDimensionAsync(
+            "process_500.exe", BaselineMetricType.ProcessNetworkVolume, CancellationToken.None);
+
+        result.ShouldBeTrue();
+    }
+
+    // Wall-clock assertion: it measures performance, not correctness, and fails on a loaded shared CI runner
+    // It runs in the nightly Stress job; the functional check is Known_Dimension_Is_Found_Among_1000_Metrics.
+    [Fact]
+    [Trait("Category", "Stress")]
     public async Task Query_Performance_Under_50ms_With_1000_Metrics()
     {
         // Insert baseline first

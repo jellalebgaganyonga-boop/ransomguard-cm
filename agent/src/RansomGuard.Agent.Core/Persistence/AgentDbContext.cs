@@ -28,6 +28,9 @@ public sealed class AgentDbContext : DbContext
     /// </summary>
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
+    /// <summary>Audit entries recorded but not chained yet (AGT-AUD-002).</summary>
+    public DbSet<PendingAuditEntry> PendingAuditEntries => Set<PendingAuditEntry>();
+
     /// <summary>
     /// SENTINEL canary files deployed for ransomware detection.
     /// </summary>
@@ -114,6 +117,11 @@ public sealed class AgentDbContext : DbContext
     public DbSet<IronCladDeviceState> IronCladDeviceStates => Set<IronCladDeviceState>();
 
     /// <summary>
+    /// Pending alert uploads for resilient retry when GRID is unreachable.
+    /// </summary>
+    public DbSet<PendingAlertUpload> PendingAlertUploads => Set<PendingAlertUpload>();
+
+    /// <summary>
     /// Initializes a new instance of <see cref="AgentDbContext"/>.
     /// </summary>
     /// <param name="options">Database context options.</param>
@@ -158,6 +166,7 @@ public sealed class AgentDbContext : DbContext
         modelBuilder.Entity<AuditLog>(entity =>
         {
             entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.Sequence).IsUnique();
             entity.HasIndex(e => e.CreatedAt);
             entity.Property(e => e.Action).IsRequired().HasMaxLength(100);
             entity.Property(e => e.Details).IsRequired();
@@ -165,6 +174,16 @@ public sealed class AgentDbContext : DbContext
             entity.Property(e => e.PreviousHash).HasMaxLength(64);
             entity.Property(e => e.CurrentHash).IsRequired().HasMaxLength(64);
             entity.Property(e => e.Signature).HasMaxLength(128);
+        });
+
+        modelBuilder.Entity<PendingAuditEntry>(entity =>
+        {
+            // INTEGER PRIMARY KEY: SQLite's rowid, assigned in insertion order -- the chain's order.
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).ValueGeneratedOnAdd();
+            entity.Property(e => e.Action).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Details).IsRequired();
+            entity.Property(e => e.EntityType).HasMaxLength(100);
         });
 
         modelBuilder.Entity<SentinelCanary>(entity =>
@@ -361,6 +380,18 @@ public sealed class AgentDbContext : DbContext
             entity.HasIndex(e => e.LastChangedAt);
             entity.Property(e => e.State).IsRequired().HasMaxLength(20);
             entity.Property(e => e.Reason).IsRequired().HasMaxLength(500);
+        });
+
+        modelBuilder.Entity<PendingAlertUpload>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.ClientMessageId).IsUnique();
+            entity.HasIndex(e => e.NextRetryAt);
+            entity.HasIndex(e => e.Status);
+            entity.Property(e => e.ClientMessageId).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.SerializedPayload).IsRequired();
+            entity.Property(e => e.Status).HasConversion<string>().HasMaxLength(20);
+            entity.Property(e => e.LastErrorMessage).HasMaxLength(2000);
         });
     }
 }

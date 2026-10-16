@@ -7,7 +7,7 @@ using Serilog;
 namespace RansomGuard.Agent.Core.Detection.IronClad.Communication;
 
 /// <summary>
-/// IronClad communicator using TCP socket to MockArduinoServer (localhost:9999).
+/// IronClad communicator using TCP socket to MockArduinoServer (127.0.0.1:9999).
 /// Sprint 5 software-only implementation. Sprint 8 will swap for SerialPortCommunicator.
 /// Thread-safe: SemaphoreSlim enforces one outstanding command at a time (CWE-400).
 /// </summary>

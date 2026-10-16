@@ -31,11 +31,13 @@ public sealed class AlertOnlyAction : IExfilAction
                          $"Dest={finding.Destination}, Bytes={finding.BytesTransferred}, " +
                          $"MITRE={finding.MitreId}";
 
+        // The record is the action here. Not tied to the action timeout (AGT-AUD-002): it is
+        // one INSERT that never waits for the chain.
         await _auditLog.AppendAsync(
             "ExfilAlert",
             details,
             entityType: "ExfilFinding",
-            cancellationToken: ct);
+            cancellationToken: CancellationToken.None);
 
         _logger.LogWarning("EXFIL ACTION [AlertOnly]: {Details}", details);
 

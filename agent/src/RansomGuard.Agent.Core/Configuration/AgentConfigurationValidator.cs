@@ -1,4 +1,5 @@
 using FluentValidation;
+using RansomGuard.Agent.Core.Persistence.Entities;
 
 namespace RansomGuard.Agent.Core.Configuration;
 
@@ -23,6 +24,15 @@ public sealed class AgentConfigurationValidator : AbstractValidator<AgentConfigu
         {
             RuleFor(x => x.Sentinel!).SetValidator(new SentinelOptionsValidator());
         });
+
+        When(x => x.UsbGuard is not null, () =>
+        {
+            RuleFor(x => x.UsbGuard!.OperatingMode)
+                .Must(ConfigurationValueRules.IsDefinedEnumName<UsbOperatingMode>)
+                .WithMessage(mode =>
+                    $"'{mode.UsbGuard!.OperatingMode}' is not a valid mode. Allowed values: " +
+                    $"{ConfigurationValueRules.AllowedEnumNames<UsbOperatingMode>()}.");
+        });
     }
 }
 
@@ -45,12 +55,6 @@ public sealed class AgentIdentityOptionsValidator : AbstractValidator<AgentIdent
             .WithMessage("Agent.Id must be a valid GUID or 'auto-generated-on-first-run'.");
 
         RuleFor(x => x.Hostname).NotEmpty();
-        RuleFor(x => x.Version).NotEmpty();
-
-        RuleFor(x => x.Environment)
-            .NotEmpty()
-            .Must(env => env is "Development" or "Staging" or "Production")
-            .WithMessage("Environment must be Development, Staging, or Production.");
     }
 }
 
@@ -101,6 +105,10 @@ public sealed class DetectionOptionsValidator : AbstractValidator<DetectionOptio
 /// </summary>
 public sealed class LoggingOptionsValidator : AbstractValidator<LoggingOptions>
 {
+    internal const string AbsolutePathMessage =
+        "must be an absolute path once environment variables are resolved: a relative path " +
+        "would land in the working directory, which is System32 for a Windows service.";
+
     private static readonly string[] ValidLevels = ["Verbose", "Debug", "Information", "Warning", "Error", "Fatal"];
 
     /// <summary>
@@ -113,7 +121,9 @@ public sealed class LoggingOptionsValidator : AbstractValidator<LoggingOptions>
             .Must(level => ValidLevels.Contains(level))
             .WithMessage($"MinimumLevel must be one of: {string.Join(", ", ValidLevels)}.");
 
-        RuleFor(x => x.LogFilePath).NotEmpty();
+        RuleFor(x => x.LogFilePath)
+            .Must(ConfigurationValueRules.IsAbsoluteAfterExpansion)
+            .WithMessage(AbsolutePathMessage);
         RuleFor(x => x.MaxFileSizeMB).InclusiveBetween(1, 500);
         RuleFor(x => x.RetainedFileCount).InclusiveBetween(1, 365);
     }
@@ -129,10 +139,13 @@ public sealed class ServerOptionsValidator : AbstractValidator<ServerOptions>
     /// </summary>
     public ServerOptionsValidator()
     {
+        // Stop at the first failure: a missing address is one message, not two.
         RuleFor(x => x.BaseUrl)
+            .Cascade(CascadeMode.Stop)
             .NotEmpty()
+            .WithMessage("is required and missing: there is no default GRID server address.")
             .Must(BeValidHttpsUri)
-            .WithMessage("Server.BaseUrl must be a valid HTTPS URI.");
+            .WithMessage("must be a valid HTTPS URI.");
 
         RuleFor(x => x.HeartbeatIntervalSeconds).InclusiveBetween(10, 3600);
         RuleFor(x => x.ConnectionTimeoutSeconds).InclusiveBetween(1, 120);
@@ -155,7 +168,12 @@ public sealed class DatabaseOptionsValidator : AbstractValidator<DatabaseOptions
     /// </summary>
     public DatabaseOptionsValidator()
     {
-        RuleFor(x => x.ConnectionString).NotEmpty();
+        RuleFor(x => x.ConnectionString)
+            .Must(cs => ConfigurationValueRules.IsAbsoluteAfterExpansion(ConfigurationValueRules.DataSource(cs)))
+            .WithMessage("its Data Source " + LoggingOptionsValidator.AbsolutePathMessage);
+        RuleFor(x => x.KeyDirectory)
+            .Must(ConfigurationValueRules.IsAbsoluteAfterExpansion)
+            .WithMessage(LoggingOptionsValidator.AbsolutePathMessage);
         RuleFor(x => x.MaxRetentionDays).InclusiveBetween(1, 3650);
     }
 }

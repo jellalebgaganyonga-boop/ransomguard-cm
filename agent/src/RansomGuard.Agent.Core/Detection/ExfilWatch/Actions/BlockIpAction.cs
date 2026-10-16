@@ -42,6 +42,14 @@ public sealed class BlockIpAction : IExfilAction
         string timestamp = DateTime.UtcNow.ToString(TimestampFormat, CultureInfo.InvariantCulture);
         string ruleName = $"{RuleNamePrefix}{finding.Destination}-{timestamp}";
 
+        // Trace before the command (AGT-AUD-002): the intent is recorded — one durable INSERT,
+        // no wait on the chain — before the firewall is changed, then the real result.
+        await _auditLog.AppendAsync(
+            "ExfilBlockIntent",
+            $"Dest={finding.Destination}, Rule={ruleName}",
+            entityType: "ExfilFinding",
+            cancellationToken: CancellationToken.None);
+
         bool blocked = _firewall.AddBlockRule(ruleName, finding.Destination);
 
         string details = $"Dest={finding.Destination}, Rule={ruleName}, Blocked={blocked}";
@@ -50,7 +58,7 @@ public sealed class BlockIpAction : IExfilAction
             blocked ? "ExfilBlock" : "ExfilBlockFailed",
             details,
             entityType: "ExfilFinding",
-            cancellationToken: ct);
+            cancellationToken: CancellationToken.None);
 
         if (blocked)
             _logger.LogWarning("EXFIL ACTION [BlockIp]: {Details}", details);

@@ -12,7 +12,9 @@ info:
     
     - **Agent API** — mTLS (mutual TLS) with client certificates
     - **Dashboard API** — OAuth2 + JWT Bearer + MFA TOTP
+      (**Not implemented** — no MFA in the GRID, the console or the database; see `docs/console/INVENTAIRE_CONSOLE.md` (MFA); decided: mandatory TOTP for tenant_admin, after Sprint 8.)
     - **Admin API** — OAuth2 + JWT Bearer + MFA TOTP + Director role
+      (MFA: **Not implemented**, see above)
     - **Cloud API** — Ed25519 signed requests
     
     ## Standards Compliance
@@ -174,7 +176,7 @@ components:
           example: true
         mfa_token:
           type: string
-          description: Temporary token to use for MFA verification
+          description: Temporary token to use for MFA verification (Not implemented — no MFA today)
           example: "mfa_tmp_8a7f9c2e1b3d4e5f"
         mfa_methods:
           type: array
@@ -712,6 +714,7 @@ paths:
       tags: [Authentication]
       summary: Initial login with email + password
       description: |
+        **Not implemented** — no MFA in the GRID, the console or the database; see `docs/console/INVENTAIRE_CONSOLE.md` (MFA); decided: mandatory TOTP for tenant_admin, after Sprint 8.
         Returns an MFA challenge token. The actual access token is issued
         only after MFA verification via /api/v1/auth/mfa/verify.
       requestBody:
@@ -737,7 +740,8 @@ paths:
   /api/v1/auth/mfa/verify:
     post:
       tags: [Authentication]
-      summary: Verify MFA TOTP code and issue tokens
+      summary: Verify MFA TOTP code and issue tokens (Not implemented)
+      description: "**Not implemented** — no MFA in the GRID, the console or the database; see `docs/console/INVENTAIRE_CONSOLE.md` (MFA); decided: mandatory TOTP for tenant_admin, after Sprint 8."
       requestBody:
         required: true
         content:

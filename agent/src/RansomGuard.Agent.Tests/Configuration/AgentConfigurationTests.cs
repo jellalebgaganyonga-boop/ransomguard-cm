@@ -16,8 +16,6 @@ public sealed class AgentConfigurationTests
         {
             ["Agent:Identity:Id"] = "auto-generated-on-first-run",
             ["Agent:Identity:Hostname"] = "AUTO",
-            ["Agent:Identity:Version"] = "0.3.0",
-            ["Agent:Identity:Environment"] = "Development",
             ["Agent:Detection:WatchPaths:0"] = @"C:\Test",
             ["Agent:Detection:EnableFileSystemWatcher"] = "true",
             ["Agent:Detection:EnableETW"] = "false",
@@ -35,8 +33,6 @@ public sealed class AgentConfigurationTests
         config.ShouldNotBeNull();
         config.Identity.Id.ShouldBe("auto-generated-on-first-run");
         config.Identity.Hostname.ShouldBe("AUTO");
-        config.Identity.Version.ShouldBe("0.3.0");
-        config.Identity.Environment.ShouldBe("Development");
         config.Detection.WatchPaths.Length.ShouldBe(1);
         config.Detection.WatchPaths[0].ShouldBe(@"C:\Test");
         config.Detection.EnableFileSystemWatcher.ShouldBeTrue();
@@ -58,8 +54,6 @@ public sealed class AgentConfigurationTests
         {
             ["Agent:Identity:Id"] = "auto-generated-on-first-run",
             ["Agent:Identity:Hostname"] = "AUTO",
-            ["Agent:Identity:Version"] = "0.3.0",
-            ["Agent:Identity:Environment"] = "Development",
             ["Agent:Detection:WatchPaths:0"] = @"C:\Path1",
             ["Agent:Detection:WatchPaths:1"] = @"C:\Path2",
             ["Agent:Detection:WatchPaths:2"] = @"C:\Path3",
@@ -81,8 +75,6 @@ public sealed class AgentConfigurationTests
         {
             ["Agent:Identity:Id"] = "auto-generated-on-first-run",
             ["Agent:Identity:Hostname"] = "AUTO",
-            ["Agent:Identity:Version"] = "0.3.0",
-            ["Agent:Identity:Environment"] = "Development",
             ["Agent:Detection:WatchPaths:0"] = @"C:\Test",
             ["Agent:Logging:MinimumLevel"] = "Information",
             ["Agent:Logging:LogFilePath"] = @"C:\logs\agent.log",
@@ -111,8 +103,6 @@ public sealed class AgentConfigurationTests
             {
                 Id = "",
                 Hostname = "",
-                Version = "",
-                Environment = ""
             },
             Detection = new DetectionOptions { WatchPaths = [] },
             Logging = new LoggingOptions { MinimumLevel = "", LogFilePath = "" },

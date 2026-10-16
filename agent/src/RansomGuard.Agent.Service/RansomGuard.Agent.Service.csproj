@@ -33,9 +33,20 @@
     <ProjectReference Include="..\RansomGuard.Agent.Core\RansomGuard.Agent.Core.csproj" />
   </ItemGroup>
 
-  <!-- Generate SHA-256 hash file after publish for self-integrity verification -->
+  <!-- Generate SHA-256 hash file after publish for self-integrity verification.
+       MSBuild's own GetFileHash task, not a PowerShell call: started from a PowerShell 7 shell,
+       Windows PowerShell inherits a PSModulePath it cannot load and Get-FileHash is "not
+       recognized": the publish failed or succeeded depending on the calling shell.
+       SelfIntegrityChecker trims and upper-cases the file, so hex case and newline do not matter. -->
   <Target Name="GenerateSelfHash" AfterTargets="Publish">
-    <Exec Command="powershell -NoProfile -Command &quot;(Get-FileHash -Algorithm SHA256 '$(PublishDir)$(TargetFileName)').Hash | Out-File -Encoding ascii -NoNewline '$(PublishDir)$(TargetFileName).sha256'&quot;" />
+    <GetFileHash Files="$(PublishDir)$(TargetFileName)" Algorithm="SHA256" HashEncoding="hex">
+      <Output TaskParameter="Hash" PropertyName="SelfIntegrityHash" />
+    </GetFileHash>
+    <WriteLinesToFile File="$(PublishDir)$(TargetFileName).sha256" Lines="$(SelfIntegrityHash)" Overwrite="true" />
     <Message Importance="high" Text="Self-integrity hash generated: $(PublishDir)$(TargetFileName).sha256" />
   </Target>
+  <ItemGroup>
+    <!-- GridHeartbeatService.BuildHeartbeatAsync and AlertForwardingService.MarkUploadOk are tested directly. -->
+    <InternalsVisibleTo Include="RansomGuard.Agent.Tests" />
+  </ItemGroup>
 </Project>
