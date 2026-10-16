@@ -37,7 +37,7 @@ bench's own PID (`#`), another PID (`!`), nobody (`.`), or whether no event
 arrived (`_`). It also measures when the event arrived relative to the moment
 the pattern released the file.
 
-## The six patterns
+## The patterns
 
 | # | Pattern | Event | What it reproduces |
 |---|---|---|---|
@@ -47,6 +47,16 @@ the pattern released the file.
 | 4 | Rename to `.locked` | Renamed | Extension change |
 | 5 | Delete the canary | Deleted | Deletion — **ransomware-shaped** |
 | 6 | Write an encrypted copy, then delete the original | Deleted | The classic ransomware pattern — **ransomware-shaped** |
+| 7a | Rewrite through a memory-mapped view, flushed (`FlushViewOfFile`) | Modified | Encryption by mapped file (ADR-025, 4d) |
+| 7b | Rewrite through a memory-mapped view, not flushed | Modified | The same, pages left to the system's mapped page writer |
+
+**A concurrent reader runs during every pattern** (ADR-025, correction A): a
+second process — the bench itself, `reader <dir>` — opens every file of the
+bench directory for reading, in a loop, sharing everything, as an antivirus,
+the Windows indexer or a backup does on a real workstation. Its PID is printed
+and is never the right answer; the table counts how many wrong PIDs were the
+reader's. The "after" measure (ETW) is only comparable to a "before" measure
+played with the same reader.
 
 The decisive rate is patterns 3, 5 and 6. Thresholds, fixed before measuring
 (`CLAUDE_CODE_A5_GO_ET_A1_MESURE.md`): ≥ 80 % ship the action engine on Restart
@@ -139,6 +149,33 @@ checks and exits 4 when either fails: an "after" figure (ETW attribution) is
 only comparable to a "before" figure produced by this same, checked instrument.
 Check 3 (Restart Manager in isolation at fixed cadences) adds nothing once the
 owner-thread probe passes, and is not rebuilt.
+
+## The "before" with the concurrent reader (2026-10-16)
+
+Development machine, `-- 20 10`, instrument checks 1 and 2 passed (owner probe
+5/5 on both sides, 0 events seen by the reference only, 0 API errors):
+
+| # | Attributed | Correct PID | Wrong PID | of which the reader |
+|---|---|---|---|---|
+| 1 | 20 / 20 | 20 | 0 | 0 |
+| 2 – 6 | 0 / 100 | 0 | 0 | 0 |
+| 7a, 7b | 0 / 40 — **no watcher event at all** (40 / 40) | 0 | 0 | 0 |
+
+Ransomware-shaped patterns (3, 5, 6): **0 / 60**, unchanged. Two things the
+reader changes, said plainly:
+
+- **Pattern 1 is now attributed, 20 / 20**: the watcher event arrives about
+  5 s *before* the handle is released (median −4 998 ms, against 0 ms without
+  the reader). The reader's openings make NTFS update the directory entry while
+  the writer still holds the file, so the Restart Manager still sees it. Over
+  all eight patterns the "before" is therefore 20 / 160, not 0 / 120 — on the
+  one pattern that is not ransomware-shaped.
+- **Patterns 7a and 7b produce no watcher event within 3 s**, flushed or not:
+  the `FileSystemWatcher` does not see a rewrite through a mapped view. For
+  that pattern only an ETW event can trigger the detection.
+
+No wrong PID, and never the reader's: the reader's handles are too short-lived
+for the Restart Manager to name it here.
 
 ## Provenance
 

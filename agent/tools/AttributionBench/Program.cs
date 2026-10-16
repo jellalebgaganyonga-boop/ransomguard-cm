@@ -6,15 +6,22 @@
 // which it deletes at the end. See README.md.
 //
 // Usage: dotnet run --project agent/tools/AttributionBench -c Release -- [iterations] [consumerDelayMs]
+//   (a concurrent reader process -- the bench itself, "reader <dir>" -- runs during every pattern)
 //   iterations      per pattern, default 20
 //   consumerDelayMs delay before the attribution query, standing in for SENTINEL's repository
 //                   lookup between the event and the query; default 10
 
 using System.Diagnostics;
+using System.IO.MemoryMappedFiles;
 using System.Security.Cryptography;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging.Abstractions;
 using RansomGuard.Agent.Core.Detection.Sentinel;
+
+if (args.Length > 1 && args[0] == "reader")
+{
+    return Reader.Run(args[1]);
+}
 
 int iterations = args.Length > 0 ? int.Parse(args[0]) : 20;
 int consumerDelayMs = args.Length > 1 ? int.Parse(args[1]) : 10;
@@ -108,7 +115,31 @@ Pattern[] patterns =
         await File.WriteAllBytesAsync(path + ".locked", EncryptOwnTestData(plain));
         File.Delete(path);
     }),
+    // Pattern 7: rewrite through a memory-mapped view (ADR-025, 4d), with an explicit flush (7a)
+    // and without (7b): the pages then leave later, written by the system's mapped page writer.
+    new(7, "Rewrite through a mapped view, flushed", "Modified", path =>
+    {
+        RewriteMapped(path, flush: true);
+        return Task.CompletedTask;
+    }),
+    new(8, "Rewrite through a mapped view, not flushed", "Modified", path =>
+    {
+        RewriteMapped(path, flush: false);
+        return Task.CompletedTask;
+    }),
 ];
+
+// The concurrent reader (ADR-025, correction A): another process opens every file of the bench
+// directory for reading, in a loop, sharing everything -- as an antivirus, the Windows indexer or
+// a backup does on a real workstation. Its PID is never the right answer.
+using Process reader = Process.Start(new ProcessStartInfo(Environment.ProcessPath!)
+{
+    ArgumentList = { "reader", dir },
+    UseShellExecute = false,
+})!;
+int readerPid = reader.Id;
+Console.WriteLine($"  concurrent reader: PID {readerPid}  <- never the right answer");
+Console.WriteLine();
 
 // Check 2: the owner-thread probe. The bench queries the Restart Manager about a file from the
 // thread that holds it open for writing. If neither query sees the bench here, the environment
@@ -136,12 +167,35 @@ Console.WriteLine();
 var results = new List<PatternResult>();
 foreach (Pattern pattern in patterns)
 {
-    Console.Write($"[{pattern.Number}/6] {pattern.Name} ");
+    Console.Write($"[{pattern.Label}] {pattern.Name} ");
     var outcome = new PatternResult(pattern);
     for (int i = 0; i < iterations; i++)
     {
         string path = Path.Combine(dir, $"0001_dossier_patient_p{pattern.Number}_{i:00}.txt");
-        await File.WriteAllTextAsync(path, $"Dossier patient synthetique {i} — fichier de mesure du banc\n");
+        // With the concurrent reader, creating the canary once failed (2026-10-15, message lost):
+        // three attempts, then the iteration counts as an action failure, with its message.
+        Exception? createFailure = null;
+        for (int creation = 0; creation < 3; creation++)
+        {
+            try
+            {
+                await File.WriteAllTextAsync(path, $"Dossier patient synthetique {i} — fichier de mesure du banc\n");
+                createFailure = null;
+                break;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                createFailure = ex;
+                await Task.Delay(50);
+            }
+        }
+
+        if (createFailure is not null)
+        {
+            Console.Write('x');
+            outcome.ActionFailures.Add($"canary creation: {createFailure.GetType().Name}: {createFailure.Message}");
+            continue;
+        }
         await Task.Delay(400); // let the creation events go by before the file is under measurement
 
         var tcs = new TaskCompletionSource<Attempt>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -178,7 +232,12 @@ foreach (Pattern pattern in patterns)
         if (attempt.Holders > 1) outcome.MoreThanOneHolder++;
         if (attempt.OffenderPid is null) { Console.Write('.'); outcome.NotAttributed++; }
         else if (attempt.OffenderPid == benchPid) { Console.Write('#'); outcome.CorrectPid++; }
-        else { Console.Write('!'); outcome.WrongPid++; }
+        else
+        {
+            Console.Write('!');
+            outcome.WrongPid++;
+            if (attempt.OffenderPid == readerPid) outcome.WrongPidIsReader++;
+        }
     }
     Console.WriteLine();
     results.Add(outcome);
@@ -187,17 +246,19 @@ foreach (Pattern pattern in patterns)
 watcher.EnableRaisingEvents = false;
 channel.Writer.TryComplete();
 await consumer;
+reader.Kill();
+reader.WaitForExit();
 Directory.Delete(dir, recursive: true);
 
 Console.WriteLine();
 Console.WriteLine("legend: # correct PID   ! wrong PID   . no attribution   _ no event   x action failed");
 Console.WriteLine();
-Console.WriteLine("| # | Pattern | Iter | Attributed | Rate | Correct PID | Wrong PID | >1 holder |");
-Console.WriteLine("|---|---------|------|------------|------|-------------|-----------|-----------|");
+Console.WriteLine("| # | Pattern | Iter | Attributed | Rate | Correct PID | Wrong PID | of which the reader | >1 holder |");
+Console.WriteLine("|---|---------|------|------------|------|-------------|-----------|---------------------|-----------|");
 foreach (PatternResult r in results)
 {
     int attributed = r.CorrectPid + r.WrongPid;
-    Console.WriteLine($"| {r.Pattern.Number} | {r.Pattern.Name} | {iterations} | {attributed} | {Rate(attributed, iterations),6} | {r.CorrectPid} | {r.WrongPid} | {r.MoreThanOneHolder} |");
+    Console.WriteLine($"| {r.Pattern.Label} | {r.Pattern.Name} | {iterations} | {attributed} | {Rate(attributed, iterations),6} | {r.CorrectPid} | {r.WrongPid} | {r.WrongPidIsReader} | {r.MoreThanOneHolder} |");
 }
 
 Console.WriteLine();
@@ -206,14 +267,22 @@ foreach (PatternResult r in results)
 {
     string median = r.EventVsRelease.Count == 0 ? "n/a" : $"{Median(r.EventVsRelease),8:0}";
     int beforeClose = r.EventVsRelease.Count(ms => ms < 0);
-    Console.WriteLine($"  pattern {r.Pattern.Number}: median {median} ms   before-close {beforeClose}/{r.EventVsRelease.Count}   no event {r.NoEvent}   action failed {r.ActionFailures.Count}");
+    Console.WriteLine($"  pattern {r.Pattern.Label}: median {median} ms   before-close {beforeClose}/{r.EventVsRelease.Count}   no event {r.NoEvent}   action failed {r.ActionFailures.Count}");
+}
+
+foreach (PatternResult r in results.Where(r => r.ActionFailures.Count > 0))
+{
+    foreach (string failure in r.ActionFailures.Distinct())
+    {
+        Console.WriteLine($"  pattern {r.Pattern.Label} action failure: {failure}");
+    }
 }
 
 Console.WriteLine();
 Console.WriteLine("Check 1, reference Restart Manager query (independent of the production wrapper), per event:");
 foreach (PatternResult r in results)
 {
-    Console.WriteLine($"  pattern {r.Pattern.Number}: only the reference found a holder {r.OnlyReferenceFound}   only production {r.OnlyProductionFound}   reference API errors {r.ReferenceErrors}");
+    Console.WriteLine($"  pattern {r.Pattern.Label}: only the reference found a holder {r.OnlyReferenceFound}   only production {r.OnlyProductionFound}   reference API errors {r.ReferenceErrors}");
 }
 
 int onlyReference = results.Sum(r => r.OnlyReferenceFound);
@@ -240,6 +309,22 @@ return instrumentValid ? 0 : 4;
 
 static string Rate(int part, int total) => total == 0 ? "n/a" : $"{100.0 * part / total:0}%";
 
+// Patterns 7a and 7b: the canary rewritten through a memory-mapped view of the bench's own file.
+static void RewriteMapped(string path, bool flush)
+{
+    using var file = MemoryMappedFile.CreateFromFile(path, FileMode.Open, null, 0, MemoryMappedFileAccess.ReadWrite);
+    using var view = file.CreateViewAccessor(0, 0, MemoryMappedFileAccess.ReadWrite);
+    for (long i = 0; i < view.Capacity; i++)
+    {
+        view.Write(i, (byte)(view.ReadByte(i) ^ 0x5A));
+    }
+
+    if (flush)
+    {
+        view.Flush();
+    }
+}
+
 static double Median(List<double> values)
 {
     var sorted = values.OrderBy(v => v).ToList();
@@ -261,7 +346,46 @@ internal sealed record WatcherEvent(string Path, string Kind, DateTime SeenAt);
 
 internal sealed record Attempt(string Kind, DateTime SeenAt, int Holders, int? OffenderPid, ReferenceResult Reference);
 
-internal sealed record Pattern(int Number, string Name, string ExpectedEvent, Func<string, Task> Act);
+internal sealed record Pattern(int Number, string Name, string ExpectedEvent, Func<string, Task> Act)
+{
+    /// <summary>"1" to "6", then "7a" (mapped, flushed) and "7b" (mapped, not flushed).</summary>
+    public string Label => Number switch { 7 => "7a", 8 => "7b", _ => Number.ToString() };
+}
+
+/// <summary>The concurrent reader: opens every file of the directory for reading, in a loop.</summary>
+internal static class Reader
+{
+    public static int Run(string directory)
+    {
+        var buffer = new byte[4096];
+        try
+        {
+            while (true)
+            {
+                foreach (string file in Directory.EnumerateFiles(directory))
+                {
+                    try
+                    {
+                        // Share everything, like an antivirus: the reader never blocks the writer.
+                        using var stream = new FileStream(file, FileMode.Open, FileAccess.Read,
+                            FileShare.ReadWrite | FileShare.Delete);
+                        _ = stream.Read(buffer, 0, buffer.Length);
+                    }
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                    {
+                        // The file was renamed or deleted under us: the next pass sees the new state.
+                    }
+                }
+
+                Thread.Sleep(5);
+            }
+        }
+        catch (DirectoryNotFoundException)
+        {
+            return 0; // the bench is over
+        }
+    }
+}
 
 internal sealed class PatternResult(Pattern pattern)
 {
@@ -271,6 +395,7 @@ internal sealed class PatternResult(Pattern pattern)
     public int NotAttributed { get; set; }
     public int NoEvent { get; set; }
     public int MoreThanOneHolder { get; set; }
+    public int WrongPidIsReader { get; set; }
     public int OnlyReferenceFound { get; set; }
     public int OnlyProductionFound { get; set; }
     public int ReferenceErrors { get; set; }
