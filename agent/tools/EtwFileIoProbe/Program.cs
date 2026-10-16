@@ -498,8 +498,10 @@ internal static class Measure
             Named("Create", e.FileName, e.ProcessID, mutating: false);
             if (_current is { Phase: "copy" } s && IsCanary(e.FileName))
             {
-                uint raw = Convert.ToUInt32(e.PayloadByName("CreateOptions"), CultureInfo.InvariantCulture);
-                string disposition = $"{raw >> 24} ({e.CreateDisposition})";
+                // TraceEvent's CreateDisposition: Win32 names, NT values (CREATE_ALWAYS = 5 =
+                // FILE_OVERWRITE_IF, OPEN_EXISTING = 1 = FILE_OPEN). PayloadByName("CreateOptions")
+                // is already masked: its high byte reads 0 (run 38813859055).
+                string disposition = $"{(int)e.CreateDisposition} ({e.CreateDisposition})";
                 Tally(s.CreateByDisposition, disposition, e.ProcessID);
             }
         };
@@ -638,7 +640,7 @@ internal static class Measure
 
             sb.AppendLine();
             Pivot(sb, "Mutating operations on the canaries, by the PID the event carries (writer = the process that did it; reader = the concurrent reader):", "Operation", s.CanaryPid);
-            Pivot(sb, "Creates (opens) on every canary, by disposition -- raw NT value (CreateOptions >> 24) and TraceEvent's name -- and by PID:", "Disposition", s.CreateByDisposition);
+            Pivot(sb, "Creates (opens) on every canary, by NT disposition (TraceEvent's value and name) and by PID:", "Disposition", s.CreateByDisposition);
 
             sb.AppendLine();
             Pivot(sb, "Pattern 7, memory-mapped rewrite of a canary: every operation on the mapped canaries, by PID:", "Operation", s.MappedPid);
