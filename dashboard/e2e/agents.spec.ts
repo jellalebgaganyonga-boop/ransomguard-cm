@@ -3,7 +3,7 @@
  * AC4.x: List, detail, isolate command (admin-only).
  */
 
-import { test, expect, AxeBuilder, setupMocks, loginAs, navigateTo, MOCK_AGENT } from './fixtures/index';
+import { test, expect, AxeBuilder, setupMocks, loginAs, navigateTo, expectNoHorizontalOverflow, MOCK_AGENT } from './fixtures/index';
 
 test.describe('Agents list', () => {
   test('tenant_admin sees agent list with hostname', async ({ page }) => {
@@ -181,6 +181,7 @@ test.describe('Add agent — install command (GRID-SEC-006)', () => {
     const command = page.getByTestId('install-command');
     await expect(command).toContainText(`(Get-FileHash -Algorithm SHA256 $f).Hash -ne '${SHA}'`);
     await expect(page.getByTestId('installer-sha256')).toHaveText(SHA);
+    await expectNoHorizontalOverflow(page);
     const text = (await command.textContent()) ?? '';
     expect(text).not.toMatch(/(^|\s)-k(\s|$)/);
     expect(text).not.toMatch(/C:\\/i);

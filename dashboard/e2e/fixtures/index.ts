@@ -197,6 +197,12 @@ export const MOCK_COMMAND = {
  *
  * Use this instead of page.goto() for all post-login navigation in tests.
  */
+/** The page fits its viewport: nothing wider than the screen (Fix E, phones). */
+export async function expectNoHorizontalOverflow(page: Page): Promise<void> {
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  expect(overflow, 'horizontal overflow in px').toBeLessThanOrEqual(0);
+}
+
 export async function navigateTo(page: Page, path: string): Promise<void> {
   await page.evaluate((p) => {
     window.history.pushState({}, '', p);

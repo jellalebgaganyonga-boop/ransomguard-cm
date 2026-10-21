@@ -4,7 +4,7 @@
  * On a phone the items live in the drawer behind the hamburger: same rule there.
  */
 
-import { test, expect, setupMocks, loginAs, navigateTo } from './fixtures/index';
+import { test, expect, setupMocks, loginAs, navigateTo, expectNoHorizontalOverflow } from './fixtures/index';
 import type { Locator, Page } from '@playwright/test';
 
 const PREFS = { id: 'pref-e2e-1', email_critical: true, email_high: true, email_medium: false, email_low: false };
@@ -12,7 +12,7 @@ const PREFS = { id: 'pref-e2e-1', email_critical: true, email_high: true, email_
 async function navItems(page: Page): Promise<Locator> {
   const phone = (page.viewportSize()?.width ?? 1280) < 768;
   if (phone) {
-    await page.getByRole('button', { name: 'Menu' }).click();
+    await page.getByRole('button', { name: 'Menu', exact: true }).click();
     return page.getByRole('dialog');
   }
   return page.getByRole('navigation').first();
@@ -31,6 +31,7 @@ for (const [path, expected, notExpected] of [
     await navigateTo(page, path);
 
     const nav = await navItems(page);
+    await expectNoHorizontalOverflow(page);
     const active = (await nav.locator('a[aria-current="page"]').allInnerTexts()).map((s) => s.trim());
     expect(active).toHaveLength(1);
     expect(active[0]).toContain(expected);

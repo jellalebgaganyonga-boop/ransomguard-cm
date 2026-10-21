@@ -107,7 +107,8 @@ export function UsersListPage() {
         )}
 
         {!isLoading && !isError && users.length > 0 && (
-          <div className="overflow-x-auto">
+          // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
+          <div className="overflow-x-auto" tabIndex={0} role="region" aria-label={t('a11y.scrollableTable')}>
             <table className="w-full border-collapse text-sm">
               <thead>
                 <tr className="border-b border-border-default">

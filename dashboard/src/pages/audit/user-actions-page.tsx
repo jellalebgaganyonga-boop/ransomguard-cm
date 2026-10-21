@@ -105,7 +105,8 @@ export function UserActionsPage() {
       </div>
 
       {/* Table */}
-      <div className="rounded-lg border border-border-subtle bg-canvas overflow-x-auto">
+      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex */}
+      <div className="rounded-lg border border-border-subtle bg-canvas overflow-x-auto" tabIndex={0} role="region" aria-label={t('a11y.scrollableTable')}>
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border-subtle bg-gray-50">

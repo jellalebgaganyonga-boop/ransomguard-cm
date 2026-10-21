@@ -391,6 +391,9 @@
       "receivedAt": "Received"
     }
   },
+  "a11y": {
+    "scrollableTable": "Horizontally scrollable table"
+  },
   "settings": {
     "title": "Settings",
     "subtitle": "Your account, your language, your notifications, your password.",

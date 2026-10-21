@@ -77,8 +77,10 @@ test.describe('Idle timeout', () => {
     // Advance 20 minutes
     await page.clock.fastForward(20 * 60 * 1000);
 
-    // Simulate user activity (mousemove / keypress resets the timer)
-    await page.mouse.move(400, 300);
+    // Simulate user activity (mousemove / keypress resets the timer). Inside every viewport:
+    // (400, 300) fell outside the 320 px mobile-small one, no event reached the page, and the
+    // modal showed up -- a test bug, not a product one.
+    await page.mouse.move(100, 100);
 
     // Advance another 20 minutes (total 40 min, but 20 min since last activity)
     await page.clock.fastForward(20 * 60 * 1000);

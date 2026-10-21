@@ -5,7 +5,7 @@
  * the bell in the header is its quick link.
  */
 
-import { test, expect, AxeBuilder, setupMocks, loginAs, navigateTo, MOCK_ME } from './fixtures/index';
+import { test, expect, AxeBuilder, setupMocks, loginAs, navigateTo, expectNoHorizontalOverflow, MOCK_ME } from './fixtures/index';
 import type { Page } from '@playwright/test';
 
 const PREFS = { id: 'pref-e2e-1', email_critical: true, email_high: true, email_medium: false, email_low: false, email_delivery_configured: false };
@@ -32,6 +32,7 @@ test.describe('Settings', () => {
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Paramètres');
     await expect(page.getByRole('tab', { name: 'Profil' })).toHaveAttribute('aria-selected', 'true');
     await expect(page.getByTestId('profile-name')).toHaveText('Auditeur E2E');
+    await expectNoHorizontalOverflow(page);
     const panel = page.getByRole('tabpanel');
     await expect(panel.getByText('auditor@hopital-yde.cm')).toBeVisible();
     await expect(panel.getByText('Hôpital Régional de Yaoundé')).toBeVisible();
@@ -137,6 +138,7 @@ test.describe('Settings', () => {
     const submit = page.getByRole('button', { name: 'Changer le mot de passe' });
     await expect(submit).toBeDisabled();
 
+    await expectNoHorizontalOverflow(page);
     await page.getByLabel('Mot de passe actuel').fill('wrong');
     await page.getByLabel(/^Nouveau mot de passe/).fill('short');
     await expect(page.getByText('8 caractères au moins.')).toBeVisible();

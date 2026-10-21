@@ -57,9 +57,9 @@ export function Header({ me }: HeaderProps) {
   const [confirmLogoutAll, setConfirmLogoutAll] = useState(false);
 
   return (
-    <header className="flex h-16 shrink-0 items-center justify-between border-b border-border-subtle bg-canvas px-6 shadow-sm">
-      {/* Left cluster */}
-      <div className="flex items-center gap-3">
+    <header className="flex h-16 shrink-0 items-center justify-between gap-2 border-b border-border-subtle bg-canvas px-3 shadow-sm sm:px-6">
+      {/* Left cluster: shrinks first (the brand truncates), the buttons on the right never do. */}
+      <div className="flex min-w-0 items-center gap-2 sm:gap-3">
         <Button
           variant="ghost"
           size="icon"
@@ -69,9 +69,9 @@ export function Header({ me }: HeaderProps) {
         >
           <Menu className="size-5" aria-hidden="true" />
         </Button>
-        <span className="flex items-center gap-2 text-lg font-semibold text-text-primary">
+        <span className="flex min-w-0 items-center gap-2 text-base font-semibold text-text-primary sm:text-lg">
           <span aria-hidden="true">&#x1F6E1;</span>
-          {t('app.name')}
+          <span className="truncate">{t('app.name')}</span>
         </span>
         <span className="hidden rounded-full bg-primary-subtle px-3 py-1 text-xs font-medium text-primary sm:inline-block">
           {me.tenant.name}
@@ -79,7 +79,7 @@ export function Header({ me }: HeaderProps) {
       </div>
 
       {/* Right cluster */}
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-1 sm:gap-2">
         {/* Notification preferences, for every role (Fix C.4). The badge it used to carry always
             read 0: nothing fed it; nothing pretends a count now. */}
         <Button

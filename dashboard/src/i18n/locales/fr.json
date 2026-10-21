@@ -391,6 +391,9 @@
       "receivedAt": "Reçu le"
     }
   },
+  "a11y": {
+    "scrollableTable": "Tableau défilant horizontalement"
+  },
   "settings": {
     "title": "Paramètres",
     "subtitle": "Votre compte, votre langue, vos notifications, votre mot de passe.",

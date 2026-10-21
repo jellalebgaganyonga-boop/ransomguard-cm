@@ -52,7 +52,8 @@ export function SettingsPage() {
         <p className="text-text-muted">{t('settings.subtitle')}</p>
       </div>
 
-      <div role="tablist" aria-label={t('settings.title')} className="flex flex-wrap gap-1 border-b border-border-subtle">
+      {/* Phones: the four tabs in two rows of two; wider: one row. */}
+      <div role="tablist" aria-label={t('settings.title')} className="grid grid-cols-2 gap-1 border-b border-border-subtle sm:flex sm:flex-wrap">
         {tabs.map(({ id, icon: Icon, label }) => (
           <button
             key={id}
