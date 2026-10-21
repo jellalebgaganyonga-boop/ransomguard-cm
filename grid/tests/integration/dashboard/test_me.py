@@ -104,7 +104,9 @@ async def test_me_returns_admin_identity_correctly(client: AsyncClient) -> None:
     assert body["tenant"]["name"] == info["tenant_name"]
     assert body["tenant"]["status"] == "active"
     assert "tenant_admin" in body["roles"]
-    assert body["preferences"]["language"] == "fr"
+    # No language chosen yet in Settings: null, and the console follows its default (English) and
+    # the browser. "fr" was the former hard-coded answer (ADR-FE-002 French default, since reversed).
+    assert body["preferences"]["language"] is None
     assert body["preferences"]["timezone"] == "Africa/Douala"
 
 
