@@ -180,12 +180,27 @@ jobs:
           $canaries | Format-Table Name, Length, Attributes -AutoSize | Out-String | Write-Host
           if ($canaries.Count -eq 0) { Write-Host '::error::no canary in the configured directory'; exit 1 }
 
-      - name: A canary modification writes the signed audit chain
+      - name: A canary modification writes the signed audit chain, and its writer is suspended (ADR-026)
         shell: pwsh
         run: |
           $canary = Get-ChildItem $env:WATCH_DIR -File -Force -Filter '0001_*' | Select-Object -First 1
-          Add-Content -Path $canary.FullName -Value 'modified by the CI service check' -Force
-          Start-Sleep 20
+          # The write comes from a throwaway child, not from this shell: with the response engine on,
+          # the writer of a canary is suspended (ETW names it), and this step must stay alive.
+          $writer = Start-Process cmd.exe -ArgumentList "/c echo modified by the CI service check>>`"$($canary.FullName)`" & ping -n 90 127.0.0.1 >nul" -PassThru -WindowStyle Hidden
+          Write-Host "writer: cmd.exe PID $($writer.Id)"
+          $deadline = (Get-Date).AddSeconds(15)
+          do {
+            Start-Sleep 1
+            $p = Get-Process -Id $writer.Id -ErrorAction SilentlyContinue
+            $threads = @($p.Threads)
+            $suspended = $threads.Count -gt 0 -and @($threads | Where-Object { $_.ThreadState -eq 'Wait' -and $_.WaitReason -eq 'Suspended' }).Count -eq $threads.Count
+          } while (-not $suspended -and (Get-Date) -lt $deadline)
+          Write-Host "writer threads: $($threads.Count), all suspended: $suspended"
+          if (-not $suspended) { Write-Host '::error::ADR-026: the canary writer was not suspended within 15 s'; Stop-Process -Id $writer.Id -Force -ErrorAction SilentlyContinue; exit 1 }
+          Write-Host "::notice title=ADR-026 real suspension::cmd.exe PID $($writer.Id) wrote a canary and was suspended by the installed service"
+          "`n- **ADR-026 real suspension**: cmd.exe PID $($writer.Id) wrote a canary and was suspended by the installed service" >> $env:GITHUB_STEP_SUMMARY
+          Stop-Process -Id $writer.Id -Force
+          Start-Sleep 10
           Stop-Service $env:SERVICE_NAME -Force
           $exe = Join-Path $env:INSTALL_DIR 'RansomGuard.Agent.Service.exe'
           # Run from System32 too: the CLI must also read the configuration of its own directory.
@@ -241,7 +256,12 @@ jobs:
           $killed = $false
           while ((Get-Date) -lt $end) {
             foreach ($c in @(Get-ChildItem $env:WATCH_DIR -File -Force -Filter '0001_*' -ErrorAction SilentlyContinue)) {
-              Remove-Item $c.FullName -Force -ErrorAction SilentlyContinue; $deleted++
+              # From a throwaway child, never from this shell: with the response engine (ADR-026) the
+              # process that deletes a canary is suspended once attributed. A Remove-Item here got this
+              # very step suspended, and the job never ended (2026-10-21). cmd.exe exits right after
+              # the deletion, so the attribution finds it gone and suspends nobody.
+              Start-Process cmd.exe -ArgumentList "/c del /f /q `"$($c.FullName)`"" -WindowStyle Hidden -Wait
+              $deleted++
             }
             if (-not $killed -and (Get-Date) -ge $killAt) {
               taskkill /F /PID $agentPid | Out-Host   # mid-burst: no shutdown, no last chaining pass

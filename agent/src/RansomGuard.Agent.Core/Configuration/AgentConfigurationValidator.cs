@@ -204,6 +204,13 @@ public sealed class SentinelOptionsValidator : AbstractValidator<SentinelOptions
             .WithMessage("Sentinel.CanaryTemplates must contain at least 3 templates.");
 
         RuleFor(x => x.CanaryPrefix).NotEmpty();
+
+        When(x => x.Response is not null, () =>
+        {
+            RuleFor(x => x.Response!.EscalationMinutes)
+                .InclusiveBetween(5, 1440)
+                .WithMessage("Sentinel.Response.EscalationMinutes must be between 5 and 1440.");
+        });
     }
 
     private static bool BeValidPath(string path)

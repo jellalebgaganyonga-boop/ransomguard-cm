@@ -8,6 +8,7 @@ using RansomGuard.Agent.Core.Detection;
 using RansomGuard.Agent.Core.Detection.Genealogy;
 using RansomGuard.Agent.Core.Detection.Sentinel;
 using RansomGuard.Agent.Core.Detection.Sentinel.Etw;
+using RansomGuard.Agent.Core.Detection.Sentinel.Response;
 using RansomGuard.Agent.Core.Communication;
 using RansomGuard.Agent.Core.Communication.Models;
 using RansomGuard.Agent.Core.Persistence.Entities;
@@ -54,6 +55,7 @@ public sealed class SentinelMonitor : BackgroundService
     private readonly ProcessCreationTimes _processTimes;
     private readonly UserProfileEnumerator _profiles;
     private readonly CanaryAttributor _attributor;
+    private readonly CanaryResponseEngine? _response;
     private readonly TimeProvider _time;
 
     /// <summary>
@@ -76,6 +78,7 @@ public sealed class SentinelMonitor : BackgroundService
     /// <param name="time">The clock of the correlation window and of the attribution delay.</param>
     /// <param name="processTimes">Process creation times for the attribution; the OS by default (test seam).</param>
     /// <param name="profiles">The real user profiles that %EACHUSERPROFILE% expands to (AGT-PATH-001); null: the Windows registry.</param>
+    /// <param name="responseEngine">The response (ADR-026): suspends the attributed writer. Required when Sentinel:Response:SuspendProcess is true.</param>
     public SentinelMonitor(
         ILogger<SentinelMonitor> logger,
         IOptionsMonitor<AgentConfiguration> config,
@@ -89,8 +92,10 @@ public sealed class SentinelMonitor : BackgroundService
         EtwFileIoSession? etwSession = null,
         TimeProvider? time = null,
         ProcessCreationTimes? processTimes = null,
-        UserProfileEnumerator? profiles = null)
+        UserProfileEnumerator? profiles = null,
+        CanaryResponseEngine? responseEngine = null)
     {
+        _response = responseEngine;
         _processTimes = processTimes ?? new ProcessCreationTimes();
         _profiles = profiles ?? UserProfileEnumerator.Windows;
         _etwSession = etwSession;
@@ -181,6 +186,24 @@ public sealed class SentinelMonitor : BackgroundService
                     resolvedDirs.Length);
                 _moduleState.Publish(ModuleCode.Sentinel, ModuleState.Inactive, ModuleReasonCode.NoWatchDirectory);
                 return;
+            }
+
+            // The chain is proven before "active" (plan de finition): a response the configuration
+            // promises and that nothing can carry out is a lie the console would repeat.
+            if (sentinel.Response?.SuspendProcess == true && _response is null)
+            {
+                _logger.LogCritical("SENTINEL: Sentinel:Response:SuspendProcess is true but no response engine is wired; the module does not start (init_failed)");
+                _moduleState.Publish(ModuleCode.Sentinel, ModuleState.Inactive, ModuleReasonCode.InitFailed);
+                return;
+            }
+
+            if (sentinel.Response is null)
+            {
+                _logger.LogWarning("SENTINEL: no Sentinel:Response section: a canary write is alerted, never answered (no suspension)");
+            }
+            else if (sentinel.Response.SuspendProcess && !sentinel.EtwEnabled)
+            {
+                _logger.LogWarning("SENTINEL: Sentinel:Response:SuspendProcess is true but Sentinel:EtwEnabled is false: without ETW no writer is ever attributed, so nobody is ever suspended");
             }
 
             _logger.LogInformation("SENTINEL monitor active — real-time watchers on {DirCount} directories, polling every {IntervalMs}ms",
@@ -677,6 +700,12 @@ public sealed class SentinelMonitor : BackgroundService
                 $"{detection.Path}: {outcome.StateCode}"
                     + (outcome.ProcessId is int pid ? $" PID {pid} created {outcome.ProcessCreatedAtUtc:o} {outcome.ProcessName}" : $" ({outcome.Reason})"),
                 "CanaryAlert", alertId, CancellationToken.None).ConfigureAwait(false);
+
+            // The response (ADR-026): decided on the final attribution, after the complement left.
+            if (_response is not null)
+            {
+                await _response.RespondAsync(outcome, detection.Path, alertId, clientMessageId).ConfigureAwait(false);
+            }
         }
         catch (Exception ex)
         {

@@ -4,10 +4,12 @@ using RansomGuard.Agent.Core.Configuration;
 using RansomGuard.Agent.Core.Detection;
 using RansomGuard.Agent.Core.Detection.Sentinel;
 using RansomGuard.Agent.Core.Detection.Sentinel.Etw;
+using RansomGuard.Agent.Core.Detection.Sentinel.Response;
 using RansomGuard.Agent.Core.Diagnostics;
 using RansomGuard.Agent.Core.Persistence.Entities;
 using RansomGuard.Agent.Service;
 using RansomGuard.Agent.Tests.Diagnostics;
+using RansomGuard.Agent.Tests.Detection.Sentinel.Response;
 using Shouldly;
 
 namespace RansomGuard.Agent.Tests.Detection.Sentinel.Etw;
@@ -22,12 +24,15 @@ public sealed class SentinelEtwCorrelationTests : IDisposable
     private readonly EmittingTrace _trace = new();
 
     // The processes the attribution may find running: 4242 and 5151, both started before any write.
+    private static readonly DateTime EvilStart = DateTime.UtcNow.AddHours(-1);
+    private static readonly DateTime OtherStart = DateTime.UtcNow.AddHours(-2);
     private readonly ProcessCreationTimes _processes = new(pid => pid switch
     {
-        4242 => new ProcessFacts(DateTime.UtcNow.AddHours(-1), "evil", @"C:\Users\x\AppData\Local\Temp\evil.exe"),
-        5151 => new ProcessFacts(DateTime.UtcNow.AddHours(-2), "other", @"C:\Tools\other.exe"),
+        4242 => new ProcessFacts(EvilStart, "evil", @"C:\Users\x\AppData\Local\Temp\evil.exe"),
+        5151 => new ProcessFacts(OtherStart, "other", @"C:\Tools\other.exe"),
         _ => null,
     });
+    private readonly FakeSuspender _suspender = new();
     private int _tracesOpened;
 
     public void Dispose() => _h.Dispose();
@@ -83,8 +88,12 @@ public sealed class SentinelEtwCorrelationTests : IDisposable
         _tracesOpened.ShouldBe(0);
     }
 
-    private async Task<SentinelMonitor> StartedSentinelAsync(bool etwEnabled)
+    private async Task<SentinelMonitor> StartedSentinelAsync(bool etwEnabled, bool respond = false)
     {
+        CanaryResponseEngine? engine = respond
+            ? new CanaryResponseEngine(_suspender, _h.ScopeFactory, _h.AlertQueue, new SentinelResponseOptions { SuspendProcess = true, EscalationMinutes = 60 },
+                NullLogger<CanaryResponseEngine>.Instance, readStartTime: pid => pid == 4242 ? EvilStart : null)
+            : null;
         var session = new EtwFileIoSession(
             () =>
             {
@@ -102,6 +111,7 @@ public sealed class SentinelEtwCorrelationTests : IDisposable
                 CheckIntervalMs = 60_000, // the integrity check stays out of the count
                 EnableRealTimeRegeneration = false,
                 EtwEnabled = etwEnabled,
+                Response = respond ? new SentinelResponseOptions { SuspendProcess = true, EscalationMinutes = 60 } : null,
             }),
             _h.ScopeFactory,
             new FileEventDeduplicator(50),
@@ -110,7 +120,8 @@ public sealed class SentinelEtwCorrelationTests : IDisposable
             _h.Reporter,
             startupDelay: TimeSpan.Zero,
             etwSession: session,
-            processTimes: _processes);
+            processTimes: _processes,
+            responseEngine: engine);
         await monitor.StartAsync(CancellationToken.None);
         await Eventually.HoldsAsync(() => _h.State(ModuleCode.Sentinel).State == ModuleState.Active, "SENTINEL active");
         if (etwEnabled)
@@ -190,11 +201,70 @@ public sealed class SentinelEtwCorrelationTests : IDisposable
         Complements(alert).ShouldBeEmpty();
     }
 
+    [Fact(Timeout = 30_000)]
+    public async Task A_resolved_writer_is_suspended_and_the_console_is_told()
+    {
+        SentinelCanary canary = await _h.CreateCanaryAsync(_h.Folder);
+        using SentinelMonitor monitor = await StartedSentinelAsync(etwEnabled: true, respond: true);
+
+        _trace.Emit(new FileIoRecord(FileIoOperation.Write, canary.FilePath, 4242, DateTime.UtcNow, 0, 0));
+
+        await Eventually.HoldsAsync(() => _suspender.Suspended.Contains(4242), "the writer suspended");
+        AlertIngestRequest alert = Alert(canary);
+        await Eventually.HoldsAsync(() => Responses().Count == 1, "the response alert");
+        AlertIngestRequest response = Responses()[0];
+        response.AlertType.ShouldBe("SentinelProcessSuspended");
+        Detail(response, "response_to").ShouldBe(alert.ClientMessageId);
+        Detail(response, "process_id").ShouldBe("4242");
+        Detail(response, "process_name").ShouldBe("evil");
+    }
+
+    [Fact(Timeout = 30_000)]
+    public async Task Two_writers_are_ambiguous_and_nobody_is_suspended()
+    {
+        SentinelCanary canary = await _h.CreateCanaryAsync(_h.Folder);
+        using SentinelMonitor monitor = await StartedSentinelAsync(etwEnabled: true, respond: true);
+
+        _trace.Emit(new FileIoRecord(FileIoOperation.Write, canary.FilePath, 4242, DateTime.UtcNow, 0, 0));
+        _trace.Emit(new FileIoRecord(FileIoOperation.Write, canary.FilePath, 5151, DateTime.UtcNow, 0, 0));
+
+        await Eventually.HoldsAsync(() => Alerts(canary) == 1, "the alert");
+        AlertIngestRequest alert = Alert(canary);
+        await Eventually.HoldsAsync(() => Complements(alert).Count == 1, "the attribution complement");
+        await Task.Delay(500);
+        _suspender.Suspended.ShouldBeEmpty();
+        Responses().ShouldBeEmpty();
+    }
+
+    [Fact(Timeout = 30_000)]
+    public async Task A_reader_that_only_opens_the_canary_is_never_suspended()
+    {
+        SentinelCanary canary = await _h.CreateCanaryAsync(_h.Folder);
+        using SentinelMonitor monitor = await StartedSentinelAsync(etwEnabled: true, respond: true);
+
+        // 5151 opens the canary to read it (FILE_OPEN, disposition 1), then 4242 writes it: only the writer can be named.
+        _trace.Emit(new FileIoRecord(FileIoOperation.Create, canary.FilePath, 5151, DateTime.UtcNow, 1, 0));
+        _trace.Emit(new FileIoRecord(FileIoOperation.Write, canary.FilePath, 4242, DateTime.UtcNow, 0, 0));
+
+        await Eventually.HoldsAsync(() => _suspender.Suspended.Contains(4242), "the writer suspended");
+        _suspender.Suspended.ShouldNotContain(5151);
+    }
+
+    private List<AlertIngestRequest> Responses()
+    {
+        lock (_h.Forwarded)
+        {
+            return _h.Forwarded.Where(a => a.AlertType.StartsWith("SentinelProcess", StringComparison.Ordinal)).ToList();
+        }
+    }
+
     private AlertIngestRequest Alert(SentinelCanary canary)
     {
         lock (_h.Forwarded)
         {
-            return _h.Forwarded.Single(a => Equals(a.RawPayload["canary_path"], canary.FilePath));
+            // The canary alert only: the response alert (ADR-026) names the same canary.
+            return _h.Forwarded.Single(a => a.AlertType == "SentinelCanaryModified"
+                && Equals(a.RawPayload["canary_path"], canary.FilePath));
         }
     }
 

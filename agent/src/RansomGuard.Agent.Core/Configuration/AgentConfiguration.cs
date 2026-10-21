@@ -62,6 +62,20 @@ public sealed record AgentConfiguration
     public ExfilWatchOptions? ExfilWatch { get; init; }
 }
 
+/// <summary>SENTINEL's response to a canary write (ADR-026).</summary>
+public sealed record SentinelResponseOptions
+{
+    /// <summary>Suspend the writer on a resolved attribution (one writer, PID and creation time re-read).</summary>
+    public required bool SuspendProcess { get; init; }
+
+    /// <summary>
+    /// Minutes without a human decision before the "suspended, no decision" alert repeats.
+    /// Never an automatic resume: resuming an encryptor because nobody answered is the worst outcome.
+    /// </summary>
+    [Range(5, 1440)]
+    public required int EscalationMinutes { get; init; }
+}
+
 /// <summary>
 /// SENTINEL semantic medical canary file configuration.
 /// Controls deployment and monitoring of decoy files that detect ransomware.
@@ -125,6 +139,12 @@ public sealed record SentinelOptions
     /// </summary>
     [Range(1, 3600)]
     public int RegenerationCooldownSeconds { get; init; } = 60;
+
+    /// <summary>
+    /// The response (ADR-026): suspend the process that wrote a canary. Absent: no response, said
+    /// in the log at start -- never a silent default.
+    /// </summary>
+    public SentinelResponseOptions? Response { get; init; }
 
     /// <summary>
     /// Maximum number of canary regenerations per hour per directory.

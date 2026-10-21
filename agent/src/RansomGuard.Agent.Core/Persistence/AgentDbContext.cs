@@ -121,6 +121,9 @@ public sealed class AgentDbContext : DbContext
     /// </summary>
     public DbSet<PendingAlertUpload> PendingAlertUploads => Set<PendingAlertUpload>();
 
+    /// <summary>Processes SENTINEL suspended after a canary write (ADR-026).</summary>
+    public DbSet<SuspendedProcess> SuspendedProcesses => Set<SuspendedProcess>();
+
     /// <summary>
     /// Initializes a new instance of <see cref="AgentDbContext"/>.
     /// </summary>
@@ -393,6 +396,20 @@ public sealed class AgentDbContext : DbContext
             entity.Property(e => e.SerializedPayload).IsRequired();
             entity.Property(e => e.Status).HasConversion<string>().HasMaxLength(20);
             entity.Property(e => e.LastErrorMessage).HasMaxLength(2000);
+        });
+
+        modelBuilder.Entity<SuspendedProcess>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.State);
+            entity.HasIndex(e => e.ClientMessageId);
+            entity.Property(e => e.State).HasConversion<string>().HasMaxLength(20);
+            entity.Property(e => e.ProcessName).HasMaxLength(260);
+            entity.Property(e => e.ImagePath).HasMaxLength(1024);
+            entity.Property(e => e.CanaryPath).IsRequired().HasMaxLength(1024);
+            entity.Property(e => e.ClientMessageId).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.ResumedBy).HasMaxLength(200);
+            entity.Property(e => e.LastError).HasMaxLength(2000);
         });
     }
 }

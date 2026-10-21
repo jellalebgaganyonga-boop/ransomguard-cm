@@ -60,6 +60,45 @@ LocalService, NetworkService and service SIDs are excluded). `Desktop` and `Docu
 folder under the profile is assumed and a Warning names the user and the folder. Profiles are read when the
 module starts: a profile created afterwards is seen at the next agent restart (AGT-PATH-002).
 
+## Response: suspending the writer (ADR-026)
+
+```json
+{
+  "Sentinel": {
+    "EtwEnabled": true,
+    "Response": {
+      "SuspendProcess": true,
+      "EscalationMinutes": 60
+    }
+  }
+}
+```
+
+When the attribution of a canary write is **resolved** (one writer seen by the kernel ETW session,
+ADR-025), SENTINEL suspends that process with `NtSuspendProcess` -- every thread in one kernel call --
+after re-reading its (PID, creation time) pair (50 ms tolerance). Never PID 0 or 4, never the agent
+itself; never on an `unavailable` or `ambiguous` attribution: nobody is suspended on a guess. The
+suspension is an alert the console shows (`SentinelProcessSuspended`, linked to the canary alert by
+`response_to`), an audit entry before the call (`ProcessSuspendIntent`) and one after
+(`ProcessSuspended` / `ProcessSuspendFailed`), and a row in `SuspendedProcesses`.
+
+**Nothing resumes by itself.** Every `EscalationMinutes` without a decision, the alert
+`SentinelProcessSuspendedNoDecision` repeats; a process that is gone closes its row as `Ended`. The
+resume is a request (console command, J1 § 1.3): three attempts, then `ResumeFailed` and the process
+stays suspended until the machine restarts (AGT-RESP-001).
+
+Without a `Response` section the write is alerted and never answered, and the log says so at start;
+with `SuspendProcess` true and no engine wired, SENTINEL does not start (`inactive / init_failed`).
+Three distinct canaries written within 60 s with no process named raise `SentinelIsolationRecommended`
+once per minute: the isolation itself does not exist (AGT-ISO-001).
+
+**Honesty.** The suspension works when, and only when, ETW saw the write and one process made it.
+Without ETW (no administrator rights, no session slot), for a deferred write carried by PID 4, or
+when two processes write in the same 2 s window, the agent alerts and does **not** act. It is never
+presented as guaranteed. A sync client or a restore that rewrites a canary would be suspended; the
+resume exists for that, and no exclusion list is planned (an exclusion by image path is a bypass for
+an attacker who names itself like the sync client).
+
 ## Templates
 
 5 templates generate realistic French-language medical content:

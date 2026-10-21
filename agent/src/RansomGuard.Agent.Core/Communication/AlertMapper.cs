@@ -152,6 +152,97 @@ public static class AlertMapper
         };
     }
 
+    /// <summary>The response to a canary write (ADR-026): the writer is suspended. Linked to its alert by response_to.</summary>
+    public static AlertIngestRequest FromProcessSuspension(SuspendedProcess suspension) => new()
+    {
+        ClientMessageId = DeterministicId(suspension.Id),
+        AlertType = "SentinelProcessSuspended",
+        MitreTechniqueId = "T1486",
+        Severity = "Critical",
+        DetectedAt = suspension.SuspendedAt,
+        Summary = Truncate($"Process suspended after writing a canary: {suspension.ProcessName ?? "(unnamed)"} (PID {suspension.ProcessId}) on {suspension.CanaryPath}", 500),
+        Details =
+        [
+            new AlertDetailInput { Key = "response", Value = "process_suspended" },
+            new AlertDetailInput { Key = "suspension_id", Value = suspension.Id.ToString() },
+            new AlertDetailInput { Key = "response_to", Value = suspension.ClientMessageId },
+            new AlertDetailInput { Key = "process_id", Value = suspension.ProcessId.ToString() },
+            new AlertDetailInput { Key = "process_created_at", Value = suspension.ProcessCreatedAt.ToString("o") },
+            new AlertDetailInput { Key = "process_name", Value = Truncate(suspension.ProcessName ?? "", 260) },
+            new AlertDetailInput { Key = "process_path", Value = Truncate(suspension.ImagePath ?? "", 1024) },
+        ],
+        RawPayload = new Dictionary<string, object>
+        {
+            ["suspension_id"] = suspension.Id.ToString(),
+            ["canary_path"] = suspension.CanaryPath,
+        },
+    };
+
+    /// <summary>A suspension that was decided and could not be done; the console must know the writer runs on.</summary>
+    public static AlertIngestRequest FromSuspensionFailed(
+        Guid id, int pid, DateTime createdAt, string? processName, string? imagePath, string canaryPath,
+        string reason, string? error, string responseTo, DateTime at) => new()
+    {
+        ClientMessageId = DeterministicId(id),
+        AlertType = "SentinelProcessSuspendFailed",
+        MitreTechniqueId = "T1486",
+        Severity = "Critical",
+        DetectedAt = at,
+        Summary = Truncate($"Suspension failed ({reason}): {processName ?? "(unnamed)"} (PID {pid}) still runs after writing {canaryPath}", 500),
+        Details =
+        [
+            new AlertDetailInput { Key = "response", Value = "suspend_failed" },
+            new AlertDetailInput { Key = "reason", Value = reason },
+            new AlertDetailInput { Key = "error", Value = Truncate(error ?? "", 2000) },
+            new AlertDetailInput { Key = "response_to", Value = responseTo },
+            new AlertDetailInput { Key = "process_id", Value = pid.ToString() },
+            new AlertDetailInput { Key = "process_created_at", Value = createdAt.ToString("o") },
+            new AlertDetailInput { Key = "process_name", Value = Truncate(processName ?? "", 260) },
+            new AlertDetailInput { Key = "process_path", Value = Truncate(imagePath ?? "", 1024) },
+        ],
+        RawPayload = new Dictionary<string, object> { ["canary_path"] = canaryPath },
+    };
+
+    /// <summary>A suspended process waiting for a decision past the escalation delay (ADR-026, 2c). One per escalation.</summary>
+    public static AlertIngestRequest FromSuspensionEscalation(SuspendedProcess suspension, TimeSpan age, int escalation, DateTime at) => new()
+    {
+        ClientMessageId = $"{DeterministicId(suspension.Id)}-e{escalation}",
+        AlertType = "SentinelProcessSuspendedNoDecision",
+        MitreTechniqueId = "T1486",
+        Severity = "Critical",
+        DetectedAt = at,
+        Summary = Truncate($"Suspended for {(int)age.TotalMinutes} min with no decision: {suspension.ProcessName ?? "(unnamed)"} (PID {suspension.ProcessId}); resume or keep it, nothing resumes by itself", 500),
+        Details =
+        [
+            new AlertDetailInput { Key = "response", Value = "suspended_no_decision" },
+            new AlertDetailInput { Key = "suspension_id", Value = suspension.Id.ToString() },
+            new AlertDetailInput { Key = "response_to", Value = suspension.ClientMessageId },
+            new AlertDetailInput { Key = "suspended_for_minutes", Value = ((int)age.TotalMinutes).ToString() },
+            new AlertDetailInput { Key = "escalation", Value = escalation.ToString() },
+            new AlertDetailInput { Key = "process_id", Value = suspension.ProcessId.ToString() },
+            new AlertDetailInput { Key = "process_name", Value = Truncate(suspension.ProcessName ?? "", 260) },
+        ],
+        RawPayload = new Dictionary<string, object> { ["suspension_id"] = suspension.Id.ToString() },
+    };
+
+    /// <summary>A burst of unattributed canaries: nobody to suspend, the operator is told to isolate (ADR-026, 2d).</summary>
+    public static AlertIngestRequest FromIsolationRecommended(Guid id, IReadOnlyList<string> canaryPaths, DateTime at) => new()
+    {
+        ClientMessageId = DeterministicId(id),
+        AlertType = "SentinelIsolationRecommended",
+        MitreTechniqueId = "T1486",
+        Severity = "Critical",
+        DetectedAt = at,
+        Summary = Truncate($"{canaryPaths.Count} canaries written in 60 s with no process named: isolate this endpoint (manual, the agent cannot)", 500),
+        Details =
+        [
+            new AlertDetailInput { Key = "response", Value = "isolation_recommended" },
+            new AlertDetailInput { Key = "canaries", Value = canaryPaths.Count.ToString() },
+            new AlertDetailInput { Key = "canary_paths", Value = Truncate(string.Join("; ", canaryPaths), 2000) },
+        ],
+        RawPayload = new Dictionary<string, object> { ["canary_paths"] = canaryPaths.ToList() },
+    };
+
     /// <summary>
     /// Deterministic client_message_id from a Guid.
     /// SHA256 hex of the Guid string = 64 chars (within GRID constraint 10-64).

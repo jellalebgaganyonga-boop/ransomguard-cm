@@ -11,6 +11,7 @@ using RansomGuard.Agent.Core.Detection;
 using RansomGuard.Agent.Core.Detection.Entropy;
 using RansomGuard.Agent.Core.Detection.Genealogy;
 using RansomGuard.Agent.Core.Detection.Sentinel.Etw;
+using RansomGuard.Agent.Core.Detection.Sentinel.Response;
 using RansomGuard.Agent.Core.Detection.Sentinel;
 using RansomGuard.Agent.Core.Detection.CrossModule;
 using RansomGuard.Agent.Core.Detection.ExfilWatch;
@@ -54,6 +55,8 @@ public static class ServiceRegistration
         // SENTINEL deployment runs before Worker to ensure canaries exist
         services.AddHostedService<SentinelDeploymentService>();
         services.AddHostedService<SentinelMonitor>();
+        // The suspended processes (ADR-026): ended ones closed, undecided ones escalated.
+        services.AddHostedService<SuspensionWatchService>();
         services.AddHostedService<EntropyMonitor>();
 
         // USB GUARD monitor
@@ -309,6 +312,16 @@ public static class ServiceRegistration
         // Alert forwarding (the bridge: agent detections → GRID dashboard)
         services.AddSingleton<AlertForwardingService>();
         services.AddSingleton<IAlertForwardingQueue>(sp => sp.GetRequiredService<AlertForwardingService>());
+
+        // SENTINEL response (ADR-026): NtSuspendProcess on a resolved attribution, never on a guess.
+        services.AddSingleton<IProcessSuspender, NtProcessSuspender>();
+        services.AddSingleton(sp => new CanaryResponseEngine(
+            sp.GetRequiredService<IProcessSuspender>(),
+            sp.GetRequiredService<IServiceScopeFactory>(),
+            sp.GetRequiredService<IAlertForwardingQueue>(),
+            sp.GetRequiredService<IOptionsMonitor<AgentConfiguration>>().CurrentValue.Sentinel?.Response,
+            sp.GetRequiredService<ILogger<CanaryResponseEngine>>(),
+            TimeProvider.System));
         services.AddHostedService(sp => sp.GetRequiredService<AlertForwardingService>());
     }
 
