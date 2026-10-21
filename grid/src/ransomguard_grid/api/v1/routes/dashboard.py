@@ -5,6 +5,7 @@ from typing import Any, Literal
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi.responses import StreamingResponse
 from sqlalchemy import ColumnElement, and_, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,6 +24,7 @@ from ransomguard_grid.api.v1.schemas.dashboard import (
     ChangePasswordRequest,
     CommandItem,
     CreateUserRequest,
+    InstallerDownloadRequest,
     IssueCommandRequest,
     MetricsSummary,
     ModuleStatusItem,
@@ -54,12 +56,18 @@ from ransomguard_grid.db.models.alerts import Alert, AlertDetail, AlertStatusCha
 from ransomguard_grid.db.models.enums import AgentStatus, AlertStatus, CommandStatus, Severity
 from ransomguard_grid.db.models.notifications import NotificationPreference, UserActionLog
 from ransomguard_grid.db.models.operations import CommandQueue, CommandResponse
-from ransomguard_grid.db.models.tenant_user import User
+from ransomguard_grid.db.models.tenant_user import Tenant, User
 from ransomguard_grid.db.repositories.alert_repository import AlertRepository
 from ransomguard_grid.db.repositories.role_repository import UserRoleRepository
 from ransomguard_grid.db.session import get_db
 from ransomguard_grid.schemas.dashboard.me import MeResponse, TenantContext, UserPreferences
-from ransomguard_grid.services.agent_installer import installer_sha256
+from ransomguard_grid.services.agent_installer import (
+    installer_config_bytes,
+    installer_length,
+    installer_sha256,
+    locate_installer_parts,
+    stream_installer,
+)
 from ransomguard_grid.services.agent_posture import compute_protection_state, last_upload_age_seconds
 from ransomguard_grid.services.enrollment_otp_service import EnrollmentOtpService
 from ransomguard_grid.services.posture_store import count_recent_restarts, load_postures, snapshot
@@ -1058,4 +1066,61 @@ async def provision_agent(
 
     return ProvisionAgentResponse(
         otp=otp_string, expires_in_minutes=30, installer_sha256=installer_sha256(get_settings().agent_packages_dir)
+    )
+
+
+@router.post("/agents/installer")
+async def download_installer(
+    body: InstallerDownloadRequest,
+    user: User = Depends(require_roles("tenant_admin")),
+    db: AsyncSession = Depends(get_db),
+    store: SessionStore = Depends(get_session_store),
+) -> StreamingResponse:
+    """The double-click installer for one enrollment code (ADR-027). Admin only.
+
+    A copy of the published stub, with the agent package, the GRID address (the host the console
+    was opened on), the code, the tenant, the package's SHA-256 and the GRID CA certificate
+    appended, then the trailer the stub reads. The code is not consumed here: the agent consumes it
+    at enrollment, so a download that never reaches a machine leaves it usable until it expires.
+    Same 409 for an unknown, expired, consumed or another tenant's code: nothing is revealed.
+    """
+    try:
+        peeked = await store.peek_otp(body.otp)
+    except SessionStoreUnavailableError:
+        raise HTTPException(503, "Session store unavailable") from None
+    if peeked is None or peeked[0] != user.tenant_id:
+        raise HTTPException(409, "Unknown or expired enrollment code")
+    _, ttl_seconds = peeked
+
+    settings = get_settings()
+    parts = locate_installer_parts(settings.agent_packages_dir, settings.grid_ca_cert_path)
+    if parts is None:
+        raise HTTPException(404, "No double-click installer published (stub, package or GRID CA certificate missing)")
+
+    tenant = await db.get(Tenant, user.tenant_id)
+    now = datetime.now(UTC)
+    config = installer_config_bytes({
+        "grid_base_url": f"https://{body.host}:{body.port}",
+        "otp": body.otp,
+        "otp_expires_at": (now + timedelta(seconds=ttl_seconds)).isoformat(),
+        "tenant_code": tenant.code if tenant else None,
+        "agent_package_sha256": parts.package_sha256,
+        "grid_ca_pem": parts.ca_pem,
+    })
+    await _log_user_action(
+        db, user=user, action_type="installer_downloaded",
+        target_type="otp", target_id=body.otp[:14],
+        details={"otp_prefix": body.otp[:14], "host": body.host, "port": body.port, "package_sha256": parts.package_sha256},
+    )
+    await db.flush()
+
+    filename = f"RansomGuard-CM-Installeur-{body.host}.exe"
+    return StreamingResponse(
+        stream_installer(parts, config),
+        media_type="application/vnd.microsoft.portable-executable",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Length": str(installer_length(parts, config)),
+            "Cache-Control": "no-store",
+        },
     )

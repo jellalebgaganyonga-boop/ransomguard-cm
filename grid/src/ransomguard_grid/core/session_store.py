@@ -98,6 +98,15 @@ class SessionStore:
         value = await self._call(self._redis.getdel(_OTP + otp))
         return None if value is None else _text(value)
 
+    async def peek_otp(self, otp: str) -> tuple[str, int] | None:
+        """The tenant of a valid OTP and the seconds it has left, without consuming it (ADR-027:
+        the installer download embeds the code; only the agent's enrollment consumes it)."""
+        value = await self._call(self._redis.get(_OTP + otp))
+        if value is None:
+            return None
+        ttl = int(await self._call(self._redis.ttl(_OTP + otp)))
+        return _text(value), max(ttl, 0)
+
     @staticmethod
     async def _call(awaitable: Awaitable[T]) -> T:
         try:

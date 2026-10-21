@@ -126,6 +126,11 @@ class Settings(BaseSettings):
     # the install command refuses to run a script whose hash differs (GRID-SEC-006).
     agent_packages_dir: str = Field(default="/srv/agent-packages")
 
+    # The GRID certificate authority's public certificate (PEM), embedded in the double-click
+    # installer (ADR-027) so the endpoint trusts this GRID without any manual step. docker-compose
+    # mounts deployment/grid/pki read-only at this path. No installer is served without it.
+    grid_ca_cert_path: str = Field(default="/etc/ransomguard-grid/pki/ca.crt")
+
     @field_validator("jwt_secret_key")
     @classmethod
     def _not_a_published_key(cls, value: str) -> str:

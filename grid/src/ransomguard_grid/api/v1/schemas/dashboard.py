@@ -320,6 +320,20 @@ class ChangePasswordRequest(BaseModel):
     new_password: str = Field(min_length=8, max_length=128)
 
 
+class InstallerDownloadRequest(BaseModel):
+    """The double-click installer for one enrollment code (ADR-027)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    # The code the console just obtained from /agents/provision; it stays single-use, the agent
+    # consumes it at enrollment. Never logged whole.
+    otp: str = Field(min_length=10, max_length=50, pattern=r"^[A-Z0-9-]+$")
+    # The GRID address the agent will call: the host the console was opened on, as for the
+    # scripted command, never a value the server guesses.
+    host: str = Field(min_length=1, max_length=253, pattern=r"^[A-Za-z0-9.-]+$")
+    port: int = Field(default=8443, ge=1, le=65535)
+
+
 class ProvisionAgentResponse(BaseModel):
     """Response for agent provisioning — contains the one-time enrollment token."""
 
