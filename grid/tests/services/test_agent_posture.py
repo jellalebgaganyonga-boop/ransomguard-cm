@@ -7,6 +7,7 @@ import pytest
 from ransomguard_grid.services.agent_posture import (
     PARTIAL,
     PROTECTED,
+    REASON_CODES,
     UNKNOWN,
     UNPROTECTED,
     ModuleStatus,
@@ -95,6 +96,14 @@ def test_a_detector_other_than_sentinel_not_active_is_partial(module: str, statu
     verdict = _verdict(_posture(_modules(**{module: status})))
     assert verdict.state == PARTIAL
     assert verdict.reason_codes == [reason]
+
+
+def test_sentinel_degraded_etw_session_stopped_externally_is_partial_and_named() -> None:
+    # ADR-025: the kernel session stopped from outside -- SENTINEL still detects by its watcher,
+    # without attribution: degraded, orange, and the code says why.
+    verdict = _verdict(_posture(_modules(SENTINEL=ModuleStatus("degraded", "etw_session_stopped_externally"))))
+    assert (verdict.state, verdict.reason_codes) == (PARTIAL, ["SENTINEL:degraded:etw_session_stopped_externally"])
+    assert "etw_session_stopped_externally" in REASON_CODES
 
 
 def test_sentinel_degraded_integrity_check_failing_is_partial_not_red() -> None:

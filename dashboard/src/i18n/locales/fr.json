@@ -426,6 +426,7 @@
       "starting": "démarrage en cours",
       "no_watch_directory": "aucun dossier surveillé",
       "integrity_check_failing": "vérification d'intégrité en échec",
+      "etw_session_stopped_externally": "session de surveillance noyau arrêtée de l'extérieur",
       "not_reported": "non transmis par l'agent"
     },
     "verdictReason": {

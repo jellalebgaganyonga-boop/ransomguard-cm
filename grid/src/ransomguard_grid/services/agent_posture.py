@@ -56,6 +56,8 @@ REASON_CODES: frozenset[str] = frozenset({
     "no_watch_directory",
     "integrity_check_failing",
     "not_reported",  # server side: a v2 heartbeat without this detector
+    # SENTINEL's ETW session ended without the agent stopping it (ADR-025): stopped from outside.
+    "etw_session_stopped_externally",
 })
 
 # Bound of last_upload_ok_age_seconds on the wire: ten years, far beyond any real age.
