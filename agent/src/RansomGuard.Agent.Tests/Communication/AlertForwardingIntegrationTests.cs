@@ -200,6 +200,98 @@ public sealed class AlertForwardingIntegrationTests : IDisposable
         pending.LastErrorMessage!.ShouldContain("Connection refused");
     }
 
+    // ===== ADR-025: the attribution complement travels behind its alert =====
+    [Fact]
+    public async Task The_attribution_complement_follows_its_alert_to_its_own_endpoint()
+    {
+        var sequence = new List<string>();
+        _gridClientMock
+            .Setup(c => c.SendAlertAsync(It.IsAny<AlertIngestRequest>(), It.IsAny<CancellationToken>()))
+            .Callback((AlertIngestRequest a, CancellationToken _) => { lock (sequence) sequence.Add($"alert {a.ClientMessageId}"); })
+            .ReturnsAsync(new AlertIngestResponse { AlertId = "grid-1", Status = "ingested", IngestedAt = DateTime.UtcNow });
+        _gridClientMock
+            .Setup(c => c.SendAttributionAsync(It.IsAny<string>(), It.IsAny<AttributionComplementRequest>(), It.IsAny<CancellationToken>()))
+            .Callback((string id, AttributionComplementRequest c, CancellationToken _) => { lock (sequence) sequence.Add($"attribution {id} {c.State} {c.Pid}"); })
+            .Returns(Task.CompletedTask);
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var serviceTask = RunServiceAsync(cts.Token);
+        AlertIngestRequest request = CanaryRequest();
+
+        _service.TryEnqueue(request);
+        _service.TryEnqueueAttribution(request.ClientMessageId, new AttributionComplementRequest { State = "resolved", Pid = 4242 });
+        await WaitUntilAsync(() => { lock (sequence) return sequence.Count == 2; }, cts.Token);
+
+        await StopServiceAsync(cts);
+        await IgnoreCancellation(serviceTask);
+        sequence.ShouldBe([$"alert {request.ClientMessageId}", $"attribution {request.ClientMessageId} resolved 4242"]);
+    }
+
+    [Fact]
+    public async Task A_complement_refused_404_is_kept_as_its_own_upload_beside_its_alert()
+    {
+        // The alert is still waiting here (network down), so the GRID does not know it yet: 404.
+        _gridClientMock
+            .Setup(c => c.SendAlertAsync(It.IsAny<AlertIngestRequest>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new HttpRequestException("Connection refused"));
+        _gridClientMock
+            .Setup(c => c.SendAttributionAsync(It.IsAny<string>(), It.IsAny<AttributionComplementRequest>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new HttpRequestException("404 Not Found", null, HttpStatusCode.NotFound));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var serviceTask = RunServiceAsync(cts.Token);
+        AlertIngestRequest request = CanaryRequest();
+
+        _service.TryEnqueue(request);
+        _service.TryEnqueueAttribution(request.ClientMessageId, new AttributionComplementRequest { State = "unavailable", Reason = "system_pid" });
+        await Task.Delay(2000, cts.Token);
+
+        await StopServiceAsync(cts);
+        await IgnoreCancellation(serviceTask);
+        using var scope = _serviceProvider.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AgentDbContext>();
+        var pending = await db.PendingAlertUploads.OrderBy(p => p.Kind).ToListAsync();
+        pending.Count.ShouldBe(2); // one ClientMessageId, two kinds: neither swallows the other
+        pending.ShouldAllBe(p => p.ClientMessageId == request.ClientMessageId && p.Status == PendingUploadStatus.Pending);
+        pending.Select(p => p.Kind).ShouldBe([PendingUploadKind.Alert, PendingUploadKind.Attribution]);
+        pending[1].SerializedPayload.ShouldContain("\"reason\":\"system_pid\"");
+    }
+
+    [Fact]
+    public async Task A_complement_waiting_for_its_alert_is_not_a_transmission_failure()
+    {
+        _gridClientMock
+            .Setup(c => c.SendAttributionAsync(It.IsAny<string>(), It.IsAny<AttributionComplementRequest>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new HttpRequestException("404 Not Found", null, HttpStatusCode.NotFound));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var serviceTask = RunServiceAsync(cts.Token);
+        AlertIngestRequest request = CanaryRequest();
+
+        _service.TryEnqueue(request);
+        _service.TryEnqueueAttribution(request.ClientMessageId, new AttributionComplementRequest { State = "ambiguous" });
+        await Task.Delay(1500, cts.Token);
+
+        await StopServiceAsync(cts);
+        await IgnoreCancellation(serviceTask);
+        _service.LastUploadErrorCode.ShouldBeNull(); // the heartbeat's transmission health follows the alerts
+        _service.TotalForwarded.ShouldBe(1);
+    }
+
+    private static AlertIngestRequest CanaryRequest() => AlertMapper.FromCanaryAlert(new CanaryAlert
+    {
+        CanaryId = Guid.NewGuid(),
+        CanaryPath = "test",
+        AlertType = CanaryAlertType.CanaryModified,
+        Severity = AlertSeverity.Critical,
+    }, "pending");
+
+    private static async Task WaitUntilAsync(Func<bool> condition, CancellationToken ct)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(8);
+        while (!condition() && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(20, ct);
+        }
+    }
+
     // ===== Test 4: Validation error (422) marks FailedValidation — no retry =====
     [Fact]
     public async Task Validation_Error_Marks_FailedValidation_No_Retry()

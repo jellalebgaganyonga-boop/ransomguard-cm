@@ -34,7 +34,6 @@ public sealed class MonitorPostureTests : IDisposable
         }),
         _h.ScopeFactory,
         new FileEventDeduplicator(50),
-        new RestartManagerHelper(NullLogger<RestartManagerHelper>.Instance),
         _h.AlertQueue,
         _h.Registry,
         _h.Reporter,

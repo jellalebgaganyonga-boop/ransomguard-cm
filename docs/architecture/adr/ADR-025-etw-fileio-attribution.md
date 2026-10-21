@@ -1,6 +1,7 @@
 # ADR-025 — Attribution SENTINEL par ETW FileIO
 
 **Statut** : accepté, révision 4 (revue du 2026-10-21 : constats du banc 2a et 2b). L'implémentation suit la section 7.
+**Ajout au commit 4** (2026-10-21) : code `process_exited` dans la liste fermée des raisons (3 et 4b).
 **Révision 4** : l'ETW apporte de la **détection**, pas seulement l'attribution (le watcher ne voit pas les écritures mappées) ; repli `etw_unavailable` ; mesure « avant » présentée en entier ; libellé du canal corrigé ; arrêt de la session de l'extérieur (`etw_session_stopped_externally`).
 **Mesures** : `agent/tools/EtwFileIoProbe`, sur un runner Windows de la CI (Windows Server 2025, 4 vCPU, administrateur), 60 s par phase.
 - Run 38805679885 : jeux de mots-clés.
@@ -85,7 +86,7 @@ L'alerte part au **premier** signal, watcher ou ETW. L'ETW complète l'attributi
   - `process_created_at`, horodatage UTC ;
   - `process_name`, 260 caractères au plus ;
   - `image_path`, 1 024 caractères au plus ;
-  - `reason` dans un code fermé : `no_write_event`, `system_pid`, `pid_reused`, `etw_unavailable`, `timeout`.
+  - `reason` dans un code fermé : `no_write_event`, `system_pid`, `pid_reused`, `process_exited`, `etw_unavailable`, `timeout`.
 - **Idempotent** : un second complément sur une attribution déjà finale ne change rien, répond 200, et il est journalisé dans l'audit (`AlertAttributionIgnored`).
 - **Test d'isolation**, comme pour HOST : un complément visant l'alerte d'un autre tenant, avec le même `client_message_id`, donne 404 et ne change rien. Le test est écrit pour échouer si la recherche se fait sur `client_message_id` seul.
 
@@ -104,6 +105,8 @@ L'alerte part au **premier** signal, watcher ou ETW. L'ETW complète l'attributi
 **4b. La réutilisation des PID.**
 - L'attribution enregistre la paire (PID, heure de création), prise sur Process/Start, ou par `GetProcessTimes` lu dans le callback.
 - Une heure postérieure à l'événement donne `unavailable / pid_reused`.
+- Un PID dont le départ n'a pas été vu sur Process/Start et qui ne peut plus être lu donne `unavailable / process_exited` : la paire ne peut pas être vérifiée, personne n'est nommé. « Ne peut plus être lu » couvre le processus terminé **et** le processus encore en vie dont Windows refuse l'heure de création (processus protégé) : le code ne distingue pas les deux.
+- Un processus terminé dont le départ **a** été vu reste `resolved`, avec son heure de création mais sans nom ni image.
 - Avant d'agir, le moteur relit `GetProcessTimes` et refuse d'agir si l'heure diffère de plus de 50 ms ; il journalise pourquoi.
 - Test prévu.
 

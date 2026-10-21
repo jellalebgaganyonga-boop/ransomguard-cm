@@ -13,7 +13,7 @@ namespace RansomGuard.Agent.Core.Communication;
 public static class AlertMapper
 {
     /// <summary>Map a SENTINEL canary alert to an AlertIngestRequest.</summary>
-    public static AlertIngestRequest FromCanaryAlert(CanaryAlert alert)
+    public static AlertIngestRequest FromCanaryAlert(CanaryAlert alert, string? attributionState = null, string? attributionReason = null)
     {
         var details = new List<AlertDetailInput>();
         if (alert.OffendingProcessId is not null)
@@ -22,6 +22,13 @@ public static class AlertMapper
             details.Add(new AlertDetailInput { Key = "process_name", Value = alert.OffendingProcessName });
         if (alert.OffendingProcessPath is not null)
             details.Add(new AlertDetailInput { Key = "process_path", Value = Truncate(alert.OffendingProcessPath, 2000) });
+
+        // SENTINEL's attribution (ADR-025): "pending" while the complement is on its way,
+        // "unavailable" with its closed reason when nobody will be named.
+        if (attributionState is not null)
+            details.Add(new AlertDetailInput { Key = "attribution_state", Value = attributionState });
+        if (attributionReason is not null)
+            details.Add(new AlertDetailInput { Key = "attribution_reason", Value = attributionReason });
 
         return new AlertIngestRequest
         {

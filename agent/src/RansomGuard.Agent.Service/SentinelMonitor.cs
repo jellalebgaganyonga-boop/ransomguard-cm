@@ -9,6 +9,7 @@ using RansomGuard.Agent.Core.Detection.Genealogy;
 using RansomGuard.Agent.Core.Detection.Sentinel;
 using RansomGuard.Agent.Core.Detection.Sentinel.Etw;
 using RansomGuard.Agent.Core.Communication;
+using RansomGuard.Agent.Core.Communication.Models;
 using RansomGuard.Agent.Core.Persistence.Entities;
 using RansomGuard.Agent.Core.Persistence.Repositories;
 
@@ -34,7 +35,6 @@ public sealed class SentinelMonitor : BackgroundService
     private readonly ILogger<SentinelMonitor> _logger;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IFileEventDeduplicator _deduplicator;
-    private readonly RestartManagerHelper _restartManager;
     private readonly IAlertForwardingQueue _alertQueue;
     private readonly IModuleStateRegistry _moduleState;
     private readonly IModuleFailureReporter _failureReporter;
@@ -51,6 +51,9 @@ public sealed class SentinelMonitor : BackgroundService
     private readonly EtwFileIoSession? _etwSession;
     private readonly EtwCanaryFilter _etwFilter = new();
     private readonly CanaryCorrelator _correlator;
+    private readonly ProcessCreationTimes _processTimes;
+    private readonly CanaryAttributor _attributor;
+    private readonly TimeProvider _time;
 
     /// <summary>
     /// Initializes the SENTINEL monitor.
@@ -59,7 +62,6 @@ public sealed class SentinelMonitor : BackgroundService
     /// <param name="config">Agent configuration.</param>
     /// <param name="scopeFactory">Scope factory for per-event services.</param>
     /// <param name="deduplicator">File event deduplicator.</param>
-    /// <param name="restartManager">Process attribution through the Restart Manager.</param>
     /// <param name="alertQueue">Queue forwarding alerts to the GRID.</param>
     /// <param name="moduleState">Runtime module-state registry.</param>
     /// <param name="failureReporter">Reports the module going down.</param>
@@ -70,28 +72,31 @@ public sealed class SentinelMonitor : BackgroundService
     /// <param name="etwSession">
     /// The kernel FileIO session (ADR-025); opened only when Sentinel:EtwEnabled is true. Null: watcher only.
     /// </param>
-    /// <param name="time">The clock of the correlation window.</param>
+    /// <param name="time">The clock of the correlation window and of the attribution delay.</param>
+    /// <param name="processTimes">Process creation times for the attribution; the OS by default (test seam).</param>
     public SentinelMonitor(
         ILogger<SentinelMonitor> logger,
         IOptionsMonitor<AgentConfiguration> config,
         IServiceScopeFactory scopeFactory,
         IFileEventDeduplicator deduplicator,
-        RestartManagerHelper restartManager,
         IAlertForwardingQueue alertQueue,
         IModuleStateRegistry moduleState,
         IModuleFailureReporter failureReporter,
         TimeSpan? startupDelay = null,
         IModuleFaultInjector? faultInjector = null,
         EtwFileIoSession? etwSession = null,
-        TimeProvider? time = null)
+        TimeProvider? time = null,
+        ProcessCreationTimes? processTimes = null)
     {
+        _processTimes = processTimes ?? new ProcessCreationTimes();
         _etwSession = etwSession;
-        _correlator = new CanaryCorrelator(time);
+        _time = time ?? TimeProvider.System;
+        _correlator = new CanaryCorrelator(_time);
+        _attributor = new CanaryAttributor(_processTimes);
         _logger = logger;
         _config = config.CurrentValue;
         _scopeFactory = scopeFactory;
         _deduplicator = deduplicator;
-        _restartManager = restartManager;
         _alertQueue = alertQueue;
         _moduleState = moduleState;
         _failureReporter = failureReporter;
@@ -178,7 +183,7 @@ public sealed class SentinelMonitor : BackgroundService
             if (sentinel.EtwEnabled && _etwSession is not null)
             {
                 await RefreshCanariesAsync(moduleToken);
-                _correlator.EtwRunning = _etwSession.Start(_etwFilter.OnFileIo, _ => { });
+                _correlator.EtwRunning = _etwSession.Start(_etwFilter.OnFileIo, _processTimes.OnProcessStart);
                 etwConsumerTask = ConsumeEtwAsync(moduleToken);
             }
 
@@ -370,12 +375,13 @@ public sealed class SentinelMonitor : BackgroundService
                 }
 
                 // One detection per operation (ADR-025, section 3): ETW may have raised it already.
-                if (_correlator.OnWatcher(canary.FilePath, OperationOf(evt.AlertType)) is null)
+                CanaryDetection? watcherDetection = _correlator.OnWatcher(canary.FilePath, OperationOf(evt.AlertType));
+                if (watcherDetection is null)
                 {
                     continue;
                 }
 
-                await RaiseCanaryAlertAsync(canary, evt.AlertType, scope.ServiceProvider, cancellationToken);
+                await RaiseCanaryAlertAsync(canary, evt.AlertType, scope.ServiceProvider, cancellationToken, watcherDetection);
 
                 // Real-time regeneration for deleted canaries
                 if (evt.AlertType == CanaryAlertType.CanaryDeleted && _config.Sentinel?.EnableRealTimeRegeneration == true)
@@ -508,7 +514,7 @@ public sealed class SentinelMonitor : BackgroundService
                     }
 
                     CanaryAlertType alertType = AlertTypeOf(detection.Operation);
-                    await RaiseCanaryAlertAsync(canary, alertType, scope.ServiceProvider, cancellationToken);
+                    await RaiseCanaryAlertAsync(canary, alertType, scope.ServiceProvider, cancellationToken, detection);
                     if (alertType == CanaryAlertType.CanaryDeleted && _config.Sentinel?.EnableRealTimeRegeneration == true)
                     {
                         await TryRegenerateCanaryAsync(canary, scope.ServiceProvider, cancellationToken);
@@ -548,12 +554,19 @@ public sealed class SentinelMonitor : BackgroundService
         SentinelCanary canary,
         CanaryAlertType alertType,
         IServiceProvider services,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        CanaryDetection? detection = null)
     {
         var canaryRepo = services.GetRequiredService<ISentinelCanaryRepository>();
         var auditRepo = services.GetRequiredService<IAuditLogRepository>();
 
-        ProcessAttribution? attribution = TryAttributeProcess(canary.FilePath);
+        // The alert never waits for its attribution (ADR-025, section 3). With the ETW session
+        // running, a detection leaves as "pending" and its complement follows, decided
+        // CanaryAttributor.Delay after the first signal. Without it -- or for the integrity
+        // check, which has no detection -- the attribution is final now: nobody is named.
+        bool etwRunning = _correlator.EtwRunning;
+        bool pending = detection is not null && etwRunning;
+        string? finalReason = pending ? null : etwRunning ? AttributionReason.NoWriteEvent : AttributionReason.EtwUnavailable;
 
         var alert = new CanaryAlert
         {
@@ -561,18 +574,19 @@ public sealed class SentinelMonitor : BackgroundService
             CanaryPath = canary.FilePath,
             AlertType = alertType,
             Severity = AlertSeverity.Critical,
-            OffendingProcessId = attribution?.ProcessId,
-            OffendingProcessName = attribution?.ProcessName,
-            OffendingProcessPath = attribution?.ExecutablePath
         };
 
         // The GRID first (AGT-AUD-002): nothing local — database, audit — may delay or cancel
         // the alert. The forwarding queue persists it itself if the GRID is unreachable.
-        _alertQueue.TryEnqueue(AlertMapper.FromCanaryAlert(alert));
+        AlertIngestRequest request = AlertMapper.FromCanaryAlert(alert, pending ? "pending" : "unavailable", finalReason);
+        _alertQueue.TryEnqueue(request);
         _logger.LogCritical(
-            "SENTINEL ALERT: {AlertType} on canary {CanaryPath} | Process: {ProcessName} (PID: {ProcessId}) | Severity: {Severity}",
-            alertType, canary.FilePath, attribution?.ProcessName ?? "unknown",
-            attribution?.ProcessId.ToString() ?? "N/A", alert.Severity);
+            "SENTINEL ALERT: {AlertType} on canary {CanaryPath} | attribution {Attribution} | Severity: {Severity}",
+            alertType, canary.FilePath, pending ? "pending" : $"unavailable ({finalReason})", alert.Severity);
+        if (pending)
+        {
+            _ = AttributeAsync(detection!, alert.Id, request.ClientMessageId);
+        }
 
         canary.Status = alertType switch
         {
@@ -594,11 +608,7 @@ public sealed class SentinelMonitor : BackgroundService
             _logger.LogError(ex, "SENTINEL alert {AlertId} sent, but its local record failed", alert.Id);
         }
 
-        string details = $"Canary alert: {alertType} on {canary.FilePath}";
-        if (attribution is not null)
-        {
-            details += $" by process {attribution.ProcessName} (PID: {attribution.ProcessId})";
-        }
+        string details = $"Canary alert: {alertType} on {canary.FilePath}; attribution {(pending ? "pending" : $"unavailable ({finalReason})")}";
 
         // One INSERT, never a wait on the chain; never throws when it cannot record.
         await auditRepo.AppendAsync("CanaryAlert", details, "CanaryAlert", alert.Id, CancellationToken.None);
@@ -619,32 +629,53 @@ public sealed class SentinelMonitor : BackgroundService
         }, CancellationToken.None);
     }
 
-    private ProcessAttribution? TryAttributeProcess(string filePath)
+    /// <summary>
+    /// The attribution of a detection (ADR-025, commit 4): decided CanaryAttributor.Delay after its
+    /// first signal from the ETW writes it gathered, then sent as the alert's complement through the
+    /// forwarding queue, after the alert. The Restart Manager is no longer asked: queried when the
+    /// watcher fires, it never named the writer (AttributionBench, 0/60 on patterns 3, 5 and 6).
+    /// </summary>
+    private async Task AttributeAsync(CanaryDetection detection, Guid alertId, string clientMessageId)
     {
         try
         {
-            IReadOnlyList<ProcessAttribution> processes = _restartManager.GetProcessesLockingFile(filePath);
-            if (processes.Count == 0)
+            TimeSpan wait = detection.FirstSeen + CanaryAttributor.Delay - _time.GetUtcNow();
+            if (wait > TimeSpan.Zero)
             {
-                return null;
+                await Task.Delay(wait, _time).ConfigureAwait(false);
             }
 
-            ProcessAttribution offender = processes
-                .OrderByDescending(p => p.StartTime ?? DateTime.MinValue)
-                .First();
+            AttributionOutcome outcome = _attributor.Resolve(detection, _correlator.EtwRunning);
+            _alertQueue.TryEnqueueAttribution(clientMessageId, new AttributionComplementRequest
+            {
+                State = outcome.StateCode,
+                Pid = outcome.ProcessId,
+                ProcessCreatedAt = outcome.ProcessCreatedAtUtc,
+                ProcessName = Truncate(outcome.ProcessName, 260),
+                ImagePath = Truncate(outcome.ImagePath, 1024),
+                Reason = outcome.Reason,
+            });
+            _logger.LogWarning(
+                "SENTINEL attribution of {Path}: {State} {ProcessName} (PID {ProcessId}, created {CreatedAt:o}) {Reason}",
+                detection.Path, outcome.StateCode, outcome.ProcessName, outcome.ProcessId, outcome.ProcessCreatedAtUtc, outcome.Reason);
 
-            _logger.LogInformation(
-                "Process attribution: {ProcessName} (PID: {ProcessId}) identified for {FilePath}",
-                offender.ProcessName, offender.ProcessId, filePath);
-
-            return offender;
+            using IServiceScope scope = _scopeFactory.CreateScope();
+            var audit = scope.ServiceProvider.GetRequiredService<IAuditLogRepository>();
+            await audit.AppendAsync(
+                "CanaryAttribution",
+                $"{detection.Path}: {outcome.StateCode}"
+                    + (outcome.ProcessId is int pid ? $" PID {pid} created {outcome.ProcessCreatedAtUtc:o} {outcome.ProcessName}" : $" ({outcome.Reason})"),
+                "CanaryAlert", alertId, CancellationToken.None).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Process attribution failed for {FilePath}", filePath);
-            return null;
+            // The alert has left; a failed attribution leaves it pending in the console, and says so here.
+            _logger.LogError(ex, "SENTINEL attribution failed for {Path}", detection.Path);
         }
     }
+
+    private static string? Truncate(string? value, int max) =>
+        value is null || value.Length <= max ? value : value[..max];
 }
 
 /// <summary>

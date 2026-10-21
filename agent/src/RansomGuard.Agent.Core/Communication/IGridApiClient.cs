@@ -34,6 +34,12 @@ public interface IGridApiClient
     Task<AlertIngestResponse> SendAlertAsync(AlertIngestRequest request, CancellationToken ct = default);
 
     /// <summary>
+    /// Sends the attribution complement of an alert already sent (ADR-025): POST
+    /// /api/v1/agents/{id}/alerts/{clientMessageId}/attribution.
+    /// </summary>
+    Task SendAttributionAsync(string clientMessageId, AttributionComplementRequest request, CancellationToken ct = default);
+
+    /// <summary>
     /// Submit a batch of Ed25519-signed audit log entries.
     /// </summary>
     Task<AuditLogBatchResponse> SendAuditLogBatchAsync(AuditLogBatchRequest request, CancellationToken ct = default);

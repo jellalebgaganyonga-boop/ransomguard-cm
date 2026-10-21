@@ -127,6 +127,31 @@ public sealed class HeartbeatTransmissionTests : IDisposable
     }
 
     [Fact]
+    public async Task Attribution_complements_are_not_counted_as_pending_or_rejected_alerts()
+    {
+        // ADR-025 commit 4: complements share the retry table with the alerts. Until the GRID route
+        // exists (commit 5) every complement waits there; counted as alerts, they would show the
+        // console alerts "not yet transmitted" that do not exist.
+        DateTime now = DateTime.UtcNow;
+        using (IServiceScope scope = _provider.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AgentDbContext>();
+            db.PendingAlertUploads.AddRange(
+                Upload(PendingUploadStatus.Pending, now.AddMinutes(-1)),
+                Upload(PendingUploadStatus.FailedValidation, now.AddMinutes(-5)),
+                Upload(PendingUploadStatus.Pending, now.AddMinutes(-1), PendingUploadKind.Attribution),
+                Upload(PendingUploadStatus.Uploading, now.AddMinutes(-1), PendingUploadKind.Attribution),
+                Upload(PendingUploadStatus.FailedValidation, now.AddMinutes(-5), PendingUploadKind.Attribution));
+            await db.SaveChangesAsync();
+        }
+
+        HeartbeatRequest beat = await _heartbeat.BuildHeartbeatAsync(CancellationToken.None);
+
+        beat.Transmission!.PendingAlerts.ShouldBe(1);
+        beat.Transmission.RejectedAlerts.ShouldBe(1);
+    }
+
+    [Fact]
     public async Task An_unreadable_database_reports_pending_rejected_and_db_free_space_as_unknown_never_zero()
     {
         // A file that is not a SQLite database: every read fails, as with a corrupt agent.db.
@@ -175,9 +200,11 @@ public sealed class HeartbeatTransmissionTests : IDisposable
         beat.AgentVersion.ShouldBe(AgentVersion.Current); // never a setting (the demo showed 0.3.0)
     }
 
-    private static PendingAlertUpload Upload(PendingUploadStatus status, DateTime firstAttemptAt) => new()
+    private static PendingAlertUpload Upload(
+        PendingUploadStatus status, DateTime firstAttemptAt, PendingUploadKind kind = PendingUploadKind.Alert) => new()
     {
         ClientMessageId = Guid.NewGuid().ToString(),
+        Kind = kind,
         SerializedPayload = "{}",
         FirstAttemptAt = firstAttemptAt,
         NextRetryAt = firstAttemptAt,

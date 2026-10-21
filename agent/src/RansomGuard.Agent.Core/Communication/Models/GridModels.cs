@@ -168,6 +168,37 @@ public sealed record HeartbeatResponse
 
 // ─── Alert Ingestion ───────────────────────────────────────────────
 
+/// <summary>
+/// The attribution complement of a SENTINEL alert (ADR-025, section 3): sent after the alert, to
+/// POST /api/v1/agents/{id}/alerts/{client_message_id}/attribution. Fields bounded by the GRID.
+/// </summary>
+public sealed record AttributionComplementRequest
+{
+    /// <summary>resolved, unavailable or ambiguous.</summary>
+    [JsonPropertyName("state")]
+    public required string State { get; init; }
+
+    /// <summary>The writer's PID; only when resolved.</summary>
+    [JsonPropertyName("pid")]
+    public int? Pid { get; init; }
+
+    /// <summary>The writer's creation time (UTC); only when resolved.</summary>
+    [JsonPropertyName("process_created_at")]
+    public DateTime? ProcessCreatedAt { get; init; }
+
+    /// <summary>The writer's process name, at most 260 characters; when known.</summary>
+    [JsonPropertyName("process_name")]
+    public string? ProcessName { get; init; }
+
+    /// <summary>The writer's image path, at most 1 024 characters; when known.</summary>
+    [JsonPropertyName("image_path")]
+    public string? ImagePath { get; init; }
+
+    /// <summary>Closed reason code when unavailable (no_write_event, system_pid, pid_reused, process_exited, etw_unavailable).</summary>
+    [JsonPropertyName("reason")]
+    public string? Reason { get; init; }
+}
+
 public sealed record AlertDetailInput
 {
     [JsonPropertyName("key")]

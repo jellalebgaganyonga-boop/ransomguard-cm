@@ -13,4 +13,10 @@ public interface IAlertForwardingQueue
     /// Returns false if the queue is full (alert dropped — logged by caller).
     /// </summary>
     bool TryEnqueue(AlertIngestRequest request);
+
+    /// <summary>
+    /// Enqueues the attribution complement of an alert already enqueued (ADR-025). Same queue,
+    /// same order, same persistence and retries as the alerts: it never overtakes its alert.
+    /// </summary>
+    bool TryEnqueueAttribution(string clientMessageId, AttributionComplementRequest complement);
 }

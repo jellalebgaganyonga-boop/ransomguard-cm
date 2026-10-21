@@ -30,7 +30,7 @@ public sealed class AlertForwardingService : BackgroundService, IAlertForwarding
         WriteIndented = false,
     };
 
-    private readonly Channel<AlertIngestRequest> _channel;
+    private readonly Channel<OutboundMessage> _channel;
     private readonly IGridApiClient _gridClient;
     private readonly EnrollmentService _enrollmentService;
     private readonly IServiceScopeFactory _scopeFactory;
@@ -104,7 +104,7 @@ public sealed class AlertForwardingService : BackgroundService, IAlertForwarding
         _enrollmentService = enrollmentService;
         _scopeFactory = scopeFactory;
         _logger = logger;
-        _channel = Channel.CreateBounded<AlertIngestRequest>(
+        _channel = Channel.CreateBounded<OutboundMessage>(
             new BoundedChannelOptions(QueueCapacity)
             {
                 FullMode = BoundedChannelFullMode.DropOldest,
@@ -119,11 +119,22 @@ public sealed class AlertForwardingService : BackgroundService, IAlertForwarding
         // later reaches the GRID. Record the moment for the heartbeat.
         Interlocked.Exchange(ref _lastDetectionTicks, DateTime.UtcNow.Ticks);
 
-        if (_channel.Writer.TryWrite(request))
+        if (_channel.Writer.TryWrite(new AlertMessage(request)))
             return true;
 
         _logger.LogWarning("Alert forwarding queue full, oldest alert dropped. ClientMessageId={Id}",
             request.ClientMessageId);
+        return false;
+    }
+
+    /// <inheritdoc />
+    public bool TryEnqueueAttribution(string clientMessageId, AttributionComplementRequest complement)
+    {
+        if (_channel.Writer.TryWrite(new AttributionMessage(clientMessageId, complement)))
+            return true;
+
+        _logger.LogWarning("Alert forwarding queue full, attribution complement dropped. ClientMessageId={Id}",
+            clientMessageId);
         return false;
     }
 
@@ -159,9 +170,9 @@ public sealed class AlertForwardingService : BackgroundService, IAlertForwarding
 
     private async Task ConsumeChannelAsync(CancellationToken ct)
     {
-        await foreach (var request in _channel.Reader.ReadAllAsync(ct))
+        await foreach (OutboundMessage message in _channel.Reader.ReadAllAsync(ct))
         {
-            await SendWithFallbackAsync(request, ct).ConfigureAwait(false);
+            await SendWithFallbackAsync(message, ct).ConfigureAwait(false);
         }
     }
 
@@ -182,61 +193,99 @@ public sealed class AlertForwardingService : BackgroundService, IAlertForwarding
         }
     }
 
-    private async Task SendWithFallbackAsync(AlertIngestRequest request, CancellationToken ct)
+    private async Task SendWithFallbackAsync(OutboundMessage message, CancellationToken ct)
     {
         try
         {
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             timeoutCts.CancelAfter(SendTimeout);
 
-            var response = await _gridClient.SendAlertAsync(request, timeoutCts.Token).ConfigureAwait(false);
-            Interlocked.Increment(ref _totalForwarded);
-            MarkUploadOk();
-            _logger.LogInformation("Alert forwarded to GRID: {AlertId} status={Status} clientMsgId={ClientId}",
-                response.AlertId, response.Status, request.ClientMessageId);
+            string outcome = await SendAsync(message, timeoutCts.Token).ConfigureAwait(false);
+            _logger.LogInformation("{Kind} forwarded to GRID: {Outcome} clientMsgId={ClientId}",
+                message.Kind, outcome, message.ClientMessageId);
         }
         catch (HttpRequestException ex) when (IsValidationError(ex))
         {
-            Interlocked.Increment(ref _totalFailedValidation);
-            MarkUploadError(ex);
-            _logger.LogCritical("Alert rejected by GRID (validation error, will NOT retry): {Error} clientMsgId={ClientId}",
-                ex.Message, request.ClientMessageId);
-            await PersistFailedAsync(request, PendingUploadStatus.FailedValidation, ex.Message, ct).ConfigureAwait(false);
+            if (message.Kind == PendingUploadKind.Alert)
+            {
+                Interlocked.Increment(ref _totalFailedValidation);
+                MarkUploadError(ex);
+            }
+
+            _logger.LogCritical("{Kind} rejected by GRID (validation error, will NOT retry): {Error} clientMsgId={ClientId}",
+                message.Kind, ex.Message, message.ClientMessageId);
+            await PersistFailedAsync(message, PendingUploadStatus.FailedValidation, ex.Message, ct).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or OperationCanceledException)
         {
             if (ct.IsCancellationRequested) return;
 
-            MarkUploadError(ex);
-            _logger.LogWarning("Alert send failed (will retry): {Error} clientMsgId={ClientId}",
-                ex.Message, request.ClientMessageId);
-            await PersistFailedAsync(request, PendingUploadStatus.Pending, ex.Message, ct).ConfigureAwait(false);
+            // A complement answered 404 is retried too: its alert may still be waiting here.
+            if (message.Kind == PendingUploadKind.Alert) MarkUploadError(ex);
+            _logger.LogWarning("{Kind} send failed (will retry): {Error} clientMsgId={ClientId}",
+                message.Kind, ex.Message, message.ClientMessageId);
+            await PersistFailedAsync(message, PendingUploadStatus.Pending, ex.Message, ct).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             if (ct.IsCancellationRequested) return;
-            MarkUploadError(ex);
-            _logger.LogError(ex, "Unexpected error forwarding alert clientMsgId={ClientId}", request.ClientMessageId);
-            await PersistFailedAsync(request, PendingUploadStatus.Pending, ex.Message, ct).ConfigureAwait(false);
+            if (message.Kind == PendingUploadKind.Alert) MarkUploadError(ex);
+            _logger.LogError(ex, "Unexpected error forwarding {Kind} clientMsgId={ClientId}", message.Kind, message.ClientMessageId);
+            await PersistFailedAsync(message, PendingUploadStatus.Pending, ex.Message, ct).ConfigureAwait(false);
         }
     }
 
-    private async Task PersistFailedAsync(AlertIngestRequest request, PendingUploadStatus status, string errorMessage, CancellationToken ct)
+    // Sends one message; the transmission health of the heartbeat (last upload OK, error code)
+    // follows the alerts only: a complement waiting for its alert is not a transmission failure.
+    private async Task<string> SendAsync(OutboundMessage message, CancellationToken ct)
+    {
+        switch (message)
+        {
+            case AlertMessage alert:
+                AlertIngestResponse response = await _gridClient.SendAlertAsync(alert.Request, ct).ConfigureAwait(false);
+                Interlocked.Increment(ref _totalForwarded);
+                MarkUploadOk();
+                return $"{response.AlertId} status={response.Status}";
+            case AttributionMessage attribution:
+                await _gridClient.SendAttributionAsync(attribution.ClientMessageId, attribution.Complement, ct).ConfigureAwait(false);
+                return $"attribution {attribution.Complement.State}";
+            default:
+                throw new InvalidOperationException($"Unknown outbound message {message.GetType().Name}");
+        }
+    }
+
+    private static string Serialize(OutboundMessage message) => message switch
+    {
+        AlertMessage alert => JsonSerializer.Serialize(alert.Request, JsonOptions),
+        AttributionMessage attribution => JsonSerializer.Serialize(attribution.Complement, JsonOptions),
+        _ => throw new InvalidOperationException($"Unknown outbound message {message.GetType().Name}"),
+    };
+
+    private static OutboundMessage? Deserialize(PendingAlertUpload pending) => pending.Kind switch
+    {
+        PendingUploadKind.Attribution => JsonSerializer.Deserialize<AttributionComplementRequest>(pending.SerializedPayload, JsonOptions)
+            is { } complement ? new AttributionMessage(pending.ClientMessageId, complement) : null,
+        _ => JsonSerializer.Deserialize<AlertIngestRequest>(pending.SerializedPayload, JsonOptions)
+            is { } request ? new AlertMessage(request) : null,
+    };
+
+    private async Task PersistFailedAsync(OutboundMessage message, PendingUploadStatus status, string errorMessage, CancellationToken ct)
     {
         try
         {
             await using var scope = _scopeFactory.CreateAsyncScope();
             var db = scope.ServiceProvider.GetRequiredService<AgentDbContext>();
 
-            // Check if already persisted (idempotent)
+            // Check if already persisted (idempotent): one alert and one complement per ClientMessageId.
             bool exists = await db.PendingAlertUploads
-                .AnyAsync(p => p.ClientMessageId == request.ClientMessageId, ct).ConfigureAwait(false);
+                .AnyAsync(p => p.ClientMessageId == message.ClientMessageId && p.Kind == message.Kind, ct).ConfigureAwait(false);
             if (exists) return;
 
             var pending = new PendingAlertUpload
             {
-                ClientMessageId = request.ClientMessageId,
-                SerializedPayload = JsonSerializer.Serialize(request, JsonOptions),
+                ClientMessageId = message.ClientMessageId,
+                Kind = message.Kind,
+                SerializedPayload = Serialize(message),
                 FirstAttemptAt = DateTime.UtcNow,
                 NextRetryAt = DateTime.UtcNow.AddSeconds(1),
                 AttemptCount = 1,
@@ -249,7 +298,7 @@ public sealed class AlertForwardingService : BackgroundService, IAlertForwarding
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to persist pending alert upload");
+            _logger.LogError(ex, "Failed to persist pending {Kind} upload", message.Kind);
         }
     }
 
@@ -261,6 +310,7 @@ public sealed class AlertForwardingService : BackgroundService, IAlertForwarding
         var dueUploads = await db.PendingAlertUploads
             .Where(p => p.Status == PendingUploadStatus.Pending && p.NextRetryAt <= DateTime.UtcNow)
             .OrderBy(p => p.NextRetryAt)
+            .ThenBy(p => p.Kind) // an alert before its complement when both are due
             .Take(20)
             .ToListAsync(ct).ConfigureAwait(false);
 
@@ -268,8 +318,8 @@ public sealed class AlertForwardingService : BackgroundService, IAlertForwarding
         {
             try
             {
-                var request = JsonSerializer.Deserialize<AlertIngestRequest>(pending.SerializedPayload, JsonOptions);
-                if (request is null)
+                OutboundMessage? message = Deserialize(pending);
+                if (message is null)
                 {
                     pending.Status = PendingUploadStatus.FailedValidation;
                     pending.LastErrorMessage = "Failed to deserialize payload";
@@ -283,25 +333,26 @@ public sealed class AlertForwardingService : BackgroundService, IAlertForwarding
                 using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
                 timeoutCts.CancelAfter(SendTimeout);
 
-                var response = await _gridClient.SendAlertAsync(request, timeoutCts.Token).ConfigureAwait(false);
+                string outcome = await SendAsync(message, timeoutCts.Token).ConfigureAwait(false);
 
                 pending.Status = PendingUploadStatus.Uploaded;
                 await db.SaveChangesAsync(ct).ConfigureAwait(false);
-                Interlocked.Increment(ref _totalForwarded);
-                MarkUploadOk();
 
-                _logger.LogInformation("Retry succeeded: {AlertId} status={Status} attempt={Attempt}",
-                    response.AlertId, response.Status, pending.AttemptCount);
+                _logger.LogInformation("Retry succeeded: {Kind} {Outcome} attempt={Attempt}",
+                    pending.Kind, outcome, pending.AttemptCount);
             }
             catch (HttpRequestException ex) when (IsValidationError(ex))
             {
                 pending.Status = PendingUploadStatus.FailedValidation;
                 pending.LastErrorMessage = ex.Message.Length > 2000 ? ex.Message[..2000] : ex.Message;
                 await db.SaveChangesAsync(ct).ConfigureAwait(false);
-                Interlocked.Increment(ref _totalFailedValidation);
-                MarkUploadError(ex);
+                if (pending.Kind == PendingUploadKind.Alert)
+                {
+                    Interlocked.Increment(ref _totalFailedValidation);
+                    MarkUploadError(ex);
+                }
 
-                _logger.LogCritical("Retry rejected (validation, stopping): {Error}", ex.Message);
+                _logger.LogCritical("Retry rejected (validation, stopping): {Kind} {Error}", pending.Kind, ex.Message);
             }
             catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
             {
@@ -313,10 +364,10 @@ public sealed class AlertForwardingService : BackgroundService, IAlertForwarding
                 pending.Status = PendingUploadStatus.Pending;
                 pending.LastErrorMessage = ex.Message.Length > 2000 ? ex.Message[..2000] : ex.Message;
                 await db.SaveChangesAsync(ct).ConfigureAwait(false);
-                MarkUploadError(ex);
+                if (pending.Kind == PendingUploadKind.Alert) MarkUploadError(ex);
 
-                _logger.LogWarning("Retry failed (attempt {Attempt}, next in {Backoff}s): {Error}",
-                    pending.AttemptCount, backoffSeconds, ex.Message);
+                _logger.LogWarning("Retry failed ({Kind}, attempt {Attempt}, next in {Backoff}s): {Error}",
+                    pending.Kind, pending.AttemptCount, backoffSeconds, ex.Message);
             }
         }
     }
@@ -348,3 +399,14 @@ public sealed class AlertForwardingService : BackgroundService, IAlertForwarding
         return ex.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.UnprocessableEntity;
     }
 }
+
+/// <summary>What the forwarding queue carries: an alert, or the attribution complement of an alert.</summary>
+internal abstract record OutboundMessage(string ClientMessageId, PendingUploadKind Kind);
+
+/// <summary>An alert.</summary>
+internal sealed record AlertMessage(AlertIngestRequest Request)
+    : OutboundMessage(Request.ClientMessageId, PendingUploadKind.Alert);
+
+/// <summary>The attribution complement of the alert of the same ClientMessageId.</summary>
+internal sealed record AttributionMessage(string Id, AttributionComplementRequest Complement)
+    : OutboundMessage(Id, PendingUploadKind.Attribution);

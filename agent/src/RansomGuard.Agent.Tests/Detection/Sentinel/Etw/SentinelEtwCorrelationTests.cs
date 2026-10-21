@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using RansomGuard.Agent.Core.Communication.Models;
 using RansomGuard.Agent.Core.Configuration;
 using RansomGuard.Agent.Core.Detection;
 using RansomGuard.Agent.Core.Detection.Sentinel;
@@ -19,6 +20,14 @@ public sealed class SentinelEtwCorrelationTests : IDisposable
 {
     private readonly MonitorHarness _h = new();
     private readonly EmittingTrace _trace = new();
+
+    // The processes the attribution may find running: 4242 and 5151, both started before any write.
+    private readonly ProcessCreationTimes _processes = new(pid => pid switch
+    {
+        4242 => new ProcessFacts(DateTime.UtcNow.AddHours(-1), "evil", @"C:\Users\x\AppData\Local\Temp\evil.exe"),
+        5151 => new ProcessFacts(DateTime.UtcNow.AddHours(-2), "other", @"C:\Tools\other.exe"),
+        _ => null,
+    });
     private int _tracesOpened;
 
     public void Dispose() => _h.Dispose();
@@ -96,12 +105,12 @@ public sealed class SentinelEtwCorrelationTests : IDisposable
             }),
             _h.ScopeFactory,
             new FileEventDeduplicator(50),
-            new RestartManagerHelper(NullLogger<RestartManagerHelper>.Instance),
             _h.AlertQueue,
             _h.Registry,
             _h.Reporter,
             startupDelay: TimeSpan.Zero,
-            etwSession: session);
+            etwSession: session,
+            processTimes: _processes);
         await monitor.StartAsync(CancellationToken.None);
         await Eventually.HoldsAsync(() => _h.State(ModuleCode.Sentinel).State == ModuleState.Active, "SENTINEL active");
         if (etwEnabled)
@@ -111,6 +120,94 @@ public sealed class SentinelEtwCorrelationTests : IDisposable
 
         return monitor;
     }
+
+    [Fact(Timeout = 30_000)]
+    public async Task The_alert_leaves_pending_and_its_complement_names_the_writer()
+    {
+        SentinelCanary canary = await _h.CreateCanaryAsync(_h.Folder);
+        using SentinelMonitor monitor = await StartedSentinelAsync(etwEnabled: true);
+
+        _trace.Emit(new FileIoRecord(FileIoOperation.Write, canary.FilePath, 4242, DateTime.UtcNow, 0, 0));
+
+        await Eventually.HoldsAsync(() => Alerts(canary) == 1, "the alert");
+        AlertIngestRequest alert = Alert(canary);
+        Detail(alert, "attribution_state").ShouldBe("pending");
+        alert.Details.ShouldNotContain(d => d.Key == "process_id"); // the alert never waits for it
+        await Eventually.HoldsAsync(() => Complements(alert).Count == 1, "the attribution complement");
+        AttributionComplementRequest complement = Complements(alert)[0];
+        complement.State.ShouldBe("resolved");
+        complement.Pid.ShouldBe(4242);
+        complement.ProcessName.ShouldBe("evil");
+        complement.ProcessCreatedAt.ShouldNotBeNull();
+        complement.Reason.ShouldBeNull();
+    }
+
+    [Fact(Timeout = 30_000)]
+    public async Task A_write_only_the_watcher_saw_while_ETW_runs_is_attributed_to_nobody_no_write_event()
+    {
+        SentinelCanary canary = await _h.CreateCanaryAsync(_h.Folder);
+        using SentinelMonitor monitor = await StartedSentinelAsync(etwEnabled: true);
+
+        await File.AppendAllTextAsync(canary.FilePath, "\nENCRYPTED"); // no ETW record: the session missed it
+
+        await Eventually.HoldsAsync(() => Alerts(canary) == 1, "the alert");
+        AlertIngestRequest alert = Alert(canary);
+        await Eventually.HoldsAsync(() => Complements(alert).Count == 1, "the attribution complement");
+        Complements(alert)[0].State.ShouldBe("unavailable");
+        Complements(alert)[0].Reason.ShouldBe("no_write_event");
+        Complements(alert)[0].Pid.ShouldBeNull();
+    }
+
+    [Fact(Timeout = 30_000)]
+    public async Task Two_writers_in_the_window_are_ambiguous()
+    {
+        SentinelCanary canary = await _h.CreateCanaryAsync(_h.Folder);
+        using SentinelMonitor monitor = await StartedSentinelAsync(etwEnabled: true);
+
+        _trace.Emit(new FileIoRecord(FileIoOperation.Write, canary.FilePath, 4242, DateTime.UtcNow, 0, 0));
+        _trace.Emit(new FileIoRecord(FileIoOperation.Write, canary.FilePath, 5151, DateTime.UtcNow, 0, 0));
+
+        await Eventually.HoldsAsync(() => Alerts(canary) == 1, "the alert");
+        AlertIngestRequest alert = Alert(canary);
+        await Eventually.HoldsAsync(() => Complements(alert).Count == 1, "the attribution complement");
+        Complements(alert)[0].State.ShouldBe("ambiguous");
+        Complements(alert)[0].Pid.ShouldBeNull();
+    }
+
+    [Fact(Timeout = 30_000)]
+    public async Task Without_ETW_the_alert_is_final_etw_unavailable_and_no_complement_follows()
+    {
+        SentinelCanary canary = await _h.CreateCanaryAsync(_h.Folder);
+        using SentinelMonitor monitor = await StartedSentinelAsync(etwEnabled: false);
+
+        await File.AppendAllTextAsync(canary.FilePath, "\nENCRYPTED");
+
+        await Eventually.HoldsAsync(() => Alerts(canary) == 1, "the watcher's alert");
+        AlertIngestRequest alert = Alert(canary);
+        Detail(alert, "attribution_state").ShouldBe("unavailable");
+        Detail(alert, "attribution_reason").ShouldBe("etw_unavailable");
+        await Task.Delay(2000); // past the attribution delay
+        Complements(alert).ShouldBeEmpty();
+    }
+
+    private AlertIngestRequest Alert(SentinelCanary canary)
+    {
+        lock (_h.Forwarded)
+        {
+            return _h.Forwarded.Single(a => Equals(a.RawPayload["canary_path"], canary.FilePath));
+        }
+    }
+
+    private List<AttributionComplementRequest> Complements(AlertIngestRequest alert)
+    {
+        lock (_h.Attributions)
+        {
+            return _h.Attributions.Where(a => a.ClientMessageId == alert.ClientMessageId).Select(a => a.Complement).ToList();
+        }
+    }
+
+    private static string? Detail(AlertIngestRequest alert, string key) =>
+        alert.Details.SingleOrDefault(d => d.Key == key)?.Value;
 
     private int Alerts(SentinelCanary canary)
     {

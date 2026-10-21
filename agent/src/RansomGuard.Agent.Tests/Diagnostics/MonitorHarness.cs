@@ -67,6 +67,9 @@ internal sealed class MonitorHarness : IDisposable
         queue.Setup(q => q.TryEnqueue(It.IsAny<AlertIngestRequest>()))
             .Callback((AlertIngestRequest a) => { lock (Forwarded) Forwarded.Add(a); })
             .Returns(true);
+        queue.Setup(q => q.TryEnqueueAttribution(It.IsAny<string>(), It.IsAny<AttributionComplementRequest>()))
+            .Callback((string id, AttributionComplementRequest c) => { lock (Attributions) Attributions.Add((id, c)); })
+            .Returns(true);
         AlertQueue = queue.Object;
 
         Reporter = new ModuleFailureReporter(Registry, ScopeFactory, NullLogger<ModuleFailureReporter>.Instance);
@@ -74,6 +77,9 @@ internal sealed class MonitorHarness : IDisposable
     }
 
     public ServiceProvider Provider { get; }
+
+    /// <summary>Attribution complements enqueued (ADR-025), with their alert's client_message_id.</summary>
+    public List<(string ClientMessageId, AttributionComplementRequest Complement)> Attributions { get; } = [];
 
     public AuditHealth Health { get; } = new();
 

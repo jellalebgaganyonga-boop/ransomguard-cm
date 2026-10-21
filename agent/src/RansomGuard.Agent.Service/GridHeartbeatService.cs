@@ -208,9 +208,12 @@ public sealed class GridHeartbeatService : BackgroundService
             await using var scope = _scopeFactory.CreateAsyncScope();
             var db = scope.ServiceProvider.GetRequiredService<AgentDbContext>();
 
+            // Alerts only: the attribution complements (ADR-025) share this table, and a complement
+            // waiting for its route or its alert is not an alert the console is missing.
             int pending = await db.PendingAlertUploads
                 .CountAsync(
-                    p => p.Status == PendingUploadStatus.Pending || p.Status == PendingUploadStatus.Uploading,
+                    p => p.Kind == PendingUploadKind.Alert
+                        && (p.Status == PendingUploadStatus.Pending || p.Status == PendingUploadStatus.Uploading),
                     ct)
                 .ConfigureAwait(false);
 
@@ -221,7 +224,10 @@ public sealed class GridHeartbeatService : BackgroundService
             // clock does not.
             DateTime since = DateTime.UtcNow.AddHours(-24);
             int rejected = await db.PendingAlertUploads
-                .CountAsync(p => p.Status == PendingUploadStatus.FailedValidation && p.FirstAttemptAt >= since, ct)
+                .CountAsync(
+                    p => p.Kind == PendingUploadKind.Alert
+                        && p.Status == PendingUploadStatus.FailedValidation && p.FirstAttemptAt >= since,
+                    ct)
                 .ConfigureAwait(false);
 
             long? dbFree = FreeBytes(ExtractDataSource(db.Database.GetConnectionString()));

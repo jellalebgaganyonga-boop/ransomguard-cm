@@ -385,8 +385,9 @@ public sealed class AgentDbContext : DbContext
         modelBuilder.Entity<PendingAlertUpload>(entity =>
         {
             entity.HasKey(e => e.Id);
-            entity.HasIndex(e => e.ClientMessageId).IsUnique();
+            entity.HasIndex(e => new { e.ClientMessageId, e.Kind }).IsUnique();
             entity.HasIndex(e => e.NextRetryAt);
+            entity.Property(e => e.Kind).HasConversion<string>().HasMaxLength(20).HasDefaultValue(PendingUploadKind.Alert);
             entity.HasIndex(e => e.Status);
             entity.Property(e => e.ClientMessageId).IsRequired().HasMaxLength(64);
             entity.Property(e => e.SerializedPayload).IsRequired();

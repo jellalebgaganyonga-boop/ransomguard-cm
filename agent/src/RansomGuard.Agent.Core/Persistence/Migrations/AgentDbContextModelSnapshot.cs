@@ -15,7 +15,7 @@ namespace RansomGuard.Agent.Core.Persistence.Migrations
         protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
-            modelBuilder.HasAnnotation("ProductVersion", "8.0.31");
+            modelBuilder.HasAnnotation("ProductVersion", "8.0.32");
 
             modelBuilder.Entity("RansomGuard.Agent.Core.Persistence.Entities.AgentState", b =>
                 {
@@ -721,6 +721,13 @@ namespace RansomGuard.Agent.Core.Persistence.Migrations
                     b.Property<DateTime>("FirstAttemptAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("Alert");
+
                     b.Property<string>("LastErrorMessage")
                         .HasMaxLength(2000)
                         .HasColumnType("TEXT");
@@ -739,12 +746,12 @@ namespace RansomGuard.Agent.Core.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ClientMessageId")
-                        .IsUnique();
-
                     b.HasIndex("NextRetryAt");
 
                     b.HasIndex("Status");
+
+                    b.HasIndex("ClientMessageId", "Kind")
+                        .IsUnique();
 
                     b.ToTable("PendingAlertUploads");
                 });
