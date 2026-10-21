@@ -1,5 +1,7 @@
 /**
- * The install command the console shows for a new endpoint (GRID-SEC-006).
+ * The scripted install command (GRID-SEC-006). Since ADR-027 the console no longer shows it:
+ * the "Add agent" dialog hands out the double-click installer instead. Kept, with its tests,
+ * as the builder of the scripted path (GPO, SCCM) for an admin page to come.
  *
  * One command, for PowerShell run as administrator. It:
  *   1. downloads the installer WITH TLS validation (no -k, no SkipCertificateCheck) into a file

@@ -19,6 +19,7 @@
 
 import { z } from 'zod';
 import { apiClient } from './client';
+import { installerFilename } from '@/lib/installer-download';
 
 // ── AgentStatus — lowercase to match Python enum ────────────
 
@@ -169,6 +170,18 @@ export interface ProvisionAgentResponse {
 export async function provisionAgent(): Promise<ProvisionAgentResponse> {
   const res = await apiClient.post('/dashboard/agents/provision');
   return res.data as ProvisionAgentResponse;
+}
+
+/** The double-click installer for one enrollment code (ADR-027): the GRID builds it, the browser saves it. */
+export interface InstallerDownload {
+  blob: Blob;
+  filename: string;
+}
+
+export async function downloadInstaller(body: { otp: string; host: string; port: number }): Promise<InstallerDownload> {
+  const res = await apiClient.post('/dashboard/agents/installer', body, { responseType: 'blob' });
+  const disposition = (res.headers as Record<string, string | undefined>)['content-disposition'];
+  return { blob: res.data as Blob, filename: installerFilename(disposition, body.host) };
 }
 
 export async function decommissionAgent(agentId: string): Promise<void> {

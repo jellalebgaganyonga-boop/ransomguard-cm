@@ -166,42 +166,69 @@ test.describe('Agent detail — security_analyst RBAC (AC4.1.3)', () => {
   });
 });
 
-test.describe('Add agent — install command (GRID-SEC-006)', () => {
-  const SHA = 'C0FFEE'.repeat(10) + 'BEEF';
+test.describe('Add agent — the double-click installer (ADR-027)', () => {
+  const PROVISION = { otp: 'RG-CAM-2026-X7K9P3', expires_in_minutes: 30, installer_sha256: null };
 
-  test('one command: TLS validated, under %TEMP%, SHA-256 of the served installer checked first', async ({ page }) => {
+  test('the GRID builds the installer for this code and this host; the browser saves it', async ({ page }) => {
     await setupMocks(page, 'tenant_admin');
-    await page.route('**/api/v1/dashboard/agents/provision', (r) =>
-      r.fulfill({ status: 200, json: { otp: 'RG-CAM-2026-X7K9P3', expires_in_minutes: 30, installer_sha256: SHA } }));
+    await page.route('**/api/v1/dashboard/agents/provision', (r) => r.fulfill({ status: 200, json: PROVISION }));
+    let sent: unknown = null;
+    await page.route('**/api/v1/dashboard/agents/installer', (r) => {
+      sent = r.request().postDataJSON();
+      return r.fulfill({
+        status: 200,
+        headers: {
+          'content-type': 'application/vnd.microsoft.portable-executable',
+          'content-disposition': 'attachment; filename="RansomGuard-CM-Installeur-localhost.exe"',
+        },
+        body: Buffer.from('MZ fake installer'),
+      });
+    });
     await loginAs(page, 'tenant_admin');
     await navigateTo(page, '/agents');
 
     await page.getByRole('button', { name: /add agent/i }).click();
+    await expect(page.getByTestId('enrollment-otp')).toHaveText('RG-CAM-2026-X7K9P3');
+    await expect(page.getByTestId('install-command')).toHaveCount(0); // the command is gone: nothing to type
 
-    const command = page.getByTestId('install-command');
-    await expect(command).toContainText(`(Get-FileHash -Algorithm SHA256 $f).Hash -ne '${SHA}'`);
-    await expect(page.getByTestId('installer-sha256')).toHaveText(SHA);
-    const text = (await command.textContent()) ?? '';
-    expect(text).not.toMatch(/(^|\s)-k(\s|$)/);
-    expect(text).not.toMatch(/C:\\/i);
-    expect(text).not.toMatch(/SkipCertificateCheck/i);
-    expect(text).toContain('Join-Path $env:TEMP');
+    const downloadPromise = page.waitForEvent('download');
+    await page.getByTestId('download-installer').click();
+    const download = await downloadPromise;
+
+    expect(download.suggestedFilename()).toBe('RansomGuard-CM-Installeur-localhost.exe');
+    expect(sent).toEqual({ otp: 'RG-CAM-2026-X7K9P3', host: 'localhost', port: 8443 });
+    await expect(page.getByText(/Unknown publisher/)).toBeVisible(); // SmartScreen, said as such
 
     const results = await new AxeBuilder({ page }).analyze();
     const critical = results.violations.filter((v) => v.impact === 'critical' || v.impact === 'serious');
     expect(critical, `Critical/serious a11y violations: ${JSON.stringify(critical, null, 2)}`).toEqual([]);
   });
 
-  test('no installer published: no command at all', async ({ page }) => {
+  test('no installer published: the GRID says 404 and the console says what is missing', async ({ page }) => {
     await setupMocks(page, 'tenant_admin');
-    await page.route('**/api/v1/dashboard/agents/provision', (r) =>
-      r.fulfill({ status: 200, json: { otp: 'RG-CAM-2026-X7K9P3', expires_in_minutes: 30, installer_sha256: null } }));
+    await page.route('**/api/v1/dashboard/agents/provision', (r) => r.fulfill({ status: 200, json: PROVISION }));
+    await page.route('**/api/v1/dashboard/agents/installer', (r) =>
+      r.fulfill({ status: 404, json: { detail: 'No double-click installer published' } }));
     await loginAs(page, 'tenant_admin');
     await navigateTo(page, '/agents');
 
     await page.getByRole('button', { name: /add agent/i }).click();
+    await page.getByTestId('download-installer').click();
 
     await expect(page.getByRole('alert')).toContainText('No installer is published');
-    await expect(page.getByTestId('install-command')).toHaveCount(0);
+  });
+
+  test('a code no longer usable: 409, generate a new one', async ({ page }) => {
+    await setupMocks(page, 'tenant_admin');
+    await page.route('**/api/v1/dashboard/agents/provision', (r) => r.fulfill({ status: 200, json: PROVISION }));
+    await page.route('**/api/v1/dashboard/agents/installer', (r) =>
+      r.fulfill({ status: 409, json: { detail: 'Unknown or expired enrollment code' } }));
+    await loginAs(page, 'tenant_admin');
+    await navigateTo(page, '/agents');
+
+    await page.getByRole('button', { name: /add agent/i }).click();
+    await page.getByTestId('download-installer').click();
+
+    await expect(page.getByRole('alert')).toContainText('can no longer be used');
   });
 });

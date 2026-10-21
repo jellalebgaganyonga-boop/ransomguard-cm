@@ -15,13 +15,13 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Server, RefreshCw, AlertTriangle, Download, PlusCircle, Copy, CheckCircle2, X } from 'lucide-react';
-import { useAgentList, useProvisionAgent } from '@/hooks/use-agents';
+import { useAgentList, useDownloadInstaller, useProvisionAgent } from '@/hooks/use-agents';
 import { useMe, resolvePrimaryRole } from '@/hooks/use-me';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { agentStatusVariant, isSignalLostRed, protectionVariant } from '@/lib/agent-status';
 import { verdictSentence } from '@/lib/agent-posture';
-import { buildInstallCommand } from '@/lib/install-command';
+import { installerRequestBody } from '@/lib/installer-download';
 import { formatDistanceToNow } from '@/lib/format-date';
 import type { AgentStatus } from '@/api/agents';
 
@@ -55,17 +55,19 @@ export function AgentsListPage() {
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [showProvision]);
-  const [copiedField, setCopiedField] = useState<'otp' | 'cmd' | null>(null);
+  const [copiedField, setCopiedField] = useState<'otp' | null>(null);
 
   const provision = useProvisionAgent();
+  const download = useDownloadInstaller();
 
   const handleProvision = () => {
     provision.reset();
+    download.reset();
     setShowProvision(true);
     provision.mutate();
   };
 
-  const copyToClipboard = (text: string, field: 'otp' | 'cmd') => {
+  const copyToClipboard = (text: string, field: 'otp') => {
     void navigator.clipboard.writeText(text).then(() => {
       setCopiedField(field);
       setTimeout(() => setCopiedField(null), 2000);
@@ -316,17 +318,17 @@ export function AgentsListPage() {
             )}
 
             {provision.isSuccess && provision.data && (() => {
-              const { otp, installer_sha256: sha256, expires_in_minutes: expires } = provision.data;
-              // GRID-SEC-006: one command, TLS validated, written under %TEMP%, SHA-256 checked
-              // against the installer the GRID serves before anything runs.
-              let command: string | null = null;
-              if (sha256) {
+              const { otp, expires_in_minutes: expires } = provision.data;
+              // ADR-027: the GRID builds an installer that embeds this code and this host; the
+              // browser saves it. Nothing is typed on the endpoint.
+              const handleDownload = () => {
                 try {
-                  command = buildInstallCommand({ host: window.location.hostname, otp, sha256 });
+                  download.mutate(installerRequestBody({ host: window.location.hostname, otp }));
                 } catch {
-                  command = null;
+                  // host or code not what it should be: the error state below says so
                 }
-              }
+              };
+              const status = (download.error as { response?: { status?: number } } | null)?.response?.status;
               return (
                 <div className="space-y-4">
                   <div>
@@ -336,47 +338,45 @@ export function AgentsListPage() {
                         {t('agents.provision.expires', { n: expires })}
                       </span>
                     </p>
-                    <p className="mt-1 font-mono text-sm text-text-primary">{otp}</p>
+                    <div className="mt-1 flex items-center gap-2">
+                      <p className="font-mono text-sm text-text-primary" data-testid="enrollment-otp">{otp}</p>
+                      <button
+                        onClick={() => copyToClipboard(otp, 'otp')}
+                        className="shrink-0 text-text-secondary hover:text-text-primary"
+                        aria-label={t('agents.provision.copyOtp')}
+                      >
+                        {copiedField === 'otp' ? <CheckCircle2 className="size-4 text-success" /> : <Copy className="size-4" />}
+                      </button>
+                    </div>
                   </div>
 
-                  {command ? (
-                    <>
-                      <div>
-                        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-text-secondary">
-                          {t('agents.provision.commandLabel')}
-                        </p>
-                        <div className="flex items-start gap-2 rounded-lg border border-border-subtle bg-surface-subtle px-3 py-2">
-                          <code className="flex-1 break-all font-mono text-xs text-text-primary" data-testid="install-command">
-                            {command}
-                          </code>
-                          <button
-                            onClick={() => copyToClipboard(command, 'cmd')}
-                            className="shrink-0 text-text-secondary hover:text-text-primary"
-                            aria-label={t('agents.provision.copyCommand')}
-                          >
-                            {copiedField === 'cmd' ? <CheckCircle2 className="size-4 text-success" /> : <Copy className="size-4" />}
-                          </button>
-                        </div>
-                      </div>
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-text-secondary">
-                          {t('agents.provision.fingerprintLabel')}
-                        </p>
-                        <p className="mt-1 break-all font-mono text-xs text-text-primary" data-testid="installer-sha256">
-                          {sha256}
-                        </p>
-                      </div>
-                      <p className="text-xs text-text-secondary">{t('agents.provision.commandHint')}</p>
-                    </>
-                  ) : (
+                  <Button
+                    variant="primary"
+                    className="w-full"
+                    onClick={handleDownload}
+                    disabled={download.isPending}
+                    data-testid="download-installer"
+                  >
+                    <Download className="mr-1.5 size-4" aria-hidden="true" />
+                    {download.isPending ? t('agents.provision.downloading') : t('agents.provision.downloadButton')}
+                  </Button>
+
+                  {download.isError && (
                     <p role="alert" className="text-sm text-error">
-                      {t('agents.provision.noInstaller')}
+                      {status === 404
+                        ? t('agents.provision.noInstaller')
+                        : status === 409
+                          ? t('agents.provision.codeInvalid')
+                          : t('agents.provision.downloadFailed')}
                     </p>
                   )}
 
-                  <p className="text-xs text-text-secondary">
-                    {t('agents.provision.hint', 'After the agent enrolls, it will appear here within 60 seconds (next auto-refresh).')}
-                  </p>
+                  <ol className="list-decimal space-y-1 pl-5 text-sm text-text-secondary">
+                    <li>{t('agents.provision.step1')}</li>
+                    <li>{t('agents.provision.step2')}</li>
+                    <li>{t('agents.provision.step3')}</li>
+                  </ol>
+                  <p className="text-xs text-text-secondary">{t('agents.provision.scriptedNote')}</p>
 
                   <Button
                     variant="secondary"

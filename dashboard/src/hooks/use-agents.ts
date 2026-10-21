@@ -6,7 +6,9 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { saveBlob } from '@/lib/installer-download';
 import {
+  downloadInstaller,
   fetchAgentDetail,
   fetchAgentList,
   issueCommand,
@@ -66,6 +68,15 @@ export function useAgentDetail(id: string | undefined) {
 export function useProvisionAgent() {
   return useMutation({
     mutationFn: () => provisionAgent(),
+  });
+}
+
+// ── Download the installer (ADR-027, tenant_admin only) ─────
+
+export function useDownloadInstaller() {
+  return useMutation({
+    mutationFn: (body: { otp: string; host: string; port: number }) => downloadInstaller(body),
+    onSuccess: ({ blob, filename }) => saveBlob(blob, filename),
   });
 }
 
