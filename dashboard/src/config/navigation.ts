@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { LayoutDashboard, ShieldAlert, Monitor, Users, ScrollText, Settings, Bell, ClipboardList } from 'lucide-react';
+import { LayoutDashboard, ShieldAlert, Monitor, Users, ScrollText, Settings, ClipboardList } from 'lucide-react';
 import type { Role } from '@/api/me';
 
 /**
@@ -22,8 +22,10 @@ export interface NavItem {
   /** Route path */
   to: string;
   icon: LucideIcon;
-  /** Roles that can see this item. */
+  /** Roles that may open the page (the route guard, protected-route.tsx). */
   roles: Role[];
+  /** Roles that see the entry in the sidebar; every role of `roles` when omitted. */
+  sidebarRoles?: Role[];
 }
 
 export const NAV_ITEMS: NavItem[] = [
@@ -64,19 +66,17 @@ export const NAV_ITEMS: NavItem[] = [
     roles: ['tenant_admin', 'read_only_auditor'],
   },
   {
-    labelKey: 'nav.notifications',
-    to: '/settings/notifications',
-    icon: Bell,
-    roles: ['tenant_admin', 'security_analyst', 'read_only_auditor'],
-  },
-  {
+    // Settings (Fix C): every role edits their own name, language, notifications and password;
+    // the sidebar entry is for administrators, the others get there from the header user menu.
+    // The former 'Notifications' entry is a tab of this page now.
     labelKey: 'nav.settings',
     to: '/settings',
     icon: Settings,
-    roles: ['tenant_admin'],
+    roles: ['tenant_admin', 'security_analyst', 'read_only_auditor'],
+    sidebarRoles: ['tenant_admin'],
   },
 ];
 
 export function getNavItemsForRole(role: Role): NavItem[] {
-  return NAV_ITEMS.filter((item) => item.roles.includes(role));
+  return NAV_ITEMS.filter((item) => (item.sidebarRoles ?? item.roles).includes(role));
 }

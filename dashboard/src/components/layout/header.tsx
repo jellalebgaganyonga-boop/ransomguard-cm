@@ -6,6 +6,7 @@
 
 import { Bell, Globe, LogOut, User as UserIcon, Menu } from 'lucide-react';
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
@@ -31,7 +32,6 @@ import type { MeResponse } from '@/api/me';
 
 interface HeaderProps {
   me: MeResponse;
-  notificationCount?: number;
 }
 
 function initials(fullName: string): string {
@@ -41,11 +41,12 @@ function initials(fullName: string): string {
   return (first + last).toUpperCase();
 }
 
-export function Header({ me, notificationCount = 0 }: HeaderProps) {
+export function Header({ me }: HeaderProps) {
   const { t, i18n } = useTranslation();
   const toggleMobileSidebar = useUIStore((s) => s.toggleMobileSidebar);
   const setLanguage = useUIStore((s) => s.setLanguage);
   const logoutMutation = useLogout();
+  const navigate = useNavigate();
 
   const handleLanguageChange = (lang: 'fr' | 'en') => {
     void i18n.changeLanguage(lang);
@@ -81,23 +82,16 @@ export function Header({ me, notificationCount = 0 }: HeaderProps) {
 
       {/* Right cluster */}
       <div className="flex items-center gap-2">
-        {/* Notification bell */}
+        {/* Notification preferences, for every role (Fix C.4). The badge it used to carry always
+            read 0: nothing fed it; nothing pretends a count now. */}
         <Button
           variant="ghost"
           size="icon"
           aria-label={t('header.notifications')}
-          className="relative"
+          onClick={() => navigate('/settings?tab=notifications')}
+          data-testid="notifications-link"
         >
           <Bell className="size-5" aria-hidden="true" />
-          {notificationCount > 0 && (
-            <span
-              className="absolute right-1 top-1 flex size-[18px] items-center justify-center rounded-full bg-severity-critical text-[11px] font-bold text-white"
-              aria-label={`${notificationCount} notifications`}
-              aria-hidden="true"
-            >
-              {notificationCount}
-            </span>
-          )}
         </Button>
 
         {/* Language switcher */}

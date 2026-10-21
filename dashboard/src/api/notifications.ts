@@ -15,6 +15,8 @@ export const NotificationPreferenceSchema = z.object({
   email_high: z.boolean(),
   email_medium: z.boolean(),
   email_low: z.boolean(),
+  /** False when this GRID has no SMTP account: the switches are stored, nothing is sent yet. */
+  email_delivery_configured: z.boolean().optional(),
 });
 export type NotificationPreference = z.infer<typeof NotificationPreferenceSchema>;
 

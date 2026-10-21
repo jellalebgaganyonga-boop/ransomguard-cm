@@ -51,7 +51,7 @@ export function AppShellLayout({ me, alertCount = 0, children }: AppShellLayoutP
 
   return (
     <div className="flex h-screen flex-col">
-      <Header me={me} notificationCount={alertCount} />
+      <Header me={me} />
 
       <div className="flex flex-1 overflow-hidden">
         {/* Desktop sidebar */}

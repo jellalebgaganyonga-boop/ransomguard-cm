@@ -21,9 +21,8 @@ async function navItems(page: Page): Promise<Locator> {
 for (const [path, expected, notExpected] of [
   ['/audit', "Journal d'audit", 'Actions utilisateur'],
   ['/audit/user-actions', 'Actions utilisateur', "Journal d'audit"],
-  // /settings redirects to /settings/notifications today: one item lit, the one of the page shown.
-  ['/settings', 'Notifications', 'Paramètres'],
-  ['/settings/notifications', 'Notifications', 'Paramètres'],
+  ['/settings', 'Paramètres', 'Notifications'],
+  ['/settings/notifications', 'Paramètres', 'Notifications'], // the Notifications tab of Settings
 ] as const) {
   test(`only the item of ${path} is active`, async ({ page }) => {
     await setupMocks(page, 'tenant_admin');

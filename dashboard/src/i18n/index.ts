@@ -29,16 +29,19 @@ void i18n
       fr: { translation: fr },
       en: { translation: en },
     },
-    fallbackLng: 'fr', // French-default per product spec
-    // lng omitted: LanguageDetector decides, falls back to fallbackLng
+    // English by default (owner's decision, 2026-10-21), French kept: a browser in French gets
+    // French; the choice made in Settings is kept on the GRID (/dashboard/me.preferences) and in
+    // this browser, and applied once /me is known (protected-route.tsx).
+    fallbackLng: 'en',
+    supportedLngs: ['en', 'fr'],
+    nonExplicitSupportedLngs: true,
     interpolation: {
       escapeValue: false, // React already escapes
     },
     detection: {
-      // Order: browser -> fallback. Sprint 8 will add persisted user
-      // preference from /dashboard/me.preferences.language.
-      order: ['navigator'],
-      caches: [], // do not write to localStorage (no persisted prefs in Sprint 7)
+      order: ['localStorage', 'navigator'],
+      lookupLocalStorage: 'rg-language',
+      caches: ['localStorage'],
     },
     react: {
       useSuspense: false, // avoid suspense boundaries for simple key lookups

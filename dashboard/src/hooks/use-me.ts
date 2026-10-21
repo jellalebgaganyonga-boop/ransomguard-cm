@@ -16,8 +16,37 @@
  *   useQuery({ queryKey: ['alerts', me?.tenant.id, filters], ... })
  */
 
-import { useQuery } from '@tanstack/react-query';
-import { fetchMe, type MeResponse, type Role } from '@/api/me';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { changePassword, fetchMe, updateMe, updatePreferences, type MeResponse, type Role } from '@/api/me';
+
+// ── Settings (Fix C): what a user changes about themselves ─────────────
+
+export function useUpdateMe() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { full_name: string }) => updateMe(payload),
+    onSuccess: (me) => queryClient.setQueryData(['me'], me),
+  });
+}
+
+export function useUpdatePreferences() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { language: 'fr' | 'en'; timezone?: string }) => updatePreferences(payload),
+    // The cached /me carries the new preferences at once (the route guard applies the language
+    // from it), then a refetch confirms what the GRID kept.
+    onSuccess: (preferences) => {
+      queryClient.setQueryData<MeResponse>(['me'], (me) => (me ? { ...me, preferences } : me));
+      void queryClient.invalidateQueries({ queryKey: ['me'] });
+    },
+  });
+}
+
+export function useChangePassword() {
+  return useMutation({
+    mutationFn: (payload: { current_password: string; new_password: string }) => changePassword(payload),
+  });
+}
 
 const KNOWN_ROLES: readonly Role[] = [
   'tenant_admin',

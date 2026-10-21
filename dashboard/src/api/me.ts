@@ -24,9 +24,11 @@ export const TenantContextSchema = z.object({
 });
 
 export const UserPreferencesSchema = z.object({
-  language: z.enum(['fr', 'en']),
+  /** Null until chosen in Settings: the console then follows its default (English) and the browser. */
+  language: z.enum(['fr', 'en']).nullable(),
   timezone: z.string().min(1),
 });
+export type UserPreferences = z.infer<typeof UserPreferencesSchema>;
 
 export const MeResponseSchema = z.object({
   user_id: z.string().uuid(),
@@ -49,4 +51,21 @@ export type MeResponse = z.infer<typeof MeResponseSchema>;
 export async function fetchMe(): Promise<MeResponse> {
   const response = await apiClient.get('/dashboard/me');
   return MeResponseSchema.parse(response.data);
+}
+
+// ── Settings (Fix C): one's own name, language, password ────────────────
+
+export async function updateMe(payload: { full_name: string }): Promise<MeResponse> {
+  const response = await apiClient.patch('/dashboard/me', payload);
+  return MeResponseSchema.parse(response.data);
+}
+
+export async function updatePreferences(payload: { language: 'fr' | 'en'; timezone?: string }): Promise<UserPreferences> {
+  const response = await apiClient.patch('/dashboard/me/preferences', payload);
+  return UserPreferencesSchema.parse(response.data);
+}
+
+/** 204 when changed; 403 when the current password is wrong; 422 when the new one is unfit. */
+export async function changePassword(payload: { current_password: string; new_password: string }): Promise<void> {
+  await apiClient.post('/dashboard/me/change-password', payload);
 }

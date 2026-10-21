@@ -390,12 +390,48 @@
     }
   },
   "settings": {
+    "title": "Paramètres",
+    "subtitle": "Votre compte, votre langue, vos notifications, votre mot de passe.",
+    "tabs": { "profile": "Profil", "language": "Langue", "notifications": "Notifications", "security": "Sécurité" },
+    "profile": {
+      "name": "Nom affiché",
+      "email": "E-mail",
+      "roles": "Rôle",
+      "tenant": "Établissement",
+      "edit": "Modifier",
+      "saved": "Nom enregistré.",
+      "saveFailed": "Nom non enregistré."
+    },
+    "language": {
+      "title": "Langue",
+      "description": "La langue de cette console. L'anglais est la langue par défaut ; le français est disponible. Votre choix est enregistré sur le GRID et appliqué à chaque connexion, sur tout poste.",
+      "saved": "Langue enregistrée.",
+      "saveFailed": "Langue non enregistrée.",
+      "storedOnGrid": "Choix enregistré sur le GRID.",
+      "notChosenYet": "Aucun choix enregistré : la console suit la langue du navigateur, l'anglais sinon."
+    },
     "notifications": {
-      "title": "Préférences de notification",
-      "description": "Recevez des notifications par email lorsque de nouvelles alertes sont détectées.",
+      "title": "Notifications par e-mail",
+      "description": "Un e-mail vous est envoyé pour chaque nouvelle alerte des sévérités cochées. Les préférences sont enregistrées sur le GRID.",
+      "deliveryNotConfigured": "L'envoi d'e-mails n'est pas configuré sur ce GRID (aucun compte SMTP) : vos préférences sont enregistrées, mais aucun e-mail ne partira tant qu'il ne l'est pas.",
       "severity": "Sévérité",
-      "email": "Email",
-      "saved": "Préférences sauvegardées."
+      "email": "E-mail",
+      "saved": "Préférence enregistrée.",
+      "saveFailed": "Préférence non enregistrée.",
+      "loadFailed": "Les préférences n'ont pas pu être lues."
+    },
+    "security": {
+      "description": "Changez votre mot de passe : le mot de passe actuel prouve que c'est bien vous.",
+      "current": "Mot de passe actuel",
+      "new": "Nouveau mot de passe (8 caractères au moins)",
+      "confirm": "Confirmer le nouveau mot de passe",
+      "tooShort": "8 caractères au moins.",
+      "mismatch": "Les deux saisies diffèrent.",
+      "submit": "Changer le mot de passe",
+      "changed": "Mot de passe changé.",
+      "wrongCurrent": "Mot de passe actuel incorrect.",
+      "rejected": "Nouveau mot de passe refusé : 8 caractères au moins, différent de l'actuel.",
+      "failed": "Le mot de passe n'a pas pu être changé."
     }
   },
   "userActions": {

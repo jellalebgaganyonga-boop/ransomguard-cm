@@ -8,7 +8,9 @@
 // - Refresh failure → login redirect (AC1.3.3)
 // ============================================================
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
+import i18n from '@/i18n';
+import { useUIStore } from '@/stores/ui.store';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/stores/auth.store';
 import { useMe, resolvePrimaryRole } from '@/hooks/use-me';
@@ -56,6 +58,17 @@ function AuthenticatedRoute() {
   const { data: me, isLoading, isError } = useMe();
   const logoutMutation = useLogout();
   const [showExpiredModal, setShowExpiredModal] = useState(false);
+  const setLanguage = useUIStore((s) => s.setLanguage);
+
+  // Settings (Fix C): the language chosen in Settings is kept on the GRID; once /me is known it
+  // wins over the browser's. Null = no choice yet: the detector's pick stays.
+  const storedLanguage = me?.preferences.language ?? null;
+  useEffect(() => {
+    if (storedLanguage && i18n.resolvedLanguage !== storedLanguage) {
+      void i18n.changeLanguage(storedLanguage);
+      setLanguage(storedLanguage);
+    }
+  }, [storedLanguage, setLanguage]);
 
   // AC1.2.3: idle callback — show modal then logout
   const handleIdle = useCallback(() => {

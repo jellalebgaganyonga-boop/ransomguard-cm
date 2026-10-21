@@ -390,12 +390,48 @@
     }
   },
   "settings": {
+    "title": "Settings",
+    "subtitle": "Your account, your language, your notifications, your password.",
+    "tabs": { "profile": "Profile", "language": "Language", "notifications": "Notifications", "security": "Security" },
+    "profile": {
+      "name": "Display name",
+      "email": "E-mail",
+      "roles": "Role",
+      "tenant": "Organisation",
+      "edit": "Edit",
+      "saved": "Name saved.",
+      "saveFailed": "Name not saved."
+    },
+    "language": {
+      "title": "Language",
+      "description": "The language of this console. English is the default; French is available. Your choice is stored on the GRID and applied at every sign-in, on any machine.",
+      "saved": "Language saved.",
+      "saveFailed": "Language not saved.",
+      "storedOnGrid": "Choice stored on the GRID.",
+      "notChosenYet": "No stored choice: the console follows the browser's language, English otherwise."
+    },
     "notifications": {
-      "title": "Notification preferences",
-      "description": "Receive email notifications when new alerts are detected.",
+      "title": "E-mail notifications",
+      "description": "An e-mail is sent to you for every new alert of the checked severities. The preferences are stored on the GRID.",
+      "deliveryNotConfigured": "E-mail delivery is not configured on this GRID (no SMTP account): your preferences are stored, but no e-mail leaves until it is.",
       "severity": "Severity",
-      "email": "Email",
-      "saved": "Preferences saved."
+      "email": "E-mail",
+      "saved": "Preference saved.",
+      "saveFailed": "Preference not saved.",
+      "loadFailed": "The preferences could not be read."
+    },
+    "security": {
+      "description": "Change your password: the current one proves it is you.",
+      "current": "Current password",
+      "new": "New password (at least 8 characters)",
+      "confirm": "Confirm the new password",
+      "tooShort": "At least 8 characters.",
+      "mismatch": "The two entries differ.",
+      "submit": "Change the password",
+      "changed": "Password changed.",
+      "wrongCurrent": "Current password incorrect.",
+      "rejected": "New password refused: at least 8 characters, different from the current one.",
+      "failed": "The password could not be changed."
     }
   },
   "userActions": {

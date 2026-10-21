@@ -25,7 +25,8 @@ import { AgentDetailPage } from '@/pages/agents/agent-detail-page';
 import { UsersListPage } from '@/pages/users/users-list-page';
 import { AuditLogPage } from '@/pages/audit/audit-log-page';
 import { UserActionsPage } from '@/pages/audit/user-actions-page';
-import { NotificationPreferencesPage } from '@/pages/settings/notification-preferences-page';
+import { SettingsPage } from '@/pages/settings/settings-page';
+import { ToastProvider } from '@/components/ui/toast';
 
 /**
  * Boot sequence (AC1.3.4):
@@ -60,6 +61,7 @@ export function App() {
   }, [setAccessToken, setInitializing]);
 
   return (
+    <ToastProvider>
     <BrowserRouter>
       <Routes>
         {/* ── Public ── */}
@@ -87,8 +89,7 @@ export function App() {
           <Route path="/audit/user-actions" element={<UserActionsPage />} />
 
           {/* Settings */}
-          <Route path="/settings/notifications" element={<NotificationPreferencesPage />} />
-          <Route path="/settings" element={<Navigate to="/settings/notifications" replace />} />
+          <Route path="/settings/*" element={<SettingsPage />} />
         </Route>
 
         {/* ── Root redirect ── */}
@@ -98,5 +99,6 @@ export function App() {
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </BrowserRouter>
+    </ToastProvider>
   );
 }
