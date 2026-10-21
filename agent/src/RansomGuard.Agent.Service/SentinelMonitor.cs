@@ -7,6 +7,7 @@ using RansomGuard.Agent.Core.Diagnostics;
 using RansomGuard.Agent.Core.Detection;
 using RansomGuard.Agent.Core.Detection.Genealogy;
 using RansomGuard.Agent.Core.Detection.Sentinel;
+using RansomGuard.Agent.Core.Detection.Sentinel.Etw;
 using RansomGuard.Agent.Core.Communication;
 using RansomGuard.Agent.Core.Persistence.Entities;
 using RansomGuard.Agent.Core.Persistence.Repositories;
@@ -47,6 +48,9 @@ public sealed class SentinelMonitor : BackgroundService
     private readonly List<FileSystemWatcher> _watchers = [];
     private readonly Channel<CanaryFileEvent> _eventChannel;
     private readonly ConcurrentDictionary<string, RegenerationStats> _regenTracking = new();
+    private readonly EtwFileIoSession? _etwSession;
+    private readonly EtwCanaryFilter _etwFilter = new();
+    private readonly CanaryCorrelator _correlator;
 
     /// <summary>
     /// Initializes the SENTINEL monitor.
@@ -63,6 +67,10 @@ public sealed class SentinelMonitor : BackgroundService
     /// Test seam: wait before starting, for the deployment service; null (the DI default) is 2 s.
     /// </param>
     /// <param name="faultInjector">Development fault injection; null or the production one never stops anything.</param>
+    /// <param name="etwSession">
+    /// The kernel FileIO session (ADR-025); opened only when Sentinel:EtwEnabled is true. Null: watcher only.
+    /// </param>
+    /// <param name="time">The clock of the correlation window.</param>
     public SentinelMonitor(
         ILogger<SentinelMonitor> logger,
         IOptionsMonitor<AgentConfiguration> config,
@@ -73,8 +81,12 @@ public sealed class SentinelMonitor : BackgroundService
         IModuleStateRegistry moduleState,
         IModuleFailureReporter failureReporter,
         TimeSpan? startupDelay = null,
-        IModuleFaultInjector? faultInjector = null)
+        IModuleFaultInjector? faultInjector = null,
+        EtwFileIoSession? etwSession = null,
+        TimeProvider? time = null)
     {
+        _etwSession = etwSession;
+        _correlator = new CanaryCorrelator(time);
         _logger = logger;
         _config = config.CurrentValue;
         _scopeFactory = scopeFactory;
@@ -99,6 +111,7 @@ public sealed class SentinelMonitor : BackgroundService
         bool reachedActive = false;
         Task? consumerTask = null;
         Task? pollingTask = null;
+        Task? etwConsumerTask = null;
 
         // Every task of the module runs on this token, so that after a failure
         // nothing keeps running unseen (no orphaned polling loop, no consumer).
@@ -159,6 +172,16 @@ public sealed class SentinelMonitor : BackgroundService
             _moduleState.Publish(ModuleCode.Sentinel, ModuleState.Active);
             reachedActive = true;
 
+            // The kernel FileIO session (ADR-025): writes the watcher does not see, and one detection
+            // per operation with the watcher. When it cannot open, the session has said why in the
+            // log; SENTINEL keeps detecting by its watcher (the state says so from commit 7).
+            if (sentinel.EtwEnabled && _etwSession is not null)
+            {
+                await RefreshCanariesAsync(moduleToken);
+                _correlator.EtwRunning = _etwSession.Start(_etwFilter.OnFileIo, _ => { });
+                etwConsumerTask = ConsumeEtwAsync(moduleToken);
+            }
+
             // The periodic check is not observed as fatal: its failures degrade the
             // module (integrity_check_failing) and it never ends on its own before shutdown.
             pollingTask = PollIntegrityAsync(sentinel.CheckIntervalMs, moduleToken);
@@ -189,7 +212,7 @@ public sealed class SentinelMonitor : BackgroundService
         }
         finally
         {
-            await StopModuleAsync(moduleCts, consumerTask, pollingTask);
+            await StopModuleAsync(moduleCts, consumerTask, pollingTask, etwConsumerTask);
         }
     }
 
@@ -286,8 +309,9 @@ public sealed class SentinelMonitor : BackgroundService
     }
 
     /// <summary>Stops every source and task of the module; best effort, never throws.</summary>
-    private async Task StopModuleAsync(CancellationTokenSource moduleCts, Task? consumerTask, Task? pollingTask)
+    private async Task StopModuleAsync(CancellationTokenSource moduleCts, Task? consumerTask, Task? pollingTask, Task? etwConsumerTask = null)
     {
+        _etwSession?.Stop();
         foreach (FileSystemWatcher watcher in _watchers)
         {
             watcher.EnableRaisingEvents = false;
@@ -298,7 +322,7 @@ public sealed class SentinelMonitor : BackgroundService
         _eventChannel.Writer.TryComplete();
         await moduleCts.CancelAsync();
 
-        foreach ((string name, Task? task) in new[] { ("consumer", consumerTask), ("integrity-polling", pollingTask) })
+        foreach ((string name, Task? task) in new[] { ("consumer", consumerTask), ("integrity-polling", pollingTask), ("etw-consumer", etwConsumerTask) })
         {
             if (task is null)
             {
@@ -341,6 +365,12 @@ public sealed class SentinelMonitor : BackgroundService
 
                 SentinelCanary? canary = await canaryRepo.GetByFilePathAsync(evt.FilePath, cancellationToken);
                 if (canary is null || canary.Status != CanaryStatus.Active)
+                {
+                    continue;
+                }
+
+                // One detection per operation (ADR-025, section 3): ETW may have raised it already.
+                if (_correlator.OnWatcher(canary.FilePath, OperationOf(evt.AlertType)) is null)
                 {
                     continue;
                 }
@@ -410,6 +440,9 @@ public sealed class SentinelMonitor : BackgroundService
         var canaryRepo = scope.ServiceProvider.GetRequiredService<ISentinelCanaryRepository>();
 
         IReadOnlyList<SentinelCanary> activeCanaries = await canaryService.GetAllCanariesAsync(cancellationToken);
+        _etwFilter.SetCanaries(activeCanaries.Select(c => c.FilePath));
+        _correlator.EtwRunning = _etwSession?.State == EtwSessionState.Running;
+        _correlator.Sweep();
 
         foreach (SentinelCanary canary in activeCanaries)
         {
@@ -437,6 +470,79 @@ public sealed class SentinelMonitor : BackgroundService
             await canaryRepo.UpdateAsync(canary, cancellationToken);
         }
     }
+
+    /// <summary>The canaries the ETW filter knows, before the session opens; then every integrity cycle.</summary>
+    private async Task RefreshCanariesAsync(CancellationToken cancellationToken)
+    {
+        using IServiceScope scope = _scopeFactory.CreateScope();
+        var canaryService = scope.ServiceProvider.GetRequiredService<ICanaryFileService>();
+        IReadOnlyList<SentinelCanary> canaries = await canaryService.GetAllCanariesAsync(cancellationToken);
+        _etwFilter.SetCanaries(canaries.Select(c => c.FilePath));
+    }
+
+    /// <summary>
+    /// ETW canary writes (filtered on the session's thread) into detections. A write only ETW sees
+    /// -- a rewrite through a mapped view, a deferred write carried by PID 4 -- is a detection too
+    /// (ADR-025, 2a). The alert leaves now; attribution is commit 4.
+    /// </summary>
+    private async Task ConsumeEtwAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await foreach (FileIoRecord record in _etwFilter.Reader.ReadAllAsync(cancellationToken))
+            {
+                try
+                {
+                    CanaryDetection? detection = _correlator.OnEtw(record);
+                    if (detection is null)
+                    {
+                        continue; // joins a detection already raised (watcher or ETW)
+                    }
+
+                    using IServiceScope scope = _scopeFactory.CreateScope();
+                    var canaryRepo = scope.ServiceProvider.GetRequiredService<ISentinelCanaryRepository>();
+                    SentinelCanary? canary = await canaryRepo.GetByFilePathAsync(record.FileName, cancellationToken);
+                    if (canary is null || canary.Status != CanaryStatus.Active)
+                    {
+                        continue;
+                    }
+
+                    CanaryAlertType alertType = AlertTypeOf(detection.Operation);
+                    await RaiseCanaryAlertAsync(canary, alertType, scope.ServiceProvider, cancellationToken);
+                    if (alertType == CanaryAlertType.CanaryDeleted && _config.Sentinel?.EnableRealTimeRegeneration == true)
+                    {
+                        await TryRegenerateCanaryAsync(canary, scope.ServiceProvider, cancellationToken);
+                    }
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error processing SENTINEL ETW event for {FilePath}", record.FileName);
+                }
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // stopping
+        }
+    }
+
+    private static CanaryOperation OperationOf(CanaryAlertType alertType) => alertType switch
+    {
+        CanaryAlertType.CanaryDeleted => CanaryOperation.Deletion,
+        CanaryAlertType.CanaryRenamed => CanaryOperation.Rename,
+        _ => CanaryOperation.Modification,
+    };
+
+    private static CanaryAlertType AlertTypeOf(CanaryOperation operation) => operation switch
+    {
+        CanaryOperation.Deletion => CanaryAlertType.CanaryDeleted,
+        CanaryOperation.Rename => CanaryAlertType.CanaryRenamed,
+        _ => CanaryAlertType.CanaryModified,
+    };
 
     private async Task RaiseCanaryAlertAsync(
         SentinelCanary canary,

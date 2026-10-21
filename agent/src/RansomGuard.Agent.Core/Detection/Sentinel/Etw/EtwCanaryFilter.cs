@@ -73,15 +73,23 @@ public sealed class EtwCanaryFilter
     /// </summary>
     public void SetCanaries(IEnumerable<string> canaryPaths) => _canaries = CanarySet.Of(canaryPaths);
 
+    /// <summary>
+    /// The canary's path as SENTINEL stores it, for a path ETW or the watcher reports with another
+    /// case; false when the path is not a canary.
+    /// </summary>
+    public bool TryGetCanary(string fileName, out string canaryPath) => _canaries.TryGet(fileName, out canaryPath);
+
     /// <summary>The session callback. Never blocks.</summary>
     public void OnFileIo(FileIoRecord record)
     {
-        if (!_canaries.Contains(record.FileName) || record.ProcessId == _agentPid || !IsWrite(record))
+        if (record.ProcessId == _agentPid || !_canaries.TryGet(record.FileName, out string canaryPath) || !IsWrite(record))
         {
             return;
         }
 
-        if (!_channel.Writer.TryWrite(record))
+        // The record goes on with the stored path: the correlation key and the repository lookup
+        // need the canary's own spelling, not the kernel's.
+        if (!_channel.Writer.TryWrite(record with { FileName = canaryPath }))
         {
             Interlocked.Increment(ref _lost);
         }
@@ -99,12 +107,13 @@ public sealed class EtwCanaryFilter
     /// <summary>An immutable set of canary paths, with their directories for the cheap first test.</summary>
     private sealed class CanarySet
     {
-        public static readonly CanarySet Empty = new(FrozenSet<string>.Empty, []);
+        public static readonly CanarySet Empty = new(FrozenDictionary<string, string>.Empty, []);
 
-        private readonly FrozenSet<string> _paths;
+        // Full path (any case) -> the path as given, i.e. as SENTINEL stores it.
+        private readonly FrozenDictionary<string, string> _paths;
         private readonly string[] _directories;
 
-        private CanarySet(FrozenSet<string> paths, string[] directories)
+        private CanarySet(FrozenDictionary<string, string> paths, string[] directories)
         {
             _paths = paths;
             _directories = directories;
@@ -112,24 +121,30 @@ public sealed class EtwCanaryFilter
 
         public static CanarySet Of(IEnumerable<string> canaryPaths)
         {
-            string[] paths = canaryPaths.Select(Path.GetFullPath).ToArray();
-            string[] directories = paths
+            var paths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (string canaryPath in canaryPaths)
+            {
+                paths[Path.GetFullPath(canaryPath)] = canaryPath;
+            }
+
+            string[] directories = paths.Keys
                 .Select(p => Path.GetDirectoryName(p)! + Path.DirectorySeparatorChar)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
-            return new CanarySet(paths.ToFrozenSet(StringComparer.OrdinalIgnoreCase), directories);
+            return new CanarySet(paths.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase), directories);
         }
 
-        public bool Contains(string fileName)
+        public bool TryGet(string fileName, out string canaryPath)
         {
             foreach (string directory in _directories)
             {
                 if (fileName.StartsWith(directory, StringComparison.OrdinalIgnoreCase))
                 {
-                    return _paths.Contains(fileName);
+                    return _paths.TryGetValue(fileName, out canaryPath!);
                 }
             }
 
+            canaryPath = string.Empty;
             return false;
         }
     }

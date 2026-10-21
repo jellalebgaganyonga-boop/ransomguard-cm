@@ -112,6 +112,14 @@ public sealed record SentinelOptions
     public bool EnableRealTimeRegeneration { get; init; } = true;
 
     /// <summary>
+    /// SENTINEL's kernel FileIO session (ADR-025): detection of the writes the FileSystemWatcher
+    /// does not see (memory-mapped rewrites) and, from commit 4, process attribution. Off in code,
+    /// on in the shipped appsettings.json: one session per machine, so a host built without the
+    /// deployment configuration (tests, tools) never opens it.
+    /// </summary>
+    public bool EtwEnabled { get; init; }
+
+    /// <summary>
     /// Cooldown in seconds before a canary can be regenerated after deletion.
     /// </summary>
     [Range(1, 3600)]

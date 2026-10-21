@@ -10,6 +10,7 @@ using RansomGuard.Agent.Core.Diagnostics;
 using RansomGuard.Agent.Core.Detection;
 using RansomGuard.Agent.Core.Detection.Entropy;
 using RansomGuard.Agent.Core.Detection.Genealogy;
+using RansomGuard.Agent.Core.Detection.Sentinel.Etw;
 using RansomGuard.Agent.Core.Detection.Sentinel;
 using RansomGuard.Agent.Core.Detection.CrossModule;
 using RansomGuard.Agent.Core.Detection.ExfilWatch;
@@ -150,6 +151,11 @@ public static class ServiceRegistration
         services.AddScoped<ISentinelCanaryRepository, SentinelCanaryRepository>();
         services.AddScoped<ICanaryFileService, CanaryFileService>();
         services.AddSingleton<RestartManagerHelper>();
+        services.AddSingleton(sp => new EtwFileIoSession(
+            () => new TraceEventKernelFileIoTrace(),
+            sp.GetRequiredService<ILogger<EtwFileIoSession>>(),
+            TimeProvider.System,
+            scopeFactory: sp.GetRequiredService<IServiceScopeFactory>()));
 
         // Rate limiting
         services.AddSingleton<RateLimiterFactory>();
