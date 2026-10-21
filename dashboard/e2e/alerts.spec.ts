@@ -164,3 +164,42 @@ test.describe('Alert detail — read_only_auditor RBAC', () => {
     expect(critical, `Critical/serious a11y violations: ${JSON.stringify(critical, null, 2)}`).toEqual([]);
   });
 });
+
+// ADR-025: the alert arrives first; "Qui l'a fait ?" follows, from the agent's complement.
+test.describe('Alert detail — attribution (ADR-025)', () => {
+  for (const [label, attribution, expected] of [
+    ['pending', { state: 'pending' }, 'Attribution en cours…'],
+    [
+      'resolved',
+      { state: 'resolved', process_id: 4242, process_name: 'evil', process_path: String.raw`C:\Temp\evil.exe`, process_created_at: '2026-10-21T09:57:00+00:00' },
+      '— PID 4242',
+    ],
+    ['unavailable', { state: 'unavailable', reason: 'system_pid' }, '— écriture faite par le système (écriture différée ou fichier mappé)'],
+    ['ambiguous', { state: 'ambiguous' }, "Plusieurs processus ont écrit ce fichier : aucun n'est désigné"],
+  ] as const) {
+    test(`@a11y ${label}`, async ({ page }) => {
+      await setupMocks(page, 'security_analyst');
+      await page.route('**/api/v1/dashboard/alerts/alert-e2e-001', (r) =>
+        r.fulfill({ status: 200, json: { ...MOCK_ALERT_NEW, detected_at: new Date().toISOString(), attribution } }));
+      await loginAs(page, 'security_analyst');
+      await navigateTo(page, '/alerts/alert-e2e-001');
+
+      const section = page.getByTestId('alert-attribution');
+      await expect(section.getByText("Qui l'a fait ?")).toBeVisible();
+      await expect(section.getByText(expected)).toBeVisible();
+
+      const results = await new AxeBuilder({ page }).include('[data-testid="alert-attribution"]').analyze();
+      const critical = results.violations.filter((v) => v.impact === 'critical' || v.impact === 'serious');
+      expect(critical, `Critical/serious a11y violations: ${JSON.stringify(critical, null, 2)}`).toEqual([]);
+    });
+  }
+
+  test('an alert without attribution shows no such section', async ({ page }) => {
+    await setupMocks(page, 'security_analyst');
+    await loginAs(page, 'security_analyst');
+    await navigateTo(page, '/alerts/alert-e2e-001');
+
+    await expect(page.getByText(MOCK_ALERT_NEW.summary)).toBeVisible();
+    await expect(page.getByTestId('alert-attribution')).toHaveCount(0);
+  });
+});

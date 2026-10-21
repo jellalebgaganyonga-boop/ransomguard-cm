@@ -115,6 +115,17 @@ export const AlertStatusChangeSchema = z.object({
 });
 export type AlertStatusChange = z.infer<typeof AlertStatusChangeSchema>;
 
+/** Who wrote the canary (ADR-025): pending until the agent's complement, then final. */
+export const AlertAttributionSchema = z.object({
+  state: z.string(),
+  reason: z.string().nullable().optional(),
+  process_id: z.number().int().nullable().optional(),
+  process_name: z.string().nullable().optional(),
+  process_path: z.string().nullable().optional(),
+  process_created_at: z.string().nullable().optional(),
+});
+export type AlertAttribution = z.infer<typeof AlertAttributionSchema>;
+
 export const AlertDetailSchema = z.object({
   id: z.string(),
   detected_at: z.string(),
@@ -133,6 +144,7 @@ export const AlertDetailSchema = z.object({
   raw_payload: z.record(z.string(), z.unknown()).nullable().optional(),
   artifacts: z.array(AlertArtifactSchema).nullable().optional(),
   status_history: z.array(AlertStatusChangeSchema).nullable().optional(),
+  attribution: AlertAttributionSchema.nullable().optional(),
 });
 export type AlertDetail = z.infer<typeof AlertDetailSchema>;
 

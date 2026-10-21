@@ -5,12 +5,16 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ransomguard_grid.api.v1.dependencies.auth import get_authenticated_agent
 from ransomguard_grid.api.v1.schemas.alert import (
+    ATTRIBUTION_FINAL_STATES,
     AlertIngestRequest,
     AlertIngestResponse,
+    AttributionComplementRequest,
+    AttributionComplementResponse,
     BatchAlertIngestRequest,
     BatchAlertIngestResponse,
 )
@@ -20,7 +24,9 @@ from ransomguard_grid.core.logging import get_logger
 from ransomguard_grid.core.rate_limit import InMemoryRateLimiter, get_rate_limiter
 from ransomguard_grid.db.models.agent import Agent
 from ransomguard_grid.db.models.alerts import Alert, AlertArtifact, AlertDetail
+from ransomguard_grid.db.models.enums import LogLevel
 from ransomguard_grid.db.models.notifications import NotificationPreference
+from ransomguard_grid.db.models.operations import SystemLog
 from ransomguard_grid.db.models.tenant_user import User
 from ransomguard_grid.db.repositories.alert_repository import AlertRepository
 from ransomguard_grid.db.session import get_db
@@ -248,3 +254,86 @@ async def ingest_alerts_batch(
         results.append(result)
 
     return BatchAlertIngestResponse(results=results)
+
+
+# Detail keys the attribution complement writes on the alert (ADR-025, section 3).
+_ATTRIBUTION_KEYS = ("attribution_state", "attribution_reason", "process_id", "process_created_at",
+                     "process_name", "process_path")
+_ATTRIBUTION_COMPONENT = "alert-attribution"
+
+
+@router.post(
+    "/alerts/{client_message_id}/attribution",
+    response_model=AttributionComplementResponse,
+)
+async def attribute_alert(
+    agent_id: str,
+    client_message_id: str,
+    body: AttributionComplementRequest,
+    agent: Agent = Depends(get_authenticated_agent),
+    db: AsyncSession = Depends(get_db),
+    limiter: InMemoryRateLimiter = Depends(get_rate_limiter),
+) -> AttributionComplementResponse:
+    """The attribution complement of an alert this agent sent (ADR-025, section 3).
+
+    Partitioned like the alerts themselves:
+      * the agent is the authenticated one (get_authenticated_agent: its certificate in mtls mode);
+        a path id that is not its own is 403;
+      * the alert is looked up by client_message_id AND agent_id AND tenant_id; an alert of another
+        agent or another tenant is 404, exactly as one that does not exist -- nothing is revealed;
+      * once the attribution is final, a later complement changes nothing (idempotent) and is logged.
+    """
+    if agent.id != agent_id:
+        raise HTTPException(403, "Agent ID mismatch")
+
+    if not await limiter.check_and_increment(f"attribution:{agent.id}", limit=60, window_seconds=60):
+        raise HTTPException(429, "Rate limit exceeded: 60 attributions per minute")
+
+    alert = await AlertRepository(db, agent.tenant_id).find_by_client_message_id(agent.id, client_message_id)
+    if alert is None:
+        raise HTTPException(404, "Alert not found")
+
+    details = (await db.execute(select(AlertDetail).where(
+        AlertDetail.tenant_id == agent.tenant_id,
+        AlertDetail.alert_id == alert.id,
+        AlertDetail.key.in_(_ATTRIBUTION_KEYS),
+    ))).scalars().all()
+    current = next((d.value for d in details if d.key == "attribution_state"), None)
+    now = datetime.now(UTC)
+
+    if current in ATTRIBUTION_FINAL_STATES:
+        _log_attribution(db, agent, alert.id, "AlertAttributionIgnored", body.state, now, already=current)
+        return AttributionComplementResponse(alert_id=alert.id, status="unchanged")
+
+    values = {
+        "attribution_state": body.state,
+        "attribution_reason": body.reason,
+        "process_id": str(body.pid) if body.pid is not None else None,
+        "process_created_at": body.process_created_at.isoformat() if body.process_created_at else None,
+        "process_name": body.process_name,
+        "process_path": body.image_path,
+    }
+    for detail in details:
+        await db.delete(detail)
+    for key, value in values.items():
+        if value is not None:
+            db.add(AlertDetail(id=str(uuid4()), tenant_id=agent.tenant_id, alert_id=alert.id, key=key, value=value))
+
+    _log_attribution(db, agent, alert.id, "AlertAttributionApplied", body.state, now, previous=current)
+    await db.flush()
+    return AttributionComplementResponse(alert_id=alert.id, status="applied")
+
+
+def _log_attribution(
+    db: AsyncSession, agent: Agent, alert_id: str, event: str, state: str, now: datetime, **context: str | None,
+) -> None:
+    db.add(SystemLog(
+        id=str(uuid4()),
+        tenant_id=agent.tenant_id,
+        level=LogLevel.Info if event == "AlertAttributionApplied" else LogLevel.Warning,
+        component=_ATTRIBUTION_COMPONENT,
+        message=f"{event}: alert {alert_id}, complement {state}",
+        context_json={"event": event, "alert_id": alert_id, "agent_id": agent.id, "state": state, **context},
+        created_at=now,
+    ))
+    logger.info(event, alert_id=alert_id, agent_id=agent.id, state=state)

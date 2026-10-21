@@ -16,6 +16,18 @@ class PaginatedResponse(BaseModel):
     limit: int
 
 
+class AlertAttribution(BaseModel):
+    """Who wrote the canary, as the agent's complement said (ADR-025): state pending until it arrives,
+    then resolved (a process), unavailable (a closed reason) or ambiguous."""
+
+    state: str
+    reason: str | None = None
+    process_id: int | None = None
+    process_name: str | None = None
+    process_path: str | None = None
+    process_created_at: str | None = None
+
+
 class AlertItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -33,6 +45,9 @@ class AlertItem(BaseModel):
     agent_hostname: str | None = None
     # Stable module code derived from alert_type (core/alert_modules.py); UNKNOWN, never empty.
     module: str = "UNKNOWN"
+    # The attribution, on the alert detail only; None for an alert that carries none (not SENTINEL,
+    # or sent before ADR-025).
+    attribution: AlertAttribution | None = None
 
 
 class PaginatedAlertResponse(PaginatedResponse):

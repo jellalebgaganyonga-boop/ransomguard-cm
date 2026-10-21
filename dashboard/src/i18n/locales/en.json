@@ -142,6 +142,22 @@
     "markFalsePositive": "Mark as false positive",
     "readOnlyNotice": "Read-only mode — no action available",
     "whatHappened": "WHAT HAPPENED?",
+    "attribution": {
+      "title": "Who did it?",
+      "pending": "Attribution in progress…",
+      "notReceived": "Attribution not received",
+      "unnamed": "process with no known name",
+      "startedAt": "started {when}",
+      "ambiguous": "Several processes wrote this file: none is named",
+      "unavailable": "Process not identified",
+      "reason": {
+        "no_write_event": "no write seen by kernel monitoring",
+        "system_pid": "written by the system (deferred write or memory-mapped file)",
+        "pid_reused": "the process number was reassigned to another program",
+        "process_exited": "the process ended before it could be verified",
+        "etw_unavailable": "kernel monitoring unavailable on this endpoint"
+      }
+    },
     "confidence": "Detection confidence",
     "artifacts": "Associated artifacts",
     "technicalDetails": "Technical details",

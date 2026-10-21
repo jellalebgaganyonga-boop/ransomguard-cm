@@ -142,6 +142,22 @@
     "markFalsePositive": "Marquer faux positif",
     "readOnlyNotice": "Mode lecture seule — aucune action disponible",
     "whatHappened": "QUE S'EST-IL PASSÉ ?",
+    "attribution": {
+      "title": "Qui l'a fait ?",
+      "pending": "Attribution en cours…",
+      "notReceived": "Attribution non reçue",
+      "unnamed": "processus sans nom connu",
+      "startedAt": "démarré le {when}",
+      "ambiguous": "Plusieurs processus ont écrit ce fichier : aucun n'est désigné",
+      "unavailable": "Processus non identifié",
+      "reason": {
+        "no_write_event": "aucune écriture vue par la surveillance noyau",
+        "system_pid": "écriture faite par le système (écriture différée ou fichier mappé)",
+        "pid_reused": "le numéro de processus a été réattribué à un autre programme",
+        "process_exited": "le processus s'est terminé avant d'être vérifié",
+        "etw_unavailable": "surveillance noyau indisponible sur ce poste"
+      }
+    },
     "confidence": "Confiance de détection",
     "artifacts": "Artefacts associés",
     "technicalDetails": "Détails techniques",

@@ -14,6 +14,7 @@ from ransomguard_grid.api.v1.schemas.dashboard import (
     AgentDetailItem,
     AgentItem,
     AgentPostureItem,
+    AlertAttribution,
     AlertItem,
     AuditLogItem,
     CommandItem,
@@ -43,7 +44,7 @@ from ransomguard_grid.core.config import get_settings
 from ransomguard_grid.core.security import hash_password
 from ransomguard_grid.core.session_store import SessionStore, SessionStoreUnavailableError, get_session_store
 from ransomguard_grid.db.models.agent import Agent
-from ransomguard_grid.db.models.alerts import Alert, AlertStatusChange
+from ransomguard_grid.db.models.alerts import Alert, AlertDetail, AlertStatusChange
 from ransomguard_grid.db.models.enums import AgentStatus, AlertStatus, CommandStatus, Severity
 from ransomguard_grid.db.models.notifications import NotificationPreference, UserActionLog
 from ransomguard_grid.db.models.operations import CommandQueue
@@ -205,7 +206,31 @@ async def get_alert(
     alert = await repo.get_by_id(alert_id)
     if not alert:
         raise HTTPException(404, "Alert not found")
-    return _alert_item(alert, await _hostname_for(db, alert))
+    item = _alert_item(alert, await _hostname_for(db, alert))
+    return item.model_copy(update={"attribution": await _attribution_for(db, alert)})
+
+
+async def _attribution_for(db: AsyncSession, alert: Alert) -> AlertAttribution | None:
+    """The attribution details of an alert (ADR-025), read in the alert's own tenant."""
+    rows = (await db.execute(select(AlertDetail.key, AlertDetail.value).where(
+        AlertDetail.tenant_id == alert.tenant_id,
+        AlertDetail.alert_id == alert.id,
+        AlertDetail.key.in_(("attribution_state", "attribution_reason", "process_id", "process_name",
+                             "process_path", "process_created_at")),
+    ))).all()
+    values = {key: value for key, value in rows}
+    state = values.get("attribution_state")
+    if state is None:
+        return None
+    pid = values.get("process_id")
+    return AlertAttribution(
+        state=state,
+        reason=values.get("attribution_reason"),
+        process_id=int(pid) if pid and pid.isdigit() else None,
+        process_name=values.get("process_name"),
+        process_path=values.get("process_path"),
+        process_created_at=values.get("process_created_at"),
+    )
 
 
 @router.post("/alerts/{alert_id}/status", response_model=AlertItem)
