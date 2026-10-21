@@ -85,10 +85,11 @@ export function AppShellLayout({ me, alertCount = 0, children }: AppShellLayoutP
                     <NavLink
                       key={item.to}
                       to={item.to}
+                      end
                       onClick={closeMobileSidebar}
                       className={({ isActive }) =>
                         cn(
-                          'flex h-10 items-center gap-3 rounded-md border-l-[3px] border-transparent px-4 text-sm text-text-secondary transition-colors',
+                          'flex min-h-[44px] items-center gap-3 rounded-md border-l-[3px] border-transparent px-4 text-sm text-text-secondary transition-colors',
                           'hover:bg-hover-bg hover:text-text-primary',
                           isActive &&
                             'border-primary bg-selected-bg font-medium text-primary'
