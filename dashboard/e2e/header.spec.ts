@@ -40,6 +40,9 @@ test.describe('Header — user menu', () => {
     await page.getByRole('menuitem', { name: 'Passer en English' }).click();
     await expect(page.getByTestId('toast')).toContainText('Language saved.');
     await expect(page.getByTestId('user-menu')).toHaveAttribute('aria-label', 'Account menu');
+    // The menu that was just used is still unmounting; a click on the trigger during that time is
+    // swallowed (CI run 39693599525, chromium only) and the menu never reopens.
+    await expect(page.getByRole('menu')).toHaveCount(0);
 
     await page.getByTestId('user-menu').click();
     const menu = page.getByRole('menu');
