@@ -28,4 +28,8 @@
     <InternalsVisibleTo Include="RansomGuard.Agent.Tests" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="System.ServiceProcess.ServiceController" Version="8.0.1" />
+  </ItemGroup>
+
 </Project>

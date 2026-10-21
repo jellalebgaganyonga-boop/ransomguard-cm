@@ -3,10 +3,10 @@ using RansomGuard.Agent.Installer;
 
 // The double-click installer (ADR-027). Step 1 of 5: the stub reads the payload the console
 // appended to it. Exit codes are the contract of the acceptance test:
-//   0 payload read (and, from step 3, the agent installed and enrolled)
+//   0 payload read; with no argument: the agent installed and enrolled
 //   2 payload absent or corrupt: "retéléchargez l'installeur"
 //   3 enrollment code expired
-//   4 the agent did not enroll (step 3)
+//   4 the installation failed, or the agent did not enroll within 2 min
 //  64 bad usage
 string version = typeof(Program).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
     ?? typeof(Program).Assembly.GetName().Version?.ToString() ?? "unknown";
@@ -73,14 +73,21 @@ static int VerifyPayload(string self, string version, bool install)
         return 3;
     }
 
-    if (install)
+    if (!install)
     {
-        // Step 3 of ADR-027 brings the installation itself; said as such, never pretended.
-        Console.Error.WriteLine("L'installation n'est pas encore disponible dans cette version de l'installeur (ADR-027, étape 3).");
-        return 2;
+        return 0;
     }
 
-    return 0;
+    Console.WriteLine();
+    int code = Installation.Run(self, payload);
+    Console.WriteLine();
+    Console.WriteLine("Appuyez sur une touche pour fermer.");
+    if (!Console.IsInputRedirected)
+    {
+        Console.ReadKey(intercept: true);
+    }
+
+    return code;
 }
 
 static string Mask(string otp) =>

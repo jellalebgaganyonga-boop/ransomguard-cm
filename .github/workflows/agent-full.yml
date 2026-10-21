@@ -323,6 +323,117 @@ jobs:
           Stop-Service $env:SERVICE_NAME -Force -ErrorAction SilentlyContinue
           sc.exe delete $env:SERVICE_NAME
 
+  installer-exe:
+    # ADR-027, acceptance on a clean runner: an installer built like the GRID builds it (stub +
+    # package + configuration + trailer) is run with no argument, as a double-click (the runner is
+    # already administrator, so no UAC; SmartScreen does not apply to a file without an Internet
+    # mark). It must install the service under Program Files, write the configuration, trust the
+    # GRID CA in the machine root store, deploy the canaries in the real user's folders, and -- the
+    # GRID being unreachable here on purpose -- say honestly that the endpoint is NOT enrolled (exit
+    # 4), service running. Enrollment and the green verdict are proven on the two-machine bench.
+    name: Agent — double-click installer (ADR-027)
+    runs-on: windows-latest
+    env:
+      SERVICE_NAME: RansomGuardAgent
+      DATA_ROOT: C:\ProgramData\RansomGuard-CM
+      WORK: C:\rg-installer
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Build the stub and the package as the CD does
+        shell: pwsh
+        run: |
+          dotnet publish agent/src/RansomGuard.Agent.Service/RansomGuard.Agent.Service.csproj -c Release -r win-x64 --self-contained true -o $env:WORK/agent
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          dotnet publish agent/src/RansomGuard.Agent.Installer/RansomGuard.Agent.Installer.csproj -c Release -r win-x64 --self-contained true `
+            -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -o $env:WORK/stub
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Compress-Archive -Path "$env:WORK/agent/*" -DestinationPath "$env:WORK/RansomGuard-Agent-win-x64.zip" -Force
+
+      - name: Build the installer as the GRID does (a throwaway CA, installed nowhere by this step)
+        shell: pwsh
+        run: |
+          $openssl = 'C:\Program Files\Git\usr\bin\openssl.exe'
+          & $openssl req -x509 -newkey rsa:2048 -nodes -subj '/CN=RansomGuard-CM CI test CA' -days 1 -keyout "$env:WORK\ca.key" -out "$env:WORK\ca.crt" 2>&1 | Out-Null
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          $thumb = (New-Object System.Security.Cryptography.X509Certificates.X509Certificate2("$env:WORK\ca.crt")).Thumbprint
+          "CA_THUMBPRINT=$thumb" >> $env:GITHUB_ENV
+          $sha = (Get-FileHash "$env:WORK\RansomGuard-Agent-win-x64.zip" -Algorithm SHA256).Hash.ToLower()
+          $expires = (Get-Date).ToUniversalTime().AddMinutes(30).ToString('o')
+          @{ grid_base_url = 'https://grid.ci.invalid:8443'; otp = 'RG-CAM-2026-CITEST'; otp_expires_at = $expires; tenant_code = 'ci';
+             agent_package_sha256 = $sha; grid_ca_pem = (Get-Content "$env:WORK\ca.crt" -Raw) } |
+            ConvertTo-Json -Compress | Set-Content "$env:WORK\config.json" -Encoding utf8
+          & "$env:WORK\stub\RansomGuard-Installer.exe" --append "$env:WORK\stub\RansomGuard-Installer.exe" "$env:WORK\RansomGuard-Agent-win-x64.zip" "$env:WORK\config.json" "$env:WORK\RansomGuard-CM-Installeur-grid.ci.invalid.exe"
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Write-Host "installer: $((Get-Item "$env:WORK\RansomGuard-CM-Installeur-grid.ci.invalid.exe").Length) bytes"
+
+      - name: Double-click (no argument, no command typed)
+        shell: pwsh
+        run: |
+          $desktop = [Environment]::GetFolderPath('Desktop'); $documents = [Environment]::GetFolderPath('MyDocuments')
+          "USER_DESKTOP=$desktop" >> $env:GITHUB_ENV
+          "USER_DOCUMENTS=$documents" >> $env:GITHUB_ENV
+          $out = & "$env:WORK\RansomGuard-CM-Installeur-grid.ci.invalid.exe" 2>&1 | Out-String
+          $code = $LASTEXITCODE
+          Write-Host $out
+          Write-Host "exit code: $code"
+          "INSTALLER_EXIT=$code" >> $env:GITHUB_ENV
+          # The GRID is unreachable on purpose: 4, said honestly, never 0.
+          # ASCII only in the match: the captured output goes through the runner's console code page,
+          # and the accented "enrôlé" of the message did not survive it (run 39659654794).
+          if ($code -ne 4 -or $out -notmatch "120 s") { Write-Host "::error::ADR-027: expected exit 4 with the 'not enrolled after 120 s' message (GRID unreachable), got $code"; exit 1 }
+
+      - name: Installed, trusted, configured, watching the user's folders
+        shell: pwsh
+        run: |
+          $bad = @()
+          $svc = Get-Service $env:SERVICE_NAME -ErrorAction SilentlyContinue
+          if (-not $svc) { $bad += 'service not installed' } elseif ($svc.Status -ne 'Running') { $bad += "service $($svc.Status), not Running" }
+          if (-not (Test-Path 'C:\Program Files\RansomGuard-CM\RansomGuard.Agent.Service.exe')) { $bad += 'agent not under Program Files' }
+          $cfg = Get-Content 'C:\Program Files\RansomGuard-CM\appsettings.json' -Raw | ConvertFrom-Json
+          if ($cfg.Agent.Server.BaseUrl -ne 'https://grid.ci.invalid:8443') { $bad += "BaseUrl $($cfg.Agent.Server.BaseUrl)" }
+          if ($cfg.Agent.Server.EnrollmentOtp -ne 'RG-CAM-2026-CITEST') { $bad += 'enrollment code not written' }
+          if ($cfg.Agent.Sentinel.WatchDirectories[0] -notlike '%EACHUSERPROFILE%*') { $bad += 'watched folders changed (AGT-PATH-001)' }
+          $trusted = Get-ChildItem Cert:\LocalMachine\Root | Where-Object Thumbprint -eq $env:CA_THUMBPRINT
+          if (-not $trusted) { $bad += 'GRID CA not in the machine root store' }
+          $installLog = Get-Content "$env:DATA_ROOT\logs\install.log" -Raw
+          if ($installLog -notmatch 'ajoutée au magasin racine') { $bad += 'install.log does not record the CA addition' }
+          $deadline = (Get-Date).AddSeconds(90)
+          do { Start-Sleep 3
+            $onDesktop = @(Get-ChildItem $env:USER_DESKTOP -File -Force -Filter '0001_*' -ErrorAction SilentlyContinue)
+            $inDocuments = @(Get-ChildItem $env:USER_DOCUMENTS -File -Force -Filter '0001_*' -ErrorAction SilentlyContinue)
+          } while (($onDesktop.Count -eq 0 -or $inDocuments.Count -eq 0) -and (Get-Date) -lt $deadline)
+          if ($onDesktop.Count -eq 0 -or $inDocuments.Count -eq 0) { $bad += "canaries: Desktop $($onDesktop.Count), Documents $($inDocuments.Count)" }
+          if ($bad.Count -gt 0) { $bad | ForEach-Object { Write-Host "::error::ADR-027: $_" }; exit 1 }
+          Write-Host "::notice title=ADR-027 double-click::installed under Program Files, CA $env:CA_THUMBPRINT trusted, service Running, canaries Desktop $($onDesktop.Count) Documents $($inDocuments.Count); not enrolled (GRID unreachable), said as such"
+
+      - name: Diagnostics
+        if: always()
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path diag | Out-Null
+          Copy-Item "$env:DATA_ROOT\logs\*" diag -ErrorAction SilentlyContinue
+          Get-Content diag\install.log -ErrorAction SilentlyContinue | Write-Host
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agent-installer-exe-logs
+          path: diag
+          retention-days: 14
+
+      - name: Uninstall, and remove the throwaway CA from the root store
+        if: always()
+        shell: pwsh
+        run: |
+          Stop-Service $env:SERVICE_NAME -Force -ErrorAction SilentlyContinue
+          sc.exe delete $env:SERVICE_NAME
+          if ($env:CA_THUMBPRINT) { Get-ChildItem Cert:\LocalMachine\Root | Where-Object Thumbprint -eq $env:CA_THUMBPRINT | Remove-Item }
+
   install-script:
     # AGT-PATH-001: the agent installed by the real install.ps1, its shipped watch paths left as they
     # are. The service runs as LocalSystem, where %USERPROFILE% is the system profile: the canaries
