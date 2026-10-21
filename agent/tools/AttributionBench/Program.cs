@@ -16,7 +16,9 @@ using System.IO.MemoryMappedFiles;
 using System.Security.Cryptography;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging.Abstractions;
+using RansomGuard.Agent.Core.Configuration;
 using RansomGuard.Agent.Core.Detection.Sentinel;
+using RansomGuard.Agent.Core.Persistence.Entities;
 
 if (args.Length > 1 && args[0] == "reader")
 {
@@ -77,6 +79,40 @@ Task consumer = Task.Run(async () =>
             .OrderByDescending(p => p.StartTime ?? DateTime.MinValue) // as SentinelMonitor
             .FirstOrDefault();
         tcs.TrySetResult(new Attempt(evt.Kind, evt.SeenAt, holders.Count, offender?.ProcessId, reference));
+    }
+});
+
+// SENTINEL's periodic integrity check (ADR-025, 2a): the production VerifyCanaryIntegrityAsync
+// (SHA-256 of the content against the original hash), on SENTINEL's default cadence, on its own
+// clock -- not aligned with the patterns, as in the agent. It answers: what does SENTINEL catch
+// without the watcher, and how long after the writer let go?
+int integrityIntervalMs = new SentinelOptions { WatchDirectories = [], CanaryTemplates = [] }.CheckIntervalMs; // the default, 1 000 ms
+var canaryService = new CanaryFileService(null!, NullLogger<CanaryFileService>.Instance); // Verify uses neither
+IntegrityProbe? measured = null;
+using var integrityTimer = new PeriodicTimer(TimeSpan.FromMilliseconds(integrityIntervalMs));
+Task integrityLoop = Task.Run(async () =>
+{
+    while (await integrityTimer.WaitForNextTickAsync())
+    {
+        IntegrityProbe? probe = Volatile.Read(ref measured);
+        if (probe is null || probe.Detected.Task.IsCompleted) continue;
+        try
+        {
+            bool intact = await canaryService.VerifyCanaryIntegrityAsync(new SentinelCanary
+            {
+                FilePath = probe.Path,
+                FileName = Path.GetFileName(probe.Path),
+                Directory = dir,
+                TemplateUsed = "bench",
+                OriginalContentHash = probe.Hash,
+                FileSize = 0,
+            });
+            if (!intact) probe.Detected.TrySetResult(DateTime.UtcNow);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // the writer holds the file: as in the agent, the next tick tries again
+        }
     }
 });
 
@@ -200,6 +236,8 @@ foreach (Pattern pattern in patterns)
 
         var tcs = new TaskCompletionSource<Attempt>(TaskCreationOptions.RunContinuationsAsynchronously);
         lock (pendingLock) { pending[path] = tcs; }
+        var integrity = new IntegrityProbe(path, Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(path))).ToLowerInvariant());
+        Volatile.Write(ref measured, integrity);
 
         DateTime handleReleased;
         try
@@ -217,6 +255,14 @@ foreach (Pattern pattern in patterns)
 
         Task finished = await Task.WhenAny(tcs.Task, Task.Delay(3000));
         lock (pendingLock) { pending.Remove(path); }
+
+        // The integrity check, whatever the watcher did: up to three of its cycles.
+        if (await Task.WhenAny(integrity.Detected.Task, Task.Delay(3 * integrityIntervalMs)) == integrity.Detected.Task)
+        {
+            outcome.IntegrityDetectedAfterRelease.Add((integrity.Detected.Task.Result - handleReleased).TotalMilliseconds);
+        }
+
+        Volatile.Write(ref measured, null);
         if (finished != tcs.Task)
         {
             Console.Write('_');
@@ -246,6 +292,8 @@ foreach (Pattern pattern in patterns)
 watcher.EnableRaisingEvents = false;
 channel.Writer.TryComplete();
 await consumer;
+integrityTimer.Dispose();
+await integrityLoop;
 reader.Kill();
 reader.WaitForExit();
 Directory.Delete(dir, recursive: true);
@@ -276,6 +324,17 @@ foreach (PatternResult r in results.Where(r => r.ActionFailures.Count > 0))
     {
         Console.WriteLine($"  pattern {r.Pattern.Label} action failure: {failure}");
     }
+}
+
+Console.WriteLine();
+Console.WriteLine($"SENTINEL's periodic integrity check (production VerifyCanaryIntegrityAsync, every {integrityIntervalMs} ms), per pattern:");
+foreach (PatternResult r in results)
+{
+    int detected = r.IntegrityDetectedAfterRelease.Count;
+    string delays = detected == 0
+        ? "n/a"
+        : $"median {Median(r.IntegrityDetectedAfterRelease):0} ms, max {r.IntegrityDetectedAfterRelease.Max():0} ms after the release";
+    Console.WriteLine($"  pattern {r.Pattern.Label}: detected {detected}/{iterations}   {delays}");
 }
 
 Console.WriteLine();
@@ -344,6 +403,14 @@ static byte[] EncryptOwnTestData(byte[] plain)
 
 internal sealed record WatcherEvent(string Path, string Kind, DateTime SeenAt);
 
+/// <summary>The canary under measurement for the integrity check, and when the check caught it.</summary>
+internal sealed class IntegrityProbe(string path, string hash)
+{
+    public string Path { get; } = path;
+    public string Hash { get; } = hash;
+    public TaskCompletionSource<DateTime> Detected { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+}
+
 internal sealed record Attempt(string Kind, DateTime SeenAt, int Holders, int? OffenderPid, ReferenceResult Reference);
 
 internal sealed record Pattern(int Number, string Name, string ExpectedEvent, Func<string, Task> Act)
@@ -396,6 +463,7 @@ internal sealed class PatternResult(Pattern pattern)
     public int NoEvent { get; set; }
     public int MoreThanOneHolder { get; set; }
     public int WrongPidIsReader { get; set; }
+    public List<double> IntegrityDetectedAfterRelease { get; } = [];
     public int OnlyReferenceFound { get; set; }
     public int OnlyProductionFound { get; set; }
     public int ReferenceErrors { get; set; }

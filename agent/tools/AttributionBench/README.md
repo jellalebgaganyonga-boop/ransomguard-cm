@@ -177,6 +177,25 @@ reader changes, said plainly:
 No wrong PID, and never the reader's: the reader's handles are too short-lived
 for the Restart Manager to name it here.
 
+## SENTINEL's periodic integrity check, measured (2026-10-21)
+
+The bench also runs SENTINEL's periodic integrity check: the production
+`CanaryFileService.VerifyCanaryIntegrityAsync` (SHA-256 of the content against
+the original hash) every `CheckIntervalMs` — the default, **1 000 ms** — on its
+own clock, as in the agent. Same run, `-- 20 10`, with the reader:
+
+| # | Detected by the integrity check | After the handle is released |
+|---|---|---|
+| 1 – 6 | 20 / 20 each | median 579 – 592 ms, max 610 ms |
+| 7a (mapped, flushed) | **20 / 20** | median 513 ms, max 976 ms |
+| 7b (mapped, not flushed) | **20 / 20** | median 579 ms, max 1 006 ms |
+
+So a rewrite through a mapped view, invisible to the watcher, is caught by the
+integrity check within one cycle (≤ about 1 s here). In SENTINEL's fallback
+without ETW, that check is the only detection of those writes (ADR-025).
+The medians of patterns 1 – 6 are close to each other because the bench's
+iterations are paced; the bound that matters is the maximum: one cycle.
+
 ## Provenance
 
 The original bench was lost with the development disk (commit `90dfb1b` never
