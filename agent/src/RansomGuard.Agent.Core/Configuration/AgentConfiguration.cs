@@ -87,7 +87,8 @@ public sealed record SentinelOptions
 
     /// <summary>
     /// Directories to deploy and monitor canary files in.
-    /// Supports environment variables (e.g., %USERPROFILE%).
+    /// Supports environment variables, and %EACHUSERPROFILE% for every real user of the machine
+    /// (AGT-PATH-001; %USERPROFILE% is the system profile under LocalSystem and is refused there).
     /// </summary>
     [Required]
     [MinLength(1)]
@@ -161,7 +162,8 @@ public sealed record DetectionOptions
 {
     /// <summary>
     /// Paths to monitor for suspicious file activity.
-    /// Supports environment variables (e.g., %USERPROFILE%).
+    /// Supports environment variables, and %EACHUSERPROFILE% for every real user of the machine
+    /// (AGT-PATH-001; %USERPROFILE% is the system profile under LocalSystem and is refused there).
     /// </summary>
     [Required]
     [MinLength(1)]

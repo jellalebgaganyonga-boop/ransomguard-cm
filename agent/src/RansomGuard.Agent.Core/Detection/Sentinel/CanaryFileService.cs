@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using Microsoft.Extensions.Logging;
+using RansomGuard.Agent.Core.Configuration;
 using RansomGuard.Agent.Core.Detection.Sentinel.Generators;
 using RansomGuard.Agent.Core.Persistence.Entities;
 using RansomGuard.Agent.Core.Persistence.Repositories;
@@ -42,6 +43,13 @@ public sealed class CanaryFileService : ICanaryFileService
     /// <returns>The persisted canary entity.</returns>
     public async Task<SentinelCanary> CreateCanaryAsync(string directory, string template, string prefix, string extension, CancellationToken cancellationToken = default)
     {
+        // AGT-PATH-001: the last gate, for every caller (deployment, regeneration).
+        if (WatchedPathPolicy.IsRefused(directory))
+        {
+            throw new InvalidOperationException(
+                $"No canary in a system or service profile (AGT-PATH-001): {directory}");
+        }
+
         if (!Directory.Exists(directory))
         {
             Directory.CreateDirectory(directory);

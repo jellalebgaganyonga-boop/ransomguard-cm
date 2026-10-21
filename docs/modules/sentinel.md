@@ -25,8 +25,8 @@ When ransomware enumerates a directory and starts encrypting/renaming files, it 
     "CanariesPerDirectory": 3,
     "CheckIntervalMs": 1000,
     "WatchDirectories": [
-      "%USERPROFILE%\\Desktop",
-      "%USERPROFILE%\\Documents"
+      "%EACHUSERPROFILE%\\Desktop",
+      "%EACHUSERPROFILE%\\Documents"
     ],
     "CanaryTemplates": [
       "dossier_patient",
@@ -45,9 +45,20 @@ When ransomware enumerates a directory and starts encrypting/renaming files, it 
 | Enabled | bool | — | true | Enable/disable SENTINEL |
 | CanariesPerDirectory | int | 1-10 | 3 | Canary files per directory |
 | CheckIntervalMs | int | 100-10000 | 1000 | Periodic polling interval |
-| WatchDirectories | string[] | min 1 | — | Directories to protect |
+| WatchDirectories | string[] | min 1 | — | Directories to protect. `%EACHUSERPROFILE%` expands to one path per real user of the machine (see below) |
 | CanaryTemplates | string[] | min 3 | — | Content templates |
 | CanaryPrefix | string | — | "0001_" | Filename prefix |
+
+### `%EACHUSERPROFILE%` (AGT-PATH-001)
+
+The service runs as LocalSystem, where `%USERPROFILE%` is `C:\Windows\System32\config\systemprofile`: a path
+written with it is **refused** (never watched, never created; the module reads `inactive / no_watch_directory`
+if nothing else is left). `%EACHUSERPROFILE%` is the agent's own token: it expands to one path per real user
+profile of the machine (`HKLM\...\ProfileList`, accounts `S-1-5-21-*` whose folder exists; LocalSystem,
+LocalService, NetworkService and service SIDs are excluded). `Desktop` and `Documents` follow the user's
+*User Shell Folders* (OneDrive or GPO redirections) when the user's hive is loaded; otherwise the default
+folder under the profile is assumed and a Warning names the user and the folder. Profiles are read when the
+module starts: a profile created afterwards is seen at the next agent restart (AGT-PATH-002).
 
 ## Templates
 

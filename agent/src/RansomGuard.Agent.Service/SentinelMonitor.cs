@@ -52,6 +52,7 @@ public sealed class SentinelMonitor : BackgroundService
     private readonly EtwCanaryFilter _etwFilter = new();
     private readonly CanaryCorrelator _correlator;
     private readonly ProcessCreationTimes _processTimes;
+    private readonly UserProfileEnumerator _profiles;
     private readonly CanaryAttributor _attributor;
     private readonly TimeProvider _time;
 
@@ -74,6 +75,7 @@ public sealed class SentinelMonitor : BackgroundService
     /// </param>
     /// <param name="time">The clock of the correlation window and of the attribution delay.</param>
     /// <param name="processTimes">Process creation times for the attribution; the OS by default (test seam).</param>
+    /// <param name="profiles">The real user profiles that %EACHUSERPROFILE% expands to (AGT-PATH-001); null: the Windows registry.</param>
     public SentinelMonitor(
         ILogger<SentinelMonitor> logger,
         IOptionsMonitor<AgentConfiguration> config,
@@ -86,9 +88,11 @@ public sealed class SentinelMonitor : BackgroundService
         IModuleFaultInjector? faultInjector = null,
         EtwFileIoSession? etwSession = null,
         TimeProvider? time = null,
-        ProcessCreationTimes? processTimes = null)
+        ProcessCreationTimes? processTimes = null,
+        UserProfileEnumerator? profiles = null)
     {
         _processTimes = processTimes ?? new ProcessCreationTimes();
+        _profiles = profiles ?? UserProfileEnumerator.Windows;
         _etwSession = etwSession;
         _time = time ?? TimeProvider.System;
         _correlator = new CanaryCorrelator(_time);
@@ -138,9 +142,16 @@ public sealed class SentinelMonitor : BackgroundService
             consumerTask = ConsumeEventsAsync(moduleToken);
 
             // Set up real-time FileSystemWatcher per canary directory
-            string[] resolvedDirs = EnvironmentVariableResolver.ResolvePaths(sentinel.WatchDirectories);
+            string[] resolvedDirs = EnvironmentVariableResolver.ResolvePaths(sentinel.WatchDirectories, _profiles, _logger);
             foreach (string dir in resolvedDirs)
             {
+                // AGT-PATH-001: a system or service profile is never watched -- it counts as missing.
+                if (WatchedPathPolicy.IsRefused(dir))
+                {
+                    _logger.LogError("SENTINEL: folder {Directory} is in a system or service profile and is not watched (AGT-PATH-001)", dir);
+                    continue;
+                }
+
                 if (!Directory.Exists(dir))
                 {
                     _logger.LogWarning("SENTINEL: folder {Directory} does not exist and is not watched", dir);
@@ -166,7 +177,7 @@ public sealed class SentinelMonitor : BackgroundService
             // %USERPROFILE% resolves to the system profile and the folders do not exist).
             if (_watchers.Count == 0)
             {
-                _logger.LogError("SENTINEL watches nothing: none of the {Count} configured folders exists",
+                _logger.LogError("SENTINEL watches nothing: none of the {Count} configured folders is watchable (missing, or refused as a system profile)",
                     resolvedDirs.Length);
                 _moduleState.Publish(ModuleCode.Sentinel, ModuleState.Inactive, ModuleReasonCode.NoWatchDirectory);
                 return;

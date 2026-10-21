@@ -302,3 +302,126 @@ jobs:
         run: |
           Stop-Service $env:SERVICE_NAME -Force -ErrorAction SilentlyContinue
           sc.exe delete $env:SERVICE_NAME
+
+  install-script:
+    # AGT-PATH-001: the agent installed by the real install.ps1, its shipped watch paths left as they
+    # are. The service runs as LocalSystem, where %USERPROFILE% is the system profile: the canaries
+    # must still land in the Desktop and Documents of the person who uses the machine, and nothing
+    # may be watched (or created) in a system or service profile. The job above replaces the paths
+    # with C:\rg-ci-watch, which is why it never saw this.
+    name: Agent — installed by install.ps1, real user folders (AGT-PATH-001)
+    runs-on: windows-latest
+    env:
+      SERVICE_NAME: RansomGuardAgent
+      DATA_ROOT: C:\ProgramData\RansomGuard-CM
+      PKG_DIR: C:\rg-pkg
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Build the package the GRID serves (as cd.yml)
+        shell: pwsh
+        run: |
+          dotnet publish agent/src/RansomGuard.Agent.Service/RansomGuard.Agent.Service.csproj -c Release -r win-x64 --self-contained true -o publish/agent
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          New-Item -ItemType Directory -Force -Path "$env:PKG_DIR\agent" | Out-Null
+          Compress-Archive -Path publish/agent/* -DestinationPath "$env:PKG_DIR\agent\RansomGuard-Agent-win-x64.zip" -Force
+
+      - name: Serve it on https://127.0.0.1:8443 (a local GRID, as in development)
+        shell: pwsh
+        run: |
+          # A throwaway certificate for the local server only: it is not added to any store.
+          # install.ps1 skips certificate validation for a GRID on this machine and never otherwise.
+          $openssl = 'C:\Program Files\Git\usr\bin\openssl.exe'
+          & $openssl req -x509 -newkey rsa:2048 -nodes -subj '/CN=localhost' -days 1 -keyout "$env:PKG_DIR\key.pem" -out "$env:PKG_DIR\cert.pem" 2>&1 | Out-Null
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Set-Content -Path "$env:PKG_DIR\serve.py" -Encoding utf8 -Value @'
+          import http.server, ssl, sys
+          root, cert, key = sys.argv[1], sys.argv[2], sys.argv[3]
+          handler = lambda *a, **k: http.server.SimpleHTTPRequestHandler(*a, directory=root, **k)
+          server = http.server.ThreadingHTTPServer(("127.0.0.1", 8443), handler)
+          context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+          context.load_cert_chain(cert, key)
+          server.socket = context.wrap_socket(server.socket, server_side=True)
+          server.serve_forever()
+          '@
+          Start-Process python -ArgumentList "$env:PKG_DIR\serve.py", $env:PKG_DIR, "$env:PKG_DIR\cert.pem", "$env:PKG_DIR\key.pem" -WindowStyle Hidden
+          Start-Sleep 3
+
+      - name: The user who uses this machine
+        shell: pwsh
+        run: |
+          $desktop = [Environment]::GetFolderPath('Desktop')
+          $documents = [Environment]::GetFolderPath('MyDocuments')
+          Write-Host "user: $env:USERNAME ; Desktop: $desktop ; Documents: $documents"
+          "USER_DESKTOP=$desktop" >> $env:GITHUB_ENV
+          "USER_DOCUMENTS=$documents" >> $env:GITHUB_ENV
+          $sys = Join-Path $env:WINDIR 'System32\config\systemprofile'
+          "SYSTEM_PROFILE=$sys" >> $env:GITHUB_ENV
+          # What exists in the system profile before the install, to tell what the agent created.
+          Get-ChildItem $sys -Directory -Force -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name | Out-String | Write-Host
+
+      - name: Install with install.ps1, shipped configuration untouched
+        # Windows PowerShell 5.1, as the console's one-liner runs it (dashboard/src/lib/install-command.ts).
+        # Under pwsh 7 the script's local-GRID certificate callback (a scriptblock) cannot run on the
+        # download thread, and the download fails before anything is installed.
+        shell: powershell
+        run: |
+          # Unreachable enrollment on purpose (no GRID API here): the agent must run without it.
+          powershell -NoProfile -ExecutionPolicy Bypass -File .\agent\install.ps1 -OTP ci-otp-not-enrolled -GridServer 127.0.0.1
+          if ($LASTEXITCODE -ne 0) { Write-Host '::error::install.ps1 failed'; exit 1 }
+          if ((Get-Service $env:SERVICE_NAME).Status -ne 'Running') { Write-Host '::error::the service is not running'; exit 1 }
+          Get-Content 'C:\Program Files\RansomGuard-CM\appsettings.json' | Select-String -Pattern 'USERPROFILE|WatchDirectories|WatchPaths' | Out-String | Write-Host
+
+      - name: Canaries in the real user's Desktop and Documents, none in a system profile
+        shell: pwsh
+        run: |
+          $deadline = (Get-Date).AddSeconds(120)
+          do {
+            Start-Sleep 3
+            if ((Get-Service $env:SERVICE_NAME).Status -ne 'Running') { Write-Host '::error::the service stopped'; exit 1 }
+            $inSystem = @(Get-ChildItem $env:SYSTEM_PROFILE -Recurse -File -Force -Filter '0001_*' -ErrorAction SilentlyContinue)
+            $onDesktop = @(Get-ChildItem $env:USER_DESKTOP -File -Force -Filter '0001_*' -ErrorAction SilentlyContinue)
+            $inDocuments = @(Get-ChildItem $env:USER_DOCUMENTS -File -Force -Filter '0001_*' -ErrorAction SilentlyContinue)
+          } while ($inSystem.Count -eq 0 -and ($onDesktop.Count -eq 0 -or $inDocuments.Count -eq 0) -and (Get-Date) -lt $deadline)
+
+          Write-Host "canaries -- system profile: $($inSystem.Count) ; user Desktop: $($onDesktop.Count) ; user Documents: $($inDocuments.Count)"
+          $inSystem | ForEach-Object { Write-Host "  in a system profile: $($_.FullName)" }
+          $created = @(Get-ChildItem $env:SYSTEM_PROFILE -Recurse -Directory -Force -Filter 'RansomGuard-TestZone' -ErrorAction SilentlyContinue)
+          $created | ForEach-Object { Write-Host "  folder created in a system profile: $($_.FullName)" }
+
+          $bad = @()
+          if ($inSystem.Count -gt 0) { $bad += "$($inSystem.Count) canaries in the system profile" }
+          if ($created.Count -gt 0) { $bad += "the agent created RansomGuard-TestZone in the system profile" }
+          if ($onDesktop.Count -eq 0) { $bad += "no canary in the user's Desktop ($env:USER_DESKTOP)" }
+          if ($inDocuments.Count -eq 0) { $bad += "no canary in the user's Documents ($env:USER_DOCUMENTS)" }
+          if ($bad.Count -gt 0) { $bad | ForEach-Object { Write-Host "::error::AGT-PATH-001: $_" }; exit 1 }
+          Write-Host "::notice title=AGT-PATH-001::canaries in the user's Desktop ($($onDesktop.Count)) and Documents ($($inDocuments.Count)), none in a system profile"
+
+      - name: Diagnostics
+        if: always()
+        shell: pwsh
+        run: |
+          Get-Service $env:SERVICE_NAME -ErrorAction SilentlyContinue | Format-List Name, Status, StartType | Out-String | Write-Host
+          New-Item -ItemType Directory -Force -Path diag | Out-Null
+          Copy-Item "$env:DATA_ROOT\logs\*" diag -ErrorAction SilentlyContinue
+          Get-ChildItem diag -ErrorAction SilentlyContinue | ForEach-Object {
+            Select-String -Path $_.FullName -Pattern 'SENTINEL|ENTROPY|watch|canar' | Select-Object -First 40 | ForEach-Object { $_.Line } | Write-Host
+          }
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agent-install-script-logs
+          path: diag
+          retention-days: 14
+
+      - name: Uninstall
+        if: always()
+        shell: pwsh
+        run: |
+          Stop-Service $env:SERVICE_NAME -Force -ErrorAction SilentlyContinue
+          sc.exe delete $env:SERVICE_NAME

@@ -35,6 +35,7 @@ public sealed class EntropyMonitor : BackgroundService
     private readonly IOperationRateLimiter? _rateLimiter;
     private readonly IDetectionEventBus? _eventBus;
     private readonly IAlertForwardingQueue? _alertQueue;
+    private readonly UserProfileEnumerator _profiles;
     private readonly IModuleStateRegistry _moduleState;
     private readonly IModuleFailureReporter _failureReporter;
     private readonly IModuleFaultInjector _faultInjector;
@@ -58,6 +59,7 @@ public sealed class EntropyMonitor : BackgroundService
     /// Test seam: wait before starting, for SENTINEL's deployment; null (the DI default) is 5 s.
     /// </param>
     /// <param name="faultInjector">Development fault injection; null or the production one never stops anything.</param>
+    /// <param name="profiles">The real user profiles that %EACHUSERPROFILE% expands to (AGT-PATH-001); null: the Windows registry.</param>
     public EntropyMonitor(
         ILogger<EntropyMonitor> logger,
         IOptionsMonitor<AgentConfiguration> config,
@@ -70,7 +72,8 @@ public sealed class EntropyMonitor : BackgroundService
         IDetectionEventBus? eventBus = null,
         IAlertForwardingQueue? alertQueue = null,
         TimeSpan? startupDelay = null,
-        IModuleFaultInjector? faultInjector = null)
+        IModuleFaultInjector? faultInjector = null,
+        UserProfileEnumerator? profiles = null)
     {
         _logger = logger;
         _config = config.CurrentValue;
@@ -84,6 +87,7 @@ public sealed class EntropyMonitor : BackgroundService
         _rateLimiter = rateLimiterFactory?.GetLimiter(RateLimiterFactory.EntropyComputation);
         _eventBus = eventBus;
         _alertQueue = alertQueue;
+        _profiles = profiles ?? UserProfileEnumerator.Windows;
         _fileChannel = Channel.CreateBounded<string>(
             new BoundedChannelOptions(EventChannelCapacity)
             {
@@ -122,9 +126,16 @@ public sealed class EntropyMonitor : BackgroundService
             consumerTask = ConsumeEventsAsync(entropy, moduleToken);
 
             // Set up FSW on watch directories
-            string[] resolvedPaths = EnvironmentVariableResolver.ResolvePaths(_config.Detection.WatchPaths);
+            string[] resolvedPaths = EnvironmentVariableResolver.ResolvePaths(_config.Detection.WatchPaths, _profiles, _logger);
             foreach (string dir in resolvedPaths)
             {
+                // AGT-PATH-001: a system or service profile is never watched -- it counts as missing.
+                if (WatchedPathPolicy.IsRefused(dir))
+                {
+                    _logger.LogError("ENTROPY: folder {Directory} is in a system or service profile and is not watched (AGT-PATH-001)", dir);
+                    continue;
+                }
+
                 if (!Directory.Exists(dir))
                 {
                     _logger.LogWarning("ENTROPY: folder {Directory} does not exist and is not watched", dir);
@@ -153,7 +164,7 @@ public sealed class EntropyMonitor : BackgroundService
             // Zero watcher is not "active": the module would see no modification at all.
             if (_watchers.Count == 0)
             {
-                _logger.LogError("ENTROPY watches nothing: none of the {Count} configured folders exists",
+                _logger.LogError("ENTROPY watches nothing: none of the {Count} configured folders is watchable (missing, or refused as a system profile)",
                     resolvedPaths.Length);
                 _moduleState.Publish(ModuleCode.Entropy, ModuleState.Inactive, ModuleReasonCode.NoWatchDirectory);
                 return;
@@ -233,7 +244,7 @@ public sealed class EntropyMonitor : BackgroundService
 
     private async Task BuildBaselinesAsync(CancellationToken ct)
     {
-        string[] resolvedPaths = EnvironmentVariableResolver.ResolvePaths(_config.Detection.WatchPaths);
+        string[] resolvedPaths = EnvironmentVariableResolver.ResolvePaths(_config.Detection.WatchPaths, _profiles, _logger);
         int total = 0;
 
         foreach (string dir in resolvedPaths)

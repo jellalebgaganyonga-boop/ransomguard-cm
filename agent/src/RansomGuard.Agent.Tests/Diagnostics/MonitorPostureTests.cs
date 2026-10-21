@@ -49,6 +49,125 @@ public sealed class MonitorPostureTests : IDisposable
         _h.Reporter,
         startupDelay: TimeSpan.Zero);
 
+    // ── AGT-PATH-001: a system or service profile is refused ───────────────────
+    // The profile roots exist on every Windows: without the rule the monitors would watch them
+    // and read active, and the deployment (CI runs as administrator) would create its folder.
+
+    private static string SystemProfile => WatchedPathPolicy.RefusedRoots[0];
+
+    private static string MissingInSystemProfile() => Path.Combine(SystemProfile, $"rg_agt_path_{Guid.NewGuid():N}");
+
+    [Fact(Timeout = 30_000)]
+    public async Task Sentinel_on_the_system_profile_is_inactive_no_watch_directory_and_says_why()
+    {
+        var log = new RecordingLogger<SentinelMonitor>();
+        using SentinelMonitor monitor = Sentinel([SystemProfile], log);
+
+        await monitor.StartAsync(CancellationToken.None);
+        await Eventually.HoldsAsync(() => _h.State(ModuleCode.Sentinel).ReasonCode == ModuleReasonCode.NoWatchDirectory,
+            "SENTINEL publishes no_watch_directory");
+        await monitor.StopAsync(CancellationToken.None);
+
+        _h.Registry.Published.ShouldNotContain(p => p.Code == ModuleCode.Sentinel && p.State == ModuleState.Active);
+        log.Entries.ShouldContain(e => e.Level == LogLevel.Error && e.Message.Contains(SystemProfile) && e.Message.Contains("AGT-PATH-001"));
+    }
+
+    [Fact(Timeout = 30_000)]
+    public async Task Entropy_on_a_service_profile_is_inactive_no_watch_directory_and_says_why()
+    {
+        string localService = Path.Combine(WatchedPathPolicy.RefusedRoots[2], "LocalService");
+        var log = new RecordingLogger<EntropyMonitor>();
+        using EntropyMonitor monitor = Entropy([SystemProfile, localService], log);
+
+        await monitor.StartAsync(CancellationToken.None);
+        await Eventually.HoldsAsync(() => _h.State(ModuleCode.Entropy).ReasonCode == ModuleReasonCode.NoWatchDirectory,
+            "ENTROPY publishes no_watch_directory");
+        await monitor.StopAsync(CancellationToken.None);
+
+        _h.Registry.Published.ShouldNotContain(p => p.Code == ModuleCode.Entropy && p.State == ModuleState.Active);
+        log.Entries.ShouldContain(e => e.Level == LogLevel.Error && e.Message.Contains(localService) && e.Message.Contains("AGT-PATH-001"));
+    }
+
+    [Fact(Timeout = 30_000)]
+    public async Task Sentinel_with_a_user_folder_and_the_system_profile_is_active_on_the_user_folder_only()
+    {
+        var log = new RecordingLogger<SentinelMonitor>();
+        using SentinelMonitor monitor = Sentinel([_h.Folder, SystemProfile], log);
+
+        await monitor.StartAsync(CancellationToken.None);
+        await Eventually.HoldsAsync(() => _h.State(ModuleCode.Sentinel).State == ModuleState.Active, "SENTINEL active");
+        await monitor.StopAsync(CancellationToken.None);
+
+        log.Entries.ShouldContain(e => e.Level == LogLevel.Error && e.Message.Contains(SystemProfile));
+        log.Entries.ShouldNotContain(e => e.Level == LogLevel.Error && e.Message.Contains(_h.Folder));
+    }
+
+    [Fact(Timeout = 30_000)]
+    public async Task The_deployment_never_creates_a_folder_nor_plants_a_canary_in_the_system_profile()
+    {
+        string refused = MissingInSystemProfile();
+        try
+        {
+            var deployment = new SentinelDeploymentService(
+                NullLogger<SentinelDeploymentService>.Instance,
+                MonitorHarness.Config([], sentinel: new SentinelOptions
+                {
+                    WatchDirectories = [refused, _h.Folder],
+                    CanaryTemplates = ["dossier_patient"],
+                }),
+                _h.ScopeFactory);
+
+            await deployment.StartAsync(CancellationToken.None);
+            await deployment.ExecuteTask!;
+
+            Directory.Exists(refused).ShouldBeFalse();
+            Directory.EnumerateFiles(_h.Folder).ShouldNotBeEmpty(); // the user folder still got its canaries
+        }
+        finally
+        {
+            if (Directory.Exists(refused)) Directory.Delete(refused, recursive: true);
+        }
+    }
+
+    [Fact(Timeout = 30_000)]
+    public async Task The_worker_never_creates_its_test_zone_in_the_system_profile()
+    {
+        // The shipped Detection:WatchPaths, %USERPROFILE%\Desktop\RansomGuard-TestZone, as LocalSystem.
+        string refused = MissingInSystemProfile();
+        var log = new RecordingLogger<Worker>();
+        try
+        {
+            using var worker = new Worker(log, MonitorHarness.Config([refused]), _h.ScopeFactory, new FileEventDeduplicator(50));
+
+            await worker.StartAsync(CancellationToken.None);
+            await Eventually.HoldsAsync(() => log.Entries.Any(e => e.Message.Contains(refused)), "the worker names the refused path");
+            await worker.StopAsync(CancellationToken.None);
+
+            Directory.Exists(refused).ShouldBeFalse();
+            log.Entries.ShouldContain(e => e.Level == LogLevel.Error && e.Message.Contains("AGT-PATH-001"));
+        }
+        finally
+        {
+            if (Directory.Exists(refused)) Directory.Delete(refused, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task A_canary_is_never_created_in_the_system_profile_whoever_asks()
+    {
+        string refused = MissingInSystemProfile();
+        try
+        {
+            await Should.ThrowAsync<InvalidOperationException>(() => _h.CreateCanaryAsync(refused));
+
+            Directory.Exists(refused).ShouldBeFalse();
+        }
+        finally
+        {
+            if (Directory.Exists(refused)) Directory.Delete(refused, recursive: true);
+        }
+    }
+
     // ── Point 1: no_watch_directory ─────────────────────────────────────────────
 
     [Fact(Timeout = 30_000)]

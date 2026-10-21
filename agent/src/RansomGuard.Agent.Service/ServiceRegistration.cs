@@ -170,6 +170,8 @@ public static class ServiceRegistration
         services.AddSingleton<IModuleFaultInjector, NoModuleFaultInjector>();
         // Monotonic clock (Stopwatch) for uptime and upload ages, and timers; fakeable in tests.
         services.AddSingleton(TimeProvider.System);
+        // %EACHUSERPROFILE% (AGT-PATH-001): the real users of the machine, read from ProfileList.
+        services.AddSingleton(UserProfileEnumerator.Windows);
 
         // Cross-module event bus
         services.AddSingleton<IDetectionEventBus, InMemoryDetectionEventBus>();
