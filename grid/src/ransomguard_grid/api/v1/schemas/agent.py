@@ -3,7 +3,7 @@
 import base64
 import binascii
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
 
@@ -121,3 +121,46 @@ class HeartbeatResponse(BaseModel):
     next_heartbeat_in_seconds: int
     pending_commands: list[str] = Field(default_factory=list)
     server_time: datetime
+
+
+# ── Commands (plan de finition, J1 § 1.3) ──────────────────────────────────────
+
+
+class AgentCommandItem(BaseModel):
+    """A command the console queued for this agent, as the agent fetches it."""
+
+    id: str
+    command_type: str
+    parameters: dict[str, Any] = Field(default_factory=dict)
+    issued_at: datetime
+
+
+class AgentCommandsResponse(BaseModel):
+    commands: list[AgentCommandItem] = Field(default_factory=list)
+
+
+class CommandResultRequest(BaseModel):
+    """What the agent did with a command. Bounded: 20 scalar entries, short strings."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    success: bool
+    payload: dict[str, Any] = Field(default_factory=dict, max_length=20)
+
+    @field_validator("payload")
+    @classmethod
+    def _bounded(cls, payload: dict[str, Any]) -> dict[str, Any]:
+        for key, value in payload.items():
+            if len(key) > 50:
+                raise ValueError("payload: key too long")
+            if isinstance(value, str) and len(value) > 2000:
+                raise ValueError(f"payload: value of {key} too long")
+            if isinstance(value, (dict, list)):
+                raise ValueError(f"payload: {key} must be a scalar")
+        return payload
+
+
+class CommandResultResponse(BaseModel):
+    command_id: str
+    status: str
+    result: Literal["applied", "unchanged"]

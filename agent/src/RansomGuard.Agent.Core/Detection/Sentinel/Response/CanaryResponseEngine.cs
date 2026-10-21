@@ -37,6 +37,9 @@ public static class ResponseReason
 
     /// <summary>The kernel call failed; the error is in the audit entry.</summary>
     public const string SuspendFailed = "suspend_failed";
+
+    /// <summary>A console request names an alert this agent does not know.</summary>
+    public const string UnknownAlert = "unknown_alert";
 }
 
 /// <summary>What the response engine did for one attribution.</summary>
@@ -218,6 +221,75 @@ public sealed class CanaryResponseEngine
 
         await audit.AppendAsync("ProcessSuspended", $"{who} for {canaryPath}; suspension {record.Id}", "CanaryAlert", alertId, CancellationToken.None).ConfigureAwait(false);
         return new ResponseOutcome(true, null, record.Id);
+    }
+
+    /// <summary>
+    /// A suspension asked by the console (J1 § 1.3) on an alert of this agent, with the PID and
+    /// creation time the GRID took from the alert's resolved attribution. Same rules as the
+    /// automatic one; a process already suspended is not suspended twice.
+    /// </summary>
+    /// <param name="pid">The attributed writer.</param>
+    /// <param name="processCreatedAt">Its creation time (UTC), the other half of its identity.</param>
+    /// <param name="alertClientMessageId">The GRID id of the canary alert.</param>
+    /// <param name="by">Who asks (a command id).</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<ResponseOutcome> SuspendOnRequestAsync(
+        int pid, DateTime processCreatedAt, string alertClientMessageId, string by, CancellationToken ct = default)
+    {
+        Guid alertId;
+        string canaryPath;
+        await using (AsyncServiceScope scope = _scopes.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AgentDbContext>();
+            SuspendedProcess? already = await db.SuspendedProcesses
+                .FirstOrDefaultAsync(s => s.ProcessId == pid && s.ProcessCreatedAt == processCreatedAt && s.State == SuspensionState.Suspended, ct)
+                .ConfigureAwait(false);
+            if (already is not null)
+            {
+                _logger.LogInformation("SENTINEL RESPONSE: PID {Pid} already suspended (suspension {Id}); request by {By} changes nothing", pid, already.Id, by);
+                return new ResponseOutcome(true, null, already.Id);
+            }
+
+            // The local alert: its GRID id is derived from its id, so the recent ones are scanned.
+            DateTime since = _time.GetUtcNow().UtcDateTime.AddDays(-7);
+            var candidates = await db.CanaryAlerts
+                .Where(a => a.DetectedAt >= since)
+                .Select(a => new { a.Id, a.CanaryPath })
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
+            var match = candidates.FirstOrDefault(c => AlertMapper.DeterministicId(c.Id) == alertClientMessageId);
+            if (match is null)
+            {
+                _logger.LogWarning("SENTINEL RESPONSE: suspension asked by {By} for an alert this agent does not know ({ClientMessageId})", by, alertClientMessageId);
+                return new ResponseOutcome(false, ResponseReason.UnknownAlert);
+            }
+
+            (alertId, canaryPath) = (match.Id, match.CanaryPath);
+        }
+
+        string? name = null;
+        string? image = null;
+        try
+        {
+            using Process process = Process.GetProcessById(pid);
+            name = process.ProcessName;
+            try
+            {
+                image = process.MainModule?.FileName;
+            }
+            catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+            {
+                // protected or exiting: the image stays unknown
+            }
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            // gone: RespondAsync says process_exited after the pair re-read
+        }
+
+        _logger.LogWarning("SENTINEL RESPONSE: suspension of PID {Pid} asked by {By} for {Canary}", pid, by, canaryPath);
+        var attribution = new AttributionOutcome(AttributionState.Resolved, pid, processCreatedAt, name, image);
+        return await RespondAsync(attribution, canaryPath, alertId, alertClientMessageId, ct).ConfigureAwait(false);
     }
 
     /// <summary>

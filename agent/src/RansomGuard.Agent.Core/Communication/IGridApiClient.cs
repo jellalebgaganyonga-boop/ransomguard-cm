@@ -43,4 +43,10 @@ public interface IGridApiClient
     /// Submit a batch of Ed25519-signed audit log entries.
     /// </summary>
     Task<AuditLogBatchResponse> SendAuditLogBatchAsync(AuditLogBatchRequest request, CancellationToken ct = default);
+
+    /// <summary>The open commands the console queued for this agent (J1 § 1.3); fetched again until answered.</summary>
+    Task<IReadOnlyList<AgentCommand>> FetchCommandsAsync(CancellationToken ct = default);
+
+    /// <summary>Reports what the agent did with a command: executed, or not, and why.</summary>
+    Task SendCommandResultAsync(string commandId, CommandResultRequest result, CancellationToken ct = default);
 }

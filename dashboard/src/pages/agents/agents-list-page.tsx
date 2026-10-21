@@ -19,12 +19,11 @@ import { useAgentList, useProvisionAgent } from '@/hooks/use-agents';
 import { useMe, resolvePrimaryRole } from '@/hooks/use-me';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { CommandModal } from '@/components/agents/command-modal';
 import { agentStatusVariant, isSignalLostRed, protectionVariant } from '@/lib/agent-status';
 import { verdictSentence } from '@/lib/agent-posture';
 import { buildInstallCommand } from '@/lib/install-command';
 import { formatDistanceToNow } from '@/lib/format-date';
-import type { AgentStatus, AgentItem } from '@/api/agents';
+import type { AgentStatus } from '@/api/agents';
 
 const PAGE_SIZE = 50;
 
@@ -43,7 +42,6 @@ export function AgentsListPage() {
 
   const [statusFilter, setStatusFilter] = useState<AgentStatus | ''>('');
   const [offset, setOffset] = useState(0);
-  const [commandTarget, setCommandTarget] = useState<AgentItem | null>(null);
   const [showProvision, setShowProvision] = useState(false);
 
   // Escape closes the provisioning modal. The backdrop is deliberately not
@@ -238,15 +236,6 @@ export function AgentsListPage() {
                           >
                             {t('common.view', 'Voir →')}
                           </Link>
-                          {role === 'tenant_admin' && agent.status !== 'decommissioned' && (
-                            <Button
-                              variant="secondary"
-                              className="h-7 px-2 text-xs text-error hover:border-error/40"
-                              onClick={() => setCommandTarget(agent)}
-                            >
-                              {t('agents.command.isolate', 'Isoler')}
-                            </Button>
-                          )}
                         </div>
                       </td>
                     </tr>
@@ -404,15 +393,6 @@ export function AgentsListPage() {
         </div>
       )}
 
-      {/* Isolate command modal */}
-      {commandTarget && (
-        <CommandModal
-          agentId={commandTarget.id}
-          hostname={commandTarget.hostname}
-          open={commandTarget !== null}
-          onOpenChange={(open) => { if (!open) setCommandTarget(null); }}
-        />
-      )}
     </div>
   );
 }

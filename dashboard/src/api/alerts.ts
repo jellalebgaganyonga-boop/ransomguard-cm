@@ -126,6 +126,32 @@ export const AlertAttributionSchema = z.object({
 });
 export type AlertAttribution = z.infer<typeof AlertAttributionSchema>;
 
+/** A console command on this alert (ADR-026, J1 § 1.3), with the agent's answer when it came. */
+export const AlertCommandSchema = z.object({
+  id: z.string(),
+  command_type: z.string(),
+  status: z.string(),
+  issued_at: z.string(),
+  dispatched_at: z.string().nullable().optional(),
+  completed_at: z.string().nullable().optional(),
+  success: z.boolean().nullable().optional(),
+  result: z.record(z.string(), z.unknown()).nullable().optional(),
+});
+export type AlertCommand = z.infer<typeof AlertCommandSchema>;
+
+/** What the agent did about this alert: a response alert linked by response_to. */
+export const AlertResponseSchema = z.object({
+  alert_id: z.string(),
+  alert_type: z.string(),
+  response: z.string(),
+  detected_at: z.string(),
+  suspension_id: z.string().nullable().optional(),
+  process_id: z.number().int().nullable().optional(),
+  process_name: z.string().nullable().optional(),
+  reason: z.string().nullable().optional(),
+});
+export type AlertResponse = z.infer<typeof AlertResponseSchema>;
+
 export const AlertDetailSchema = z.object({
   id: z.string(),
   detected_at: z.string(),
@@ -145,6 +171,8 @@ export const AlertDetailSchema = z.object({
   artifacts: z.array(AlertArtifactSchema).nullable().optional(),
   status_history: z.array(AlertStatusChangeSchema).nullable().optional(),
   attribution: AlertAttributionSchema.nullable().optional(),
+  commands: z.array(AlertCommandSchema).optional(),
+  responses: z.array(AlertResponseSchema).optional(),
 });
 export type AlertDetail = z.infer<typeof AlertDetailSchema>;
 

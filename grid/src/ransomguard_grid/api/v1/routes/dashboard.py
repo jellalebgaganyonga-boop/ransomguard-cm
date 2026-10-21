@@ -1,6 +1,7 @@
 """Dashboard REST API endpoints — JWT authenticated, RBAC enforced, tenant-isolated."""
 
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -15,7 +16,9 @@ from ransomguard_grid.api.v1.schemas.dashboard import (
     AgentItem,
     AgentPostureItem,
     AlertAttribution,
+    AlertCommandItem,
     AlertItem,
+    AlertResponseItem,
     AuditLogItem,
     CommandItem,
     CreateUserRequest,
@@ -47,7 +50,7 @@ from ransomguard_grid.db.models.agent import Agent
 from ransomguard_grid.db.models.alerts import Alert, AlertDetail, AlertStatusChange
 from ransomguard_grid.db.models.enums import AgentStatus, AlertStatus, CommandStatus, Severity
 from ransomguard_grid.db.models.notifications import NotificationPreference, UserActionLog
-from ransomguard_grid.db.models.operations import CommandQueue
+from ransomguard_grid.db.models.operations import CommandQueue, CommandResponse
 from ransomguard_grid.db.models.tenant_user import User
 from ransomguard_grid.db.repositories.alert_repository import AlertRepository
 from ransomguard_grid.db.repositories.role_repository import UserRoleRepository
@@ -207,7 +210,11 @@ async def get_alert(
     if not alert:
         raise HTTPException(404, "Alert not found")
     item = _alert_item(alert, await _hostname_for(db, alert))
-    return item.model_copy(update={"attribution": await _attribution_for(db, alert)})
+    return item.model_copy(update={
+        "attribution": await _attribution_for(db, alert),
+        "commands": await _commands_for(db, alert),
+        "responses": await _responses_for(db, alert),
+    })
 
 
 async def _attribution_for(db: AsyncSession, alert: Alert) -> AlertAttribution | None:
@@ -231,6 +238,100 @@ async def _attribution_for(db: AsyncSession, alert: Alert) -> AlertAttribution |
         process_path=values.get("process_path"),
         process_created_at=values.get("process_created_at"),
     )
+
+
+ALERT_COMMANDS = ("suspend_process", "resume_process")
+
+
+async def _commands_for(db: AsyncSession, alert: Alert) -> list[AlertCommandItem]:
+    """The console's commands on this alert (parameters.alert_id), with the agent's answer."""
+    rows = (await db.execute(
+        select(CommandQueue)
+        .where(CommandQueue.tenant_id == alert.tenant_id, CommandQueue.agent_id == alert.agent_id)
+        .order_by(CommandQueue.issued_at.desc())
+        .limit(200)
+    )).scalars().all()
+    mine = [c for c in rows if (c.parameters_json or {}).get("alert_id") == alert.id]
+    if not mine:
+        return []
+    answers = {r.command_id: r for r in (await db.execute(
+        select(CommandResponse).where(
+            CommandResponse.tenant_id == alert.tenant_id,
+            CommandResponse.command_id.in_([c.id for c in mine]),
+        )
+    )).scalars().all()}
+    items = []
+    for command in sorted(mine, key=lambda c: c.issued_at):
+        answer = answers.get(command.id)
+        items.append(AlertCommandItem(
+            id=command.id, command_type=command.command_type, status=command.status.value,
+            issued_at=command.issued_at, dispatched_at=command.dispatched_at, completed_at=command.completed_at,
+            success=answer.success if answer else None,
+            result=dict(answer.response_payload_json or {}) if answer else None,
+        ))
+    return items
+
+
+async def _responses_for(db: AsyncSession, alert: Alert) -> list[AlertResponseItem]:
+    """The agent's response alerts on this one (ADR-026): detail response_to = its client_message_id."""
+    linked = (await db.execute(
+        select(Alert)
+        .join(AlertDetail, AlertDetail.alert_id == Alert.id)
+        .where(
+            Alert.tenant_id == alert.tenant_id,
+            Alert.agent_id == alert.agent_id,
+            AlertDetail.tenant_id == alert.tenant_id,
+            AlertDetail.key == "response_to",
+            AlertDetail.value == alert.client_message_id,
+        )
+        .order_by(Alert.detected_at)
+    )).scalars().unique().all()
+    items = []
+    for response in linked:
+        rows = (await db.execute(select(AlertDetail.key, AlertDetail.value).where(
+            AlertDetail.tenant_id == alert.tenant_id, AlertDetail.alert_id == response.id,
+        ))).all()
+        values = {key: value for key, value in rows}
+        pid = values.get("process_id")
+        items.append(AlertResponseItem(
+            alert_id=response.id, alert_type=response.alert_type, response=values.get("response", ""),
+            detected_at=response.detected_at, suspension_id=values.get("suspension_id"),
+            process_id=int(pid) if pid and pid.isdigit() else None,
+            process_name=values.get("process_name") or None, reason=values.get("reason"),
+        ))
+    return items
+
+
+async def _alert_command_parameters(db: AsyncSession, user: User, body: IssueCommandRequest) -> dict[str, Any]:
+    """suspend_process / resume_process (ADR-026): the alert decides, never the client.
+
+    The PID and its creation time come from the alert's resolved attribution; the suspension to
+    resume must be one the agent reported on this alert. The agent needs the alert's
+    client_message_id, which the console never sees.
+    """
+    alert_id = body.parameters.get("alert_id")
+    if not isinstance(alert_id, str):
+        raise HTTPException(422, "alert_id is required")
+    alert = await AlertRepository(db, tenant_id=user.tenant_id).get_by_id(alert_id)
+    if alert is None or alert.agent_id != body.agent_id:
+        raise HTTPException(404, "Alert not found")
+    parameters: dict[str, Any] = {"alert_id": alert.id, "alert_client_message_id": alert.client_message_id}
+    if body.command_type == "suspend_process":
+        attribution = await _attribution_for(db, alert)
+        if (attribution is None or attribution.state != "resolved"
+                or attribution.process_id is None or not attribution.process_created_at):
+            raise HTTPException(409, "No resolved attribution on this alert: nobody to suspend")
+        parameters["pid"] = attribution.process_id
+        parameters["process_created_at"] = attribution.process_created_at
+    else:
+        suspension_id = body.parameters.get("suspension_id")
+        responses = await _responses_for(db, alert)
+        if not isinstance(suspension_id, str) or not any(
+            r.response == "process_suspended" and r.suspension_id == suspension_id for r in responses
+        ):
+            raise HTTPException(409, "No suspension reported on this alert: nothing to resume")
+        parameters["suspension_id"] = suspension_id
+    return parameters
 
 
 @router.post("/alerts/{alert_id}/status", response_model=AlertItem)
@@ -414,10 +515,12 @@ async def issue_command(
     if not agent:
         raise HTTPException(404, "Agent not found")
 
+    parameters = (await _alert_command_parameters(db, user, body)
+                  if body.command_type in ALERT_COMMANDS else dict(body.parameters))
     cmd_id = str(uuid4())
     cmd = CommandQueue(
         id=cmd_id, tenant_id=user.tenant_id, agent_id=body.agent_id,
-        command_type=body.command_type, parameters_json=body.parameters,
+        command_type=body.command_type, parameters_json=parameters,
         status=CommandStatus.Pending, issued_by_user_id=user.id, issued_at=datetime.now(UTC),
     )
     db.add(cmd)

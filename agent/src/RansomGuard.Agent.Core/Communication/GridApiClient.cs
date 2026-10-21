@@ -133,6 +133,28 @@ public sealed class GridApiClient : IGridApiClient
             ?? throw new InvalidOperationException("Empty audit log response");
     }
 
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<AgentCommand>> FetchCommandsAsync(CancellationToken ct = default)
+    {
+        EnsureEnrolled();
+        var client = CreateClient();
+        AgentCommandsResponse? response = await client
+            .GetFromJsonAsync<AgentCommandsResponse>($"/api/v1/agents/{_agentId}/commands", JsonOptions, ct)
+            .ConfigureAwait(false);
+        return response?.Commands ?? [];
+    }
+
+    /// <inheritdoc />
+    public async Task SendCommandResultAsync(string commandId, CommandResultRequest result, CancellationToken ct = default)
+    {
+        EnsureEnrolled();
+        var client = CreateClient();
+        var response = await client.PostAsJsonAsync(
+            $"/api/v1/agents/{_agentId}/commands/{Uri.EscapeDataString(commandId)}/result", result, JsonOptions, ct)
+            .ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+    }
+
     private HttpClient CreateClient()
     {
         var client = _httpClientFactory.CreateClient(HttpClientName);

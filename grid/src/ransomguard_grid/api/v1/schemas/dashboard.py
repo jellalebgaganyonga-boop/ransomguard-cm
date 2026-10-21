@@ -28,6 +28,32 @@ class AlertAttribution(BaseModel):
     process_created_at: str | None = None
 
 
+class AlertCommandItem(BaseModel):
+    """A command of the console on this alert, with the agent's answer when it came."""
+
+    id: str
+    command_type: str
+    status: str
+    issued_at: datetime
+    dispatched_at: datetime | None = None
+    completed_at: datetime | None = None
+    success: bool | None = None
+    result: dict[str, Any] | None = None
+
+
+class AlertResponseItem(BaseModel):
+    """What the agent did about this alert (ADR-026): a response alert linked by response_to."""
+
+    alert_id: str
+    alert_type: str
+    response: str
+    detected_at: datetime
+    suspension_id: str | None = None
+    process_id: int | None = None
+    process_name: str | None = None
+    reason: str | None = None
+
+
 class AlertItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -48,6 +74,9 @@ class AlertItem(BaseModel):
     # The attribution, on the alert detail only; None for an alert that carries none (not SENTINEL,
     # or sent before ADR-025).
     attribution: AlertAttribution | None = None
+    # The console's commands on this alert and the agent's responses (ADR-026); detail only.
+    commands: list[AlertCommandItem] = Field(default_factory=list)
+    responses: list[AlertResponseItem] = Field(default_factory=list)
 
 
 class PaginatedAlertResponse(PaginatedResponse):

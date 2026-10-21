@@ -203,3 +203,78 @@ test.describe('Alert detail — attribution (ADR-025)', () => {
     await expect(page.getByTestId('alert-attribution')).toHaveCount(0);
   });
 });
+
+test.describe('Alert detail — response (ADR-026, J1 § 1.3)', () => {
+  const RESOLVED = {
+    state: 'resolved', process_id: 4242, process_name: 'evil',
+    process_path: String.raw`C:\Temp\evil.exe`, process_created_at: '2026-10-21T09:57:00+00:00',
+  };
+  const SUSPENDED = {
+    alert_id: 'alert-e2e-resp', alert_type: 'SentinelProcessSuspended', response: 'process_suspended',
+    detected_at: '2026-10-21T09:57:05+00:00', suspension_id: '5a6d1d3e-0000-4000-8000-000000000001',
+    process_id: 4242, process_name: 'evil',
+  };
+
+  test('a suspended writer is shown, and tenant_admin can ask for the resume', async ({ page }) => {
+    await setupMocks(page, 'tenant_admin');
+    await page.route('**/api/v1/dashboard/alerts/alert-e2e-001', (r) =>
+      r.fulfill({ status: 200, json: { ...MOCK_ALERT_NEW, attribution: RESOLVED, responses: [SUSPENDED], commands: [] } }));
+    await loginAs(page, 'tenant_admin');
+    await navigateTo(page, '/alerts/alert-e2e-001');
+
+    const section = page.getByTestId('alert-response');
+    await expect(section).toHaveAttribute('data-state', 'suspended');
+    await expect(section.getByText(/Processus suspendu : evil \(PID 4242\)/)).toBeVisible();
+    await expect(section.getByRole('button', { name: /reprendre le processus/i })).toBeVisible();
+    await expect(section.getByRole('button', { name: /suspendre le processus/i })).toHaveCount(0);
+  });
+
+  test('"Suspend" sends the command, then shows the agent\'s own answer: not executed, with its reason', async ({ page }) => {
+    await setupMocks(page, 'tenant_admin');
+    const command = {
+      id: 'cmd-e2e-suspend', command_type: 'suspend_process', status: 'Pending',
+      issued_at: '2026-10-21T10:00:00+00:00', dispatched_at: null, completed_at: null, success: null, result: null,
+    };
+    let sent: unknown = null;
+    let phase = 0; // 0: nothing sent; 1: sent; 2: answered by the agent
+    await page.route('**/api/v1/dashboard/alerts/alert-e2e-001', (r) => {
+      const commands = phase === 0 ? [] : phase === 1 ? [command]
+        : [{ ...command, status: 'Completed', completed_at: '2026-10-21T10:00:20+00:00', success: false, result: { reason: 'pid_reused' } }];
+      return r.fulfill({ status: 200, json: { ...MOCK_ALERT_NEW, attribution: RESOLVED, responses: [], commands } });
+    });
+    await page.route('**/api/v1/dashboard/commands', (r) => {
+      sent = r.request().postDataJSON();
+      phase = 1;
+      return r.fulfill({ status: 201, json: { id: command.id, agent_id: MOCK_ALERT_NEW.agent_id, command_type: 'suspend_process', status: 'Pending', issued_at: command.issued_at } });
+    });
+    await loginAs(page, 'tenant_admin');
+    await navigateTo(page, '/alerts/alert-e2e-001');
+
+    const section = page.getByTestId('alert-response');
+    await section.getByRole('button', { name: /suspendre le processus détecté/i }).click();
+    await section.getByRole('button', { name: /confirmer la suspension/i }).click();
+
+    // The console sends the alert id only: the PID comes from the alert's attribution, on the GRID.
+    expect(sent).toEqual({ agent_id: MOCK_ALERT_NEW.agent_id, command_type: 'suspend_process', parameters: { alert_id: 'alert-e2e-001' } });
+    const status = page.getByTestId('alert-command-status');
+    await expect(status).toHaveAttribute('data-status', 'sent');
+    await expect(section.getByRole('button')).toHaveCount(0); // nothing else while the agent has not answered
+
+    phase = 2; // the page polls every 5 s while a command is open
+    await expect(status).toHaveAttribute('data-status', 'not_executed', { timeout: 15_000 });
+    await expect(status).toContainText('non exécutée par l\'agent');
+    await expect(status).toContainText('le numéro de processus a été réattribué');
+  });
+
+  test('security_analyst sees the response but no command button', async ({ page }) => {
+    await setupMocks(page, 'security_analyst');
+    await page.route('**/api/v1/dashboard/alerts/alert-e2e-001', (r) =>
+      r.fulfill({ status: 200, json: { ...MOCK_ALERT_NEW, attribution: RESOLVED, responses: [SUSPENDED], commands: [] } }));
+    await loginAs(page, 'security_analyst');
+    await navigateTo(page, '/alerts/alert-e2e-001');
+
+    const section = page.getByTestId('alert-response');
+    await expect(section.getByText(/Processus suspendu/)).toBeVisible();
+    await expect(section.getByRole('button')).toHaveCount(0);
+  });
+});

@@ -18,6 +18,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AlertModule } from '@/components/alerts/alert-module';
 import { AlertAttribution } from '@/components/alerts/alert-attribution';
+import { AlertResponse } from '@/components/alerts/alert-response';
 import { Copy, ChevronLeft, ChevronDown, ChevronUp, FileQuestion } from 'lucide-react';
 import { SeverityBadge } from '@/components/ui/severity-badge';
 import { Button } from '@/components/ui/button';
@@ -196,6 +197,8 @@ export function AlertDetailPage() {
         <p className="mb-4 max-w-2xl leading-relaxed text-text-primary">{alert.summary}</p>
 
         <AlertAttribution attribution={alert.attribution} detectedAt={alert.detected_at} />
+
+        <AlertResponse alert={alert} role={role} />
 
         {alert.confidence_score != null && (
           <div className="mb-6 flex items-center gap-3">

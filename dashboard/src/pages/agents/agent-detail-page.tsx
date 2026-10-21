@@ -19,14 +19,12 @@
 import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ChevronLeft, FileQuestion, AlertTriangle } from 'lucide-react';
+import { ChevronLeft, FileQuestion } from 'lucide-react';
 import { useAgentDetail } from '@/hooks/use-agents';
 import { useAlertList } from '@/hooks/use-alerts';
-import { useMe, resolvePrimaryRole } from '@/hooks/use-me';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { SeverityBadge } from '@/components/ui/severity-badge';
-import { CommandModal } from '@/components/agents/command-modal';
 import { AgentPostureSection } from '@/components/agents/agent-posture-section';
 import { agentStatusVariant } from '@/lib/agent-status';
 import { formatDistanceToNow, formatDateTime } from '@/lib/format-date';
@@ -59,13 +57,9 @@ export function AgentDetailPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
-  const { data: me } = useMe();
-  const role = me ? resolvePrimaryRole(me.roles) : 'read_only_auditor';
-
   const { data: agent, isLoading, isError, error } = useAgentDetail(id);
 
   const [activeTab, setActiveTab] = useState<Tab>('overview');
-  const [commandModalOpen, setCommandModalOpen] = useState(false);
 
   // Alerts for this agent (used in both overview and alerts tab)
   const { data: alertsData } = useAlertList(
@@ -113,17 +107,9 @@ export function AgentDetailPage() {
             <h1 className="font-mono text-xl font-bold text-text-primary">{agent.hostname}</h1>
           </div>
 
-          {/* AC4.3.1: Isolate button — admin only */}
-          {role === 'tenant_admin' && agent.status !== 'decommissioned' && (
-            <Button
-              variant="primary"
-              className="bg-error text-white hover:bg-error/90"
-              onClick={() => setCommandModalOpen(true)}
-            >
-              <AlertTriangle className="mr-1.5 size-4" aria-hidden="true" />
-              {t('agents.command.isolate', 'Isoler le terminal')}
-            </Button>
-          )}
+          {/* The "Isolate" button is gone: it queued a command the agent never executed. The
+              response to an attack is on the alert (ADR-026): suspend / resume the named process.
+              Network isolation does not exist yet (AGT-ISO-001). */}
         </div>
 
         {/* Metadata grid */}
@@ -294,13 +280,6 @@ export function AgentDetailPage() {
         </div>
       )}
 
-      {/* Command modal */}
-      <CommandModal
-        agentId={agent.id}
-        hostname={agent.hostname}
-        open={commandModalOpen}
-        onOpenChange={setCommandModalOpen}
-      />
     </div>
   );
 }

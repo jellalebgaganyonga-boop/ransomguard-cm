@@ -140,6 +140,7 @@ def create_app() -> FastAPI:
     # Agent API routes (mTLS authenticated except enrollment)
     from ransomguard_grid.api.v1.routes.alerts import router as alerts_router
     from ransomguard_grid.api.v1.routes.audit_log import router as audit_log_router
+    from ransomguard_grid.api.v1.routes.commands import router as commands_router
     from ransomguard_grid.api.v1.routes.enrollment import router as enrollment_router
     from ransomguard_grid.api.v1.routes.heartbeat import router as heartbeat_router
 
@@ -147,6 +148,7 @@ def create_app() -> FastAPI:
     app.include_router(alerts_router, prefix="/api/v1")
     app.include_router(audit_log_router, prefix="/api/v1")
     app.include_router(heartbeat_router, prefix="/api/v1")
+    app.include_router(commands_router, prefix="/api/v1")
 
     # Threat intel endpoints (mTLS authenticated)
     from ransomguard_grid.api.v1.routes.threat_intel import router as threat_intel_router

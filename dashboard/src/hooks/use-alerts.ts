@@ -17,6 +17,8 @@ import {
   type AlertDetail,
   type UpdateAlertStatusPayload,
 } from '@/api/alerts';
+import { issueCommand, type IssueCommandPayload } from '@/api/agents';
+import { hasOpenCommand } from '@/lib/alert-response';
 
 function useTenantId(): string | undefined {
   const { data: me } = useMe();
@@ -46,6 +48,8 @@ export function useAlertDetail(alertId: string | undefined) {
     queryFn: () => fetchAlertDetail(alertId as string),
     enabled: !!tenantId && !!alertId,
     staleTime: 10_000,
+    // A command waiting for the agent's answer: poll until it comes (ADR-026, J1 § 1.3).
+    refetchInterval: (query) => (hasOpenCommand(query.state.data) ? 5_000 : false),
     retry: (failureCount, error) => {
       // AC3.2.6: 404 (cross-tenant or non-existent) — don't retry
       const status = (error as { response?: { status?: number } })?.response?.status;
@@ -108,6 +112,20 @@ export function useUpdateAlertStatus(alertId: string) {
       void queryClient.invalidateQueries({ queryKey: detailKey });
       void queryClient.invalidateQueries({ queryKey: ['alerts', tenantId, 'list'] });
       void queryClient.invalidateQueries({ queryKey: ['metrics', 'summary', tenantId] });
+    },
+  });
+}
+
+// ── Commands on an alert (ADR-026, J1 § 1.3) ────────────────
+
+export function useIssueAlertCommand(alertId: string) {
+  const queryClient = useQueryClient();
+  const tenantId = useTenantId();
+  return useMutation({
+    mutationFn: (payload: IssueCommandPayload) => issueCommand(payload),
+    onSuccess: () => {
+      // The command now exists on the alert: shown as sent, then polled for the agent's answer.
+      void queryClient.invalidateQueries({ queryKey: ['alerts', tenantId, 'detail', alertId] });
     },
   });
 }

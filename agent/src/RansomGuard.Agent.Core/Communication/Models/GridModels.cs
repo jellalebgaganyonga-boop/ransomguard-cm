@@ -1,4 +1,5 @@
 #pragma warning disable CS1591 // XML comments not needed for JSON DTO records
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace RansomGuard.Agent.Core.Communication.Models;
@@ -295,4 +296,77 @@ public sealed record AuditLogBatchResponse
 
     [JsonPropertyName("rejected_reasons")]
     public List<string> RejectedReasons { get; init; } = [];
+}
+
+// ─── Commands (plan de finition, J1 § 1.3) ───────────────────────────────────
+
+/// <summary>A command the console queued for this agent.</summary>
+public sealed record AgentCommand
+{
+    /// <summary>The command id, named in the result.</summary>
+    [JsonPropertyName("id")]
+    public required string Id { get; init; }
+
+    /// <summary>suspend_process, resume_process, isolate, …</summary>
+    [JsonPropertyName("command_type")]
+    public required string CommandType { get; init; }
+
+    /// <summary>The parameters as the GRID stored them.</summary>
+    [JsonPropertyName("parameters")]
+    public Dictionary<string, JsonElement> Parameters { get; init; } = [];
+
+    /// <summary>When the console issued it.</summary>
+    [JsonPropertyName("issued_at")]
+    public DateTime IssuedAt { get; init; }
+
+    /// <summary>A string (or number, as text) parameter; null when absent.</summary>
+    public string? Text(string key) =>
+        Parameters.TryGetValue(key, out JsonElement element)
+            ? element.ValueKind switch
+            {
+                JsonValueKind.String => element.GetString(),
+                JsonValueKind.Number => element.GetRawText(),
+                _ => null,
+            }
+            : null;
+
+    /// <summary>An integer parameter; null when absent or not an integer.</summary>
+    public int? Int(string key) =>
+        Parameters.TryGetValue(key, out JsonElement element) && element.ValueKind == JsonValueKind.Number && element.TryGetInt32(out int value)
+            ? value
+            : null;
+}
+
+/// <summary>The open commands of this agent.</summary>
+public sealed record AgentCommandsResponse
+{
+    /// <summary>Oldest first.</summary>
+    [JsonPropertyName("commands")]
+    public List<AgentCommand> Commands { get; init; } = [];
+}
+
+/// <summary>What the agent did with a command: executed, or not, with a closed reason.</summary>
+public sealed record CommandResultRequest
+{
+    /// <summary>True when the command was carried out.</summary>
+    [JsonPropertyName("success")]
+    public required bool Success { get; init; }
+
+    /// <summary>Scalars only: reason, detail, state, suspension_id.</summary>
+    [JsonPropertyName("payload")]
+    public Dictionary<string, object?> Payload { get; init; } = [];
+
+    /// <summary>An executed command, with what it produced.</summary>
+    public static CommandResultRequest Executed(params (string Key, object? Value)[] payload) =>
+        new() { Success = true, Payload = payload.ToDictionary(p => p.Key, p => p.Value) };
+
+    /// <summary>A command not carried out, and why.</summary>
+    public static CommandResultRequest NotExecuted(string reason, string? detail = null) =>
+        new()
+        {
+            Success = false,
+            Payload = detail is null
+                ? new Dictionary<string, object?> { ["reason"] = reason }
+                : new Dictionary<string, object?> { ["reason"] = reason, ["detail"] = detail },
+        };
 }
