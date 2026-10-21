@@ -107,6 +107,14 @@ jobs:
           dotnet publish agent/src/RansomGuard.Agent.Service/RansomGuard.Agent.Service.csproj
           -c Release -r win-x64 --self-contained true -o publish/agent
 
+      # The double-click installer's stub (ADR-027): the GRID appends the package and the
+      # enrollment data to it on every download from the console.
+      - name: Publish the installer stub (single file, win-x64)
+        run: >
+          dotnet publish agent/src/RansomGuard.Agent.Installer/RansomGuard.Agent.Installer.csproj
+          -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -o publish/installer
+
       # The package name carries no version (install.ps1 fetches a stable name); the version is
       # the published assembly's, read here for the summary, as install.ps1 reads it on the endpoint.
       - name: Zip package
@@ -121,6 +129,9 @@ jobs:
           $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
           "$hash  $(Split-Path $zip -Leaf)" | Out-File -Encoding ascii "$zip.sha256"
           Copy-Item agent/install.ps1 packages/install.ps1
+          Copy-Item publish/installer/RansomGuard-Installer.exe packages/RansomGuard-Installer-stub.exe
+          $stubHash = (Get-FileHash packages/RansomGuard-Installer-stub.exe -Algorithm SHA256).Hash.ToLower()
+          "$stubHash  RansomGuard-Installer-stub.exe" | Out-File -Encoding ascii packages/RansomGuard-Installer-stub.exe.sha256
           Get-ChildItem packages
 
       - uses: actions/upload-artifact@v4

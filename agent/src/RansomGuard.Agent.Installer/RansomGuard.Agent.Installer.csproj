@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The double-click installer (ADR-027): a self-contained single-file host, published as the
+       "stub" by the CD. The GRID appends a payload to it (agent package, enrollment code, GRID
+       address, GRID CA certificate) and a 56-byte trailer; the stub reads its own payload at run
+       time. A single-file host locates its bundle by an offset written at publish time, so bytes
+       appended after it never disturb it: the CI proves it on the published executable.
+
+       The publish shape (win-x64, self-contained, single file, compressed) is given on the publish
+       command line (ci.yml, cd.yml), not here: the test project references this one, and a
+       self-contained executable cannot be referenced by a plain project (NETSDK1150). -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <AssemblyName>RansomGuard-Installer</AssemblyName>
+    <RootNamespace>RansomGuard.Agent.Installer</RootNamespace>
+    <!-- UAC at launch: the user answers "Yes", nothing to type (ADR-027, 2a). -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <Version>0.4.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="RansomGuard.Agent.Tests" />
+  </ItemGroup>
+
+</Project>

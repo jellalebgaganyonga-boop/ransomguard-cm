@@ -36,6 +36,7 @@
   <ItemGroup>
     <ProjectReference Include="..\RansomGuard.Agent.Core\RansomGuard.Agent.Core.csproj" />
     <ProjectReference Include="..\RansomGuard.Agent.Service\RansomGuard.Agent.Service.csproj" />
+    <ProjectReference Include="..\RansomGuard.Agent.Installer\RansomGuard.Agent.Installer.csproj" />
   </ItemGroup>
 
 </Project>

@@ -203,6 +203,37 @@ jobs:
         # they run in the nightly workflow instead.
         run: dotnet test RansomGuard.Agent.sln -c Release --no-build --filter "Category!=Stress" --logger "trx;LogFileName=agent-tests.trx"
 
+      # ADR-027, step 1: the published single-file stub still starts with a payload appended to
+      # it, and reads that payload. The bare stub says it has none (exit 2).
+      - name: Double-click installer stub reads its appended payload (ADR-027)
+        shell: pwsh
+        run: |
+          dotnet publish RansomGuard.Agent.Installer/RansomGuard.Agent.Installer.csproj -c Release -r win-x64 --self-contained true `
+            -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -o publish/installer
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          $stub = Resolve-Path publish/installer/RansomGuard-Installer.exe
+          Write-Host "stub: $((Get-Item $stub).Length) bytes"
+
+          & $stub --verify-payload; $bare = $LASTEXITCODE
+          if ($bare -ne 2) { Write-Host "::error::the bare stub must exit 2 (no payload), got $bare"; exit 1 }
+
+          New-Item -ItemType Directory -Force publish/pl | Out-Null
+          Set-Content publish/pl/a.txt ('agent package stand-in ' + ('x' * 100000))
+          Compress-Archive -Path publish/pl/a.txt -DestinationPath publish/pl/agent.zip -Force
+          $expires = (Get-Date).ToUniversalTime().AddMinutes(30).ToString('o')
+          @{ grid_base_url = 'https://grid.ci.invalid:8443'; otp = 'CIOTP12345678'; otp_expires_at = $expires; tenant_code = 'ci' } |
+            ConvertTo-Json -Compress | Set-Content publish/pl/config.json -Encoding utf8
+          & $stub --append $stub publish/pl/agent.zip publish/pl/config.json publish/pl/installer.exe
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+          $out = & publish/pl/installer.exe --verify-payload 2>&1 | Out-String
+          $code = $LASTEXITCODE
+          Write-Host $out
+          if ($code -ne 0 -or $out -notmatch 'grid\.ci\.invalid' -or $out -notmatch 'CI\*+78' -or $out -match 'CIOTP12345678') {
+            Write-Host "::error::the installer with a payload must start, print its payload with the code masked, and exit 0 (got $code)"; exit 1
+          }
+          Write-Host "::notice title=ADR-027 step 1::the published stub starts with $((Get-Item publish/pl/installer.exe).Length) bytes and reads its payload"
+
       # install.ps1 needs an elevated session: the runner has one, a developer machine may not.
       - name: Installer guard (Pester)
         shell: pwsh
