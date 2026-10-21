@@ -67,25 +67,21 @@ public sealed class UsbGuardStartupCheckTests
         _whitelist.Verify(w => w.ListActiveAsync(It.IsAny<CancellationToken>()), Times.Never());
     }
 
-    [Fact]
-    public void Strict_runs_degraded_because_blocking_is_not_implemented()
+    // V7 (plan de finition, J2 § 2.2): while the actions are missing, no mode reads active. Strict
+    // promises eject and block, Permissive promises read-only and quarantine, and none of them
+    // happens (AGT-USB-001); Audit promises alert only, and reads the same so that "active" never
+    // means "USB GUARD acts" anywhere.
+    [Theory]
+    [InlineData(UsbOperatingMode.Strict)]
+    [InlineData(UsbOperatingMode.Permissive)]
+    [InlineData(UsbOperatingMode.Audit)]
+    public void Every_mode_runs_degraded_while_the_actions_are_not_implemented(UsbOperatingMode mode)
     {
-        var (state, reason) = UsbGuardStartupCheck.RunningPosture(UsbOperatingMode.Strict);
+        var (state, reason) = UsbGuardStartupCheck.RunningPosture(mode);
 
         state.ShouldBe(ModuleState.Degraded);
         reason.ShouldBe(ModuleReasonCode.ActionsNotImplemented);
         reason.ShouldBe("actions_not_implemented");
-    }
-
-    [Theory]
-    [InlineData(UsbOperatingMode.Permissive)]
-    [InlineData(UsbOperatingMode.Audit)]
-    public void Modes_not_asked_to_block_run_active(UsbOperatingMode mode)
-    {
-        var (state, reason) = UsbGuardStartupCheck.RunningPosture(mode);
-
-        state.ShouldBe(ModuleState.Active);
-        reason.ShouldBeNull();
     }
 
     private void VerifyWarnings(Times times) =>

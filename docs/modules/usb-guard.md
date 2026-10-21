@@ -60,8 +60,11 @@ is the IRONCLAD cut.**
 
 | Mode | Posture reported in the heartbeat | Why |
 |---|---|---|
-| Audit, Permissive | `active` | Not asked to block. |
-| Strict | `degraded`, reason `actions_not_implemented` (FR « Blocage non implémenté », EN « Blocking not implemented ») | Asked to block, detects without being able to. |
+| Strict | `degraded`, reason `actions_not_implemented` (FR « Blocage non implémenté », EN « Blocking not implemented ») | Promises eject and block; neither happens. |
+| Permissive | `degraded`, reason `actions_not_implemented` | Promises read-only and quarantine; neither happens. |
+| Audit | `degraded`, reason `actions_not_implemented` | Promises alert only, and reads the same as the others (2026-10-21, V7): `active` must never mean "USB GUARD acts" in any mode while AGT-USB-001 stands. |
+
+The module reads `active` again, mode by mode, when the actions of that mode exist and are tested.
 
 ### What Strict does exactly
 
