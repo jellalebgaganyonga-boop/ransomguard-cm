@@ -1,6 +1,7 @@
 # ADR-025 — Attribution SENTINEL par ETW FileIO
 
-**Statut** : accepté, révision 3 (revue du 2026-10-16 : corrections A et B). L'implémentation suit la section 7, un commit à la fois, diff soumis avant commit.
+**Statut** : accepté, révision 4 (revue du 2026-10-21 : constats du banc 2a et 2b). L'implémentation suit la section 7.
+**Révision 4** : l'ETW apporte de la **détection**, pas seulement l'attribution (le watcher ne voit pas les écritures mappées) ; repli `etw_unavailable` ; mesure « avant » présentée en entier ; libellé du canal corrigé ; arrêt de la session de l'extérieur (`etw_session_stopped_externally`).
 **Mesures** : `agent/tools/EtwFileIoProbe`, sur un runner Windows de la CI (Windows Server 2025, 4 vCPU, administrateur), 60 s par phase.
 - Run 38805679885 : jeux de mots-clés.
 - Run 38809979940 : Flush, Process, patron 7.
@@ -31,9 +32,10 @@ La copie est synthétique et volontairement lourde (≈ 1 300 fichiers de 64 Ko 
 - Les réécritures du rédacteur : FILE_OVERWRITE_IF (202).
 - TraceEvent expose la disposition NT dans `CreateDisposition`, avec des noms Win32 mais les valeurs NT : CREATE_ALWAYS = 5 = FILE_OVERWRITE_IF, OPEN_EXISTING = 1 = FILE_OPEN. `PayloadByName("CreateOptions")` est déjà masqué : son octet haut vaut 0.
 
-**Patron 7** (vue mappée, avec flush explicite)
-- Le Write porte le PID du rédacteur, 101 sur 101 ; le lecteur, 0.
-- Le `FileSystemWatcher` ne voit **aucune** réécriture mappée, flushée ou non (banc : 40 sur 40 sans événement en 3 s). Seul l'ETW peut la détecter.
+**Patron 7** (vue mappée)
+- Avec flush explicite, le Write porte le PID du rédacteur, 101 sur 101 ; le lecteur, 0.
+- **Le `FileSystemWatcher` ne voit aucune réécriture mappée**, flushée ou non (banc, 2026-10-16 et 2026-10-21 : 40 sur 40 sans événement en 3 s). Aujourd'hui, un rançongiciel qui chiffre par fichier mappé **n'est pas détecté par le watcher** de SENTINEL.
+- **La vérification d'intégrité périodique les attrape** : la vérification de production (`VerifyCanaryIntegrityAsync`, SHA-256 contre l'empreinte d'origine), toutes les `CheckIntervalMs` = **1 000 ms** par défaut (bornes 100 à 10 000), 7a et 7b détectés 20 sur 20 chacun, médiane 513 et 579 ms, **au plus 1 006 ms** après la libération (banc, 2026-10-21).
 
 **Nom de fichier** : 100 % des événements nommés avec DiskFileIO, et 202 sur 202 pour un handle ouvert avant la session (0 sur 409 sans DiskFileIO).
 
@@ -47,13 +49,18 @@ La copie est synthétique et volontairement lourde (≈ 1 300 fichiers de 64 Ko 
 2. **Session séparée d'EXFIL WATCH** (`RansomGuard-Sentinel-FileIO`, 64 Mo de tampons).
 3. **Filtre dans le callback, sans attente.**
    - Préfixe de dossier, puis recherche dans un ensemble immuable des chemins de canaris.
-   - Les succès partent dans un canal de 1 024 places en `DropNewest` ; les pertes sont comptées et envoyées dans le heartbeat.
+   - Seules les écritures sur un canari passent (2.4), dans un canal de 1 024 places. Plein, il **refuse l'enregistrement qui arrive** (mode `Wait` + `TryWrite`, qui ne bloque pas et dit le refus) : les premiers enregistrements sont gardés, le premier écrivain étant celui qu'il faut attribuer, et chaque refus est compté pour le heartbeat. (La révision 3 disait `DropNewest` : en .NET, ce mode évince l'enregistrement le plus récent **déjà en file**, ce qui n'est pas le comportement voulu.)
 4. **Seules les écritures attribuent (correction A).** Un PID faux est pire qu'un PID absent.
    - **Opérations qui attribuent** : Write ; SetInfo, pour les seules classes renommage (`FileRenameInformation`, `…Ex`), disposition de suppression (`FileDispositionInformation`, `…Ex`) et fin de fichier (`FileEndOfFileInformation`) ; Delete ; Rename.
    - **Un Create n'attribue que si sa disposition est une écriture** : FILE_SUPERSEDE (0), FILE_OVERWRITE (4), FILE_OVERWRITE_IF (5), ou FILE_CREATE (2) sur un canari recréé. **FILE_OPEN (1) et FILE_OPEN_IF (3) n'attribuent jamais.**
    - Jamais le PID 0, ni le PID 4, ni **le PID de l'agent**.
    - **`ambiguous` ne compte que les PID qui écrivent.** Un lecteur dans la fenêtre ne rend pas l'attribution ambiguë.
 5. **Le watcher reste**, comme déclencheur parallèle, comme repli et comme contrôle. Un canari vu par le watcher sans événement ETW dans les 2 s compte comme une perte ETW. L'inverse est normal : c'est le patron 7.
+6. **En mode ETW, une écriture de canari est une détection, même au PID 4** (écriture différée, page mappée) : elle n'a simplement pas d'attribution (`unavailable`, raison `system_pid`). L'ETW n'apporte pas seulement le PID : il apporte la détection des écritures que le watcher ne voit pas.
+7. **En repli** (pas de droits, pas de slot, session arrêtée ou coupée pour charge), SENTINEL perd l'attribution **et** la détection immédiate des écritures mappées : elles ne reposent plus que sur la vérification d'intégrité, en un cycle de 1 000 ms au plus (mesuré). L'état le dit :
+   - **`degraded / etw_unavailable`** pour tout repli, avec la cause précise dans le log (`etw_admin_rights_missing`, `etw_no_session_slot`, `etw_start_failed`, `etw_processing_failed`, `etw_suspended_load`). Il remplace `attribution_unavailable` et `attribution_suspended_load`, qui ne disaient que la moitié.
+   - Libellé FR proposé : « Surveillance renforcée indisponible : pas d'attribution, et les écritures par fichier mappé ne sont détectées qu'à la vérification périodique (1 s) ». EN : « Enhanced monitoring unavailable: no attribution, and memory-mapped writes are only caught by the periodic check (1 s) ». Écart au libellé suggéré par la revue (« certaines écritures non détectées ») : la mesure montre qu'elles sont détectées, en différé ; le libellé dit le délai plutôt que l'absence.
+   - **`degraded / etw_session_stopped_externally`** reste distinct (log Critical, audit `EtwSessionStoppedExternally`, redémarrage à 30 s, 2 min, puis 10 min) : c'est un signal d'altération (AGT-ATP-001), pas une panne. Code ajouté au GRID et traduit au commit 1 ; publié comme état de SENTINEL au commit 7, quand SENTINEL dépend de l'ETW — le publier avant serait faux, le watcher détectant alors seul.
 
 ## 3. Détection et attribution : le contrat (A.1 révisé)
 
@@ -100,7 +107,7 @@ L'alerte part au **premier** signal, watcher ou ETW. L'ETW complète l'attributi
 - Avant d'agir, le moteur relit `GetProcessTimes` et refuse d'agir si l'heure diffère de plus de 50 ms ; il journalise pourquoi.
 - Test prévu.
 
-**4c. Slots de session (R12).** Faute de slot : repli watcher, `degraded / attribution_unavailable`, raison `etw_no_session_slot` dans le log avec la liste des sessions actives. Ce cas est ajouté au test R12.
+**4c. Slots de session (R12).** Faute de slot : repli watcher, `degraded / etw_unavailable`, raison `etw_no_session_slot` dans le log avec la liste des sessions actives. Ce cas est ajouté au test R12. Une session orpheline (agent tué) est arrêtée et recréée au démarrage, avec un Warning `etw_orphan_session_replaced` (prouvé sur une vraie session au commit 1).
 
 **4d. Écritures par mappage mémoire.**
 - Avec flush explicite : bon PID sur le Write.
@@ -116,11 +123,11 @@ EtwFileIoProbe est rejoué sur un **vieux poste réel**, avec Bitdefender actif,
 ## 6. Mesure du résultat
 
 AttributionBench est rejoué **à l'identique** (`-- 20 10`), avec ses contrôles 1 et 2 et le **lecteur concurrent** dans tous les patrons.
-- **Avant**, avec le lecteur (2026-10-16) :
-  - patrons 3, 5 et 6 à **0/60** ;
-  - patron 1 à 20/20 (les ouvertures du lecteur font arriver l'événement du watcher 5 s avant la libération du handle) ;
-  - patrons 7a et 7b sans événement ;
-  - **0 PID faux**, jamais le lecteur.
+- **Avant**, avec le lecteur (2026-10-16, confirmé le 2026-10-21) :
+  - **sur les huit patrons : 20/160**. Les 20 viennent tous du patron 1 : les ouvertures du lecteur font mettre à jour l'entrée de répertoire NTFS pendant que le rédacteur tient le fichier, l'événement du watcher arrive environ 5 s avant la libération, et le Restart Manager voit encore le rédacteur ;
+  - **le chiffre qui compte : 0/60 sur les patrons 3, 5 et 6**, ceux d'un rançongiciel ;
+  - **0 PID faux**, jamais le lecteur ;
+  - patrons 7a et 7b : aucun événement du watcher (détectés par la vérification d'intégrité, en un cycle au plus).
 - **Après** : le même tableau. La colonne « PID faux » doit rester à **0 avec le lecteur**, patron 7 compris.
 
 ## 7. Découpage (un commit chacun, diff soumis avant commit)
@@ -131,5 +138,5 @@ AttributionBench est rejoué **à l'identique** (`-- 20 10`), avec ses contrôle
 4. **Attribution** : règles de la section 2.4, paire (PID, heure de création), complément par la file persistante ; Restart Manager retiré de SENTINEL, `out`/`ref` corrigé.
 5. **GRID et console** : l'endpoint cloisonné (section 3), la mise à jour idempotente, l'audit, le test d'isolation entre tenants, l'affichage.
 6. **Repli et plafond** : watcher seul ; plafond CPU inactif pendant un incident ; tampons agrandis avant de couper.
-7. **État et heartbeat** : `attribution_unavailable`, `attribution_suspended_load`, `etw_events_lost`, `etw_cpu_percent`.
+7. **État et heartbeat** : `etw_unavailable` (cause précise dans le log), `etw_session_stopped_externally`, `etw_events_lost`, `etw_cpu_percent` ; libellés FR/EN.
 8. **Mesure** : AttributionBench en mode ETW, avec le lecteur et le patron 7, et le tableau avant/après.
