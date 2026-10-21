@@ -96,6 +96,12 @@ public static class ModuleReasonCode
     /// Console labels: FR « Vérification d'intégrité en échec », EN « Integrity check failing ».
     /// </summary>
     public const string IntegrityCheckFailing = "integrity_check_failing";
+
+    /// <summary>
+    /// EXFIL WATCH learns the network for its first days (EXFIL-REG-001): VolumeAnomaly is mute,
+    /// the other rules fire. Console labels: FR « en phase d'apprentissage », EN « learning phase ».
+    /// </summary>
+    public const string LearningPhase = "learning_phase";
 }
 
 /// <summary>One module's current state.</summary>

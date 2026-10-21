@@ -31,6 +31,8 @@ public sealed class ExfilWatchMonitor : BackgroundService
     private readonly IModuleFailureReporter _failureReporter;
     private readonly IModuleFaultInjector _faultInjector;
     private readonly Func<bool> _isElevated;
+    private IDataVolumeTracker? _tracker;
+    private bool _wasLearning;
     private readonly Channel<NetworkEvent> _eventChannel;
     private long _totalEventsProcessed;
 
@@ -109,6 +111,23 @@ public sealed class ExfilWatchMonitor : BackgroundService
                 return;
             }
 
+            // The chain is proven before "active" (EXFIL-REG-001): every service a network event
+            // needs is resolved once here. A missing one is inactive / init_failed with a Critical
+            // log -- never a module that reads active while it skips every rule.
+            try
+            {
+                await using AsyncServiceScope probe = _scopeFactory.CreateAsyncScope();
+                _tracker = probe.ServiceProvider.GetRequiredService<IDataVolumeTracker>();
+                _ = probe.ServiceProvider.GetRequiredService<ExfilRuleEngine>();
+                _ = probe.ServiceProvider.GetRequiredService<IExfilActionEngine>();
+            }
+            catch (InvalidOperationException ex)
+            {
+                _logger.LogCritical(ex, "EXFIL WATCH not started: its detection chain is not wired (init_failed) -- protection from this module is down");
+                _moduleState.Publish(ModuleCode.ExfilWatch, ModuleState.Inactive, ModuleReasonCode.InitFailed);
+                return;
+            }
+
             _logger.LogInformation("EXFIL WATCH monitor starting (learning phase: {Days} days)",
                 _config.ExfilWatch.LearningPhaseDays);
 
@@ -118,8 +137,7 @@ public sealed class ExfilWatchMonitor : BackgroundService
 
             consumerTask = ConsumeEventsAsync(moduleToken);
 
-            _logger.LogInformation("EXFIL WATCH monitor active");
-            _moduleState.Publish(ModuleCode.ExfilWatch, ModuleState.Active);
+            PublishPosture(starting: true);
             reachedActive = true;
 
             await ModuleTaskObserver.ObserveUntilStoppedAsync(
@@ -153,7 +171,58 @@ public sealed class ExfilWatchMonitor : BackgroundService
             _logger.LogInformation(
                 "EXFIL WATCH heartbeat | Events processed: {Processed} | ETW captured: {Captured}",
                 TotalEventsProcessed, _networkMonitor.TotalEventsCaptured);
+            PublishPosture(); // the learning phase ends without an event: re-read every minute
         }
+    }
+
+    /// <summary>The response to one finding (alert, throttle, block by severity), in its own scope.</summary>
+    private async Task RespondAsync(ExfilFinding finding, CancellationToken ct)
+    {
+        try
+        {
+            await using AsyncServiceScope scope = _scopeFactory.CreateAsyncScope();
+            var actionEngine = scope.ServiceProvider.GetRequiredService<IExfilActionEngine>();
+            await actionEngine.ExecuteAsync(finding, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // Module stopping.
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "EXFIL WATCH: response to {Rule} finding on {Process}:{PID} failed",
+                finding.RuleName, finding.ProcessName, finding.ProcessId);
+        }
+    }
+
+    /// <summary>
+    /// Active, or degraded / learning_phase while the tracker learns (EXFIL-REG-001): VolumeAnomaly
+    /// is mute until the baselines exist; DnsTunneling, AfterHoursExfil and LolbasExfil fire. The
+    /// phase is counted from the tracker's creation, in memory: a restart begins it again (AGT-EXF-001).
+    /// </summary>
+    private void PublishPosture(bool starting = false)
+    {
+        if (_tracker?.IsLearningPhase == true)
+        {
+            if (starting)
+            {
+                _logger.LogWarning(
+                    "EXFIL WATCH in learning phase for {Days} days from this start (a restart begins it again, AGT-EXF-001): VolumeAnomaly is mute until the baselines exist; DnsTunneling, AfterHoursExfil and LolbasExfil fire",
+                    _config.ExfilWatch!.LearningPhaseDays);
+            }
+
+            _wasLearning = true;
+            _moduleState.Publish(ModuleCode.ExfilWatch, ModuleState.Degraded, ModuleReasonCode.LearningPhase);
+            return;
+        }
+
+        if (starting || _wasLearning)
+        {
+            _logger.LogInformation("EXFIL WATCH monitor active: every registered rule fires");
+        }
+
+        _wasLearning = false;
+        _moduleState.Publish(ModuleCode.ExfilWatch, ModuleState.Active);
     }
 
     /// <summary>Stops every source and task of the module; best effort, never throws.</summary>
@@ -210,32 +279,25 @@ public sealed class ExfilWatchMonitor : BackgroundService
                 Interlocked.Increment(ref _totalEventsProcessed);
 
                 await using var scope = _scopeFactory.CreateAsyncScope();
-                var tracker = scope.ServiceProvider.GetService<IDataVolumeTracker>();
+                // Required, never optional (EXFIL-REG-001): a missing service stops the module at
+                // start; here it would be a bug, and a bug must throw, not skip the rules.
+                IDataVolumeTracker tracker = scope.ServiceProvider.GetRequiredService<IDataVolumeTracker>();
+                tracker.RecordEvent(evt);
 
-                // Feed event to data volume tracker
-                tracker?.RecordEvent(evt);
-
-                // Evaluate detection rules and dispatch actions for findings >= Medium
-                if (tracker is not null)
+                var ruleEngine = scope.ServiceProvider.GetRequiredService<ExfilRuleEngine>();
+                var findings = ruleEngine.Evaluate(evt, tracker, _config.ExfilWatch!);
+                foreach (var finding in findings.Where(f => f.Severity >= ExfilSeverity.Medium))
                 {
-                    var ruleEngine = scope.ServiceProvider.GetService<ExfilRuleEngine>();
-                    var findings = ruleEngine?.Evaluate(evt, tracker, _config.ExfilWatch!);
+                    // Forward to GRID first: the queue persists it itself.
+                    _alertQueue?.TryEnqueue(AlertMapper.FromExfilFinding(finding));
 
-                    if (findings is { Count: > 0 })
-                    {
-                        var actionEngine = scope.ServiceProvider.GetService<IExfilActionEngine>();
-                        if (actionEngine is not null)
-                        {
-                            foreach (var finding in findings.Where(f => f.Severity >= ExfilSeverity.Medium))
-                            {
-                                // Fire-and-forget for non-blocking pipeline
-                                _ = Task.Run(() => actionEngine.ExecuteAsync(finding, ct), ct);
-
-                                // Forward to GRID in parallel
-                                _alertQueue?.TryEnqueue(AlertMapper.FromExfilFinding(finding));
-                            }
-                        }
-                    }
+                    // The response runs in the background, in a scope of its own that lives as long
+                    // as it does. It used to be resolved from this event's scope and fired with
+                    // Task.Run: the scope was disposed at the end of this iteration, the audit
+                    // repository with it, and the actions (throttle, block) died on an
+                    // ObjectDisposedException before reaching the firewall -- found by
+                    // ExfilWatchProductionWiringTests (EXFIL-REG-001, run 39616563004).
+                    _ = RespondAsync(finding, ct);
                 }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { break; }

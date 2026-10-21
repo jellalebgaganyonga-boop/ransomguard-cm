@@ -106,6 +106,12 @@ def test_sentinel_degraded_etw_session_stopped_externally_is_partial_and_named()
     assert "etw_session_stopped_externally" in REASON_CODES
 
 
+def test_exfil_watch_degraded_learning_phase_is_partial_not_red() -> None:
+    # Three of its four rules fire during the learning phase: partial, never unprotected.
+    verdict = _verdict(_posture(_modules(EXFIL_WATCH=ModuleStatus("degraded", "learning_phase"))))
+    assert (verdict.state, verdict.reason_codes) == (PARTIAL, ["EXFIL_WATCH:degraded:learning_phase"])
+
+
 def test_sentinel_degraded_integrity_check_failing_is_partial_not_red() -> None:
     verdict = _verdict(_posture(_modules(SENTINEL=ModuleStatus("degraded", "integrity_check_failing"))))
     assert (verdict.state, verdict.reason_codes) == (PARTIAL, ["SENTINEL:degraded:integrity_check_failing"])

@@ -483,6 +483,7 @@
       "starting": "starting",
       "no_watch_directory": "no folder being watched",
       "integrity_check_failing": "integrity check failing",
+      "learning_phase": "learning phase",
       "etw_session_stopped_externally": "kernel monitoring session stopped from outside",
       "not_reported": "not reported by the agent"
     },

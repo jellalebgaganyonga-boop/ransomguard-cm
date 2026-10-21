@@ -177,7 +177,7 @@ describe('every code the GRID can send has a French and an English label', () =>
   const reasons = [
     'admin_rights_missing', 'disabled_by_config', 'init_failed', 'stopped_unexpectedly', 'not_implemented',
     'attribution_unreliable', 'actions_not_implemented', 'starting', 'no_watch_directory',
-    'integrity_check_failing', 'not_reported', 'etw_session_stopped_externally',
+    'integrity_check_failing', 'not_reported', 'etw_session_stopped_externally', 'learning_phase',
   ];
   const verdictReasons = [
     'never_connected', 'agent_update_required', 'starting', 'no_detector_active', 'transmission_blocked',

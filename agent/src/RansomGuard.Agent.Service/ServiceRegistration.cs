@@ -190,6 +190,14 @@ public static class ServiceRegistration
         // EXFIL WATCH — Detection rules (DI-dependent)
         services.AddSingleton<IExfilDetectionRule, LolbasExfilRule>();
 
+        // EXFIL WATCH — Data volume tracker: a Singleton on purpose. The monitor opens a scope per
+        // network event; Scoped, every event would get an empty tracker and no sliding window or
+        // baseline would ever fill. Until 2026-10-21 it was registered nowhere: the consumer
+        // resolved null and skipped every rule while the module read active (EXFIL-REG-001).
+        services.AddSingleton<IDataVolumeTracker>(sp => new DataVolumeTracker(
+            sp.GetRequiredService<ILogger<DataVolumeTracker>>(),
+            (sp.GetRequiredService<IOptionsMonitor<AgentConfiguration>>().CurrentValue.ExfilWatch ?? new ExfilWatchOptions()).LearningPhaseDays));
+
         // EXFIL WATCH — Rule engine
         services.AddScoped<ExfilRuleEngine>();
 

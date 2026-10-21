@@ -58,6 +58,8 @@ REASON_CODES: frozenset[str] = frozenset({
     "not_reported",  # server side: a v2 heartbeat without this detector
     # SENTINEL's ETW session ended without the agent stopping it (ADR-025): stopped from outside.
     "etw_session_stopped_externally",
+    # EXFIL WATCH learning its baselines: VolumeAnomaly mute, the other rules fire (EXFIL-REG-001).
+    "learning_phase",
 })
 
 # Bound of last_upload_ok_age_seconds on the wire: ten years, far beyond any real age.
