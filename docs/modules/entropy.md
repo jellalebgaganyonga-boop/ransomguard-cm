@@ -66,6 +66,12 @@ At startup, ENTROPY scans all files in configured watch directories:
 2. **Extension spoofing**: Attacker renaming .docx to .zip bypasses Rule 4 (magic byte detection planned)
 3. **Slow ransomware**: Encryption over days may cause baseline drift
 4. **Pre-compressed files**: Already-compressed files show high baseline, delta detection still works
+5. **One de-duplication filter per watcher** (V5, 2026-10-21): the 500 ms filter that folds a burst of
+   events on one file is ENTROPY's own. Until then one instance was shared with the Worker (and SENTINEL,
+   USB GUARD): within the window, the first watcher to handle a write takes the slot and the others do not
+   get it. Measured honestly: the identity test is red on the old code (one instance); the loss itself was
+   not observed in CI (`FileEventDeduplicationPerConsumerTests`: 20 writes with both watchers on the
+   folder, 20/20 analysed on the old code, run 39652508279). Possible by construction, not seen.
 
 ## Academic References
 

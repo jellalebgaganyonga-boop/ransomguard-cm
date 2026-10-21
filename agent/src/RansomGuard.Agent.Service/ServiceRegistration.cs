@@ -125,9 +125,14 @@ public static class ServiceRegistration
         services.AddDbContext<AgentDbContext>(options =>
             options.UseSqlite(encryptedConnectionString).AddInterceptors(new AgentConnectionSettings()));
 
-        // Deduplicator (DetectionOptions default 500 ms, validated range 50-5000)
-        services.AddSingleton<IFileEventDeduplicator>(
-            new FileEventDeduplicator(agentConfig.Detection.DeduplicationWindowMs));
+        // Deduplicator (DetectionOptions default 500 ms, validated range 50-5000): one per consumer
+        // (V5). Transient on purpose: the Worker, SENTINEL, ENTROPY and USB GUARD each watch with
+        // their own filter. Until 2026-10-21 one Singleton served them all: within the window, the first
+        // watcher to handle a write takes the slot and the others do not get it. Possible by construction;
+        // the loss was not observed in CI (FileEventDeduplicationPerConsumerTests, 20/20 on the old code).
+        // A filter only folds the bursts of ONE watcher.
+        services.AddTransient<IFileEventDeduplicator>(
+            _ => new FileEventDeduplicator(agentConfig.Detection.DeduplicationWindowMs));
 
         // Ed25519 audit signer
         var auditLogSigner = new AuditLogSigner(keyDir,
