@@ -386,6 +386,10 @@ jobs:
           # ASCII only in the match: the captured output goes through the runner's console code page,
           # and the accented "enrôlé" of the message did not survive it (run 39659654794).
           if ($code -ne 4 -or $out -notmatch "120 s") { Write-Host "::error::ADR-027: expected exit 4 with the 'not enrolled after 120 s' message (GRID unreachable), got $code"; exit 1 }
+          # The runner ends a pwsh step with `exit $LASTEXITCODE`, still the installer's 4 here, and
+          # `pwsh -command` reports any non-zero exit as 1 (run 39665349132: "exit code: 4", step red,
+          # no message). The checks above are the verdict of this step: say so.
+          exit 0
 
       - name: Installed, trusted, configured, watching the user's folders
         shell: pwsh
