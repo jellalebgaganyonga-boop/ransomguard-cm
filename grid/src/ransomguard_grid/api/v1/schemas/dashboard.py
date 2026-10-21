@@ -1,7 +1,7 @@
 """Pydantic schemas for dashboard endpoints."""
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -284,6 +284,40 @@ class UserItemWithRoles(BaseModel):
 
 class PaginatedUserWithRolesResponse(PaginatedResponse):
     items: list[UserItemWithRoles]
+
+
+class UpdateMeRequest(BaseModel):
+    """What a user may change on their own profile (Settings > Profile)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    full_name: str = Field(min_length=1, max_length=200)
+
+    @field_validator("full_name")
+    @classmethod
+    def _not_blank(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("full_name must not be blank")
+        return stripped
+
+
+class UpdatePreferencesRequest(BaseModel):
+    """Settings > Language: kept on the GRID, applied by the console at sign-in."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    language: Literal["en", "fr"]
+    timezone: str | None = Field(default=None, max_length=64)
+
+
+class ChangePasswordRequest(BaseModel):
+    """Settings > Security: the current password proves it is the user, the new one replaces it."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    current_password: str = Field(min_length=1, max_length=128)
+    new_password: str = Field(min_length=8, max_length=128)
 
 
 class ProvisionAgentResponse(BaseModel):

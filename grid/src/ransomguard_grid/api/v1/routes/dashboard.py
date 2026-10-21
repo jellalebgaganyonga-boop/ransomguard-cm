@@ -1,10 +1,10 @@
 """Dashboard REST API endpoints — JWT authenticated, RBAC enforced, tenant-isolated."""
 
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import ColumnElement, and_, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,6 +20,7 @@ from ransomguard_grid.api.v1.schemas.dashboard import (
     AlertItem,
     AlertResponseItem,
     AuditLogItem,
+    ChangePasswordRequest,
     CommandItem,
     CreateUserRequest,
     IssueCommandRequest,
@@ -34,7 +35,9 @@ from ransomguard_grid.api.v1.schemas.dashboard import (
     PaginatedUserWithRolesResponse,
     ProvisionAgentResponse,
     UpdateAlertStatusRequest,
+    UpdateMeRequest,
     UpdateNotificationPreferenceRequest,
+    UpdatePreferencesRequest,
     UpdateUserRolesRequest,
     UserActionLogItem,
     UserItem,
@@ -44,7 +47,7 @@ from ransomguard_grid.api.v1.schemas.dashboard import (
 from ransomguard_grid.core.alert_modules import module_for
 from ransomguard_grid.core.alert_transitions import ALLOWED_TRANSITIONS, is_allowed
 from ransomguard_grid.core.config import get_settings
-from ransomguard_grid.core.security import hash_password
+from ransomguard_grid.core.security import hash_password, verify_password
 from ransomguard_grid.core.session_store import SessionStore, SessionStoreUnavailableError, get_session_store
 from ransomguard_grid.db.models.agent import Agent
 from ransomguard_grid.db.models.alerts import Alert, AlertDetail, AlertStatusChange
@@ -105,8 +108,8 @@ async def get_me(
     role_names = await role_repo.get_user_role_names(user.id)
 
     preferences = UserPreferences(
-        language=getattr(user, "preferred_language", "fr") or "fr",
-        timezone=getattr(user, "preferred_timezone", "Africa/Douala") or "Africa/Douala",
+        language=_stored_language(user),
+        timezone=user.preferred_timezone or "Africa/Douala",
     )
 
     return MeResponse(
@@ -123,6 +126,78 @@ async def get_me(
         last_login_at=user.last_login_at,
         preferences=preferences,
     )
+
+
+def _stored_language(user: User) -> Literal["en", "fr"] | None:
+    return "fr" if user.preferred_language == "fr" else "en" if user.preferred_language == "en" else None
+
+
+async def _fresh_user(current_user: User, db: AsyncSession) -> User:
+    """The user as stored now (the JWT may be minutes old), active, in an active tenant."""
+    user = (await db.execute(
+        select(User).where(User.id == current_user.id).options(selectinload(User.tenant))
+    )).scalar_one_or_none()
+    if user is None:
+        raise HTTPException(status_code=401, detail="Utilisateur introuvable", headers={"WWW-Authenticate": "Bearer"})
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail="Compte utilisateur désactivé")
+    if user.tenant is None or user.tenant.status != "active":
+        raise HTTPException(status_code=403, detail="Tenant inactif ou suspendu")
+    return user
+
+
+@router.patch("/me", response_model=MeResponse)
+async def update_me(
+    body: UpdateMeRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> MeResponse:
+    """Change one's own display name (Settings > Profile). Any role; journalised."""
+    user = await _fresh_user(current_user, db)
+    previous = user.full_name
+    user.full_name = body.full_name
+    await _log_user_action(db, user=user, action_type="profile_updated", target_type="user", target_id=user.id,
+                           details={"full_name": body.full_name, "previous": previous})
+    await db.flush()
+    return await get_me(current_user=user, db=db)
+
+
+@router.patch("/me/preferences", response_model=UserPreferences)
+async def update_my_preferences(
+    body: UpdatePreferencesRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> UserPreferences:
+    """Settings > Language (and timezone): kept on the GRID, read back by /me at sign-in."""
+    user = await _fresh_user(current_user, db)
+    user.preferred_language = body.language
+    if body.timezone is not None:
+        user.preferred_timezone = body.timezone
+    await _log_user_action(db, user=user, action_type="preferences_updated", target_type="user", target_id=user.id,
+                           details={"language": body.language, "timezone": body.timezone})
+    await db.flush()
+    return UserPreferences(language=_stored_language(user), timezone=user.preferred_timezone or "Africa/Douala")
+
+
+@router.post("/me/change-password", status_code=204)
+async def change_my_password(
+    body: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """Settings > Security. The current password proves it is the user (403 otherwise); the new
+    one must differ. Journalised without any password."""
+    user = await _fresh_user(current_user, db)
+    if not verify_password(body.current_password, user.hashed_password):
+        await _log_user_action(db, user=user, action_type="password_change_refused", target_type="user", target_id=user.id)
+        await db.commit()  # the 403 that follows must not roll the evidence back
+        raise HTTPException(status_code=403, detail="Mot de passe actuel incorrect")
+    if body.new_password == body.current_password:
+        raise HTTPException(status_code=422, detail="Le nouveau mot de passe doit être différent de l'actuel")
+    user.hashed_password = hash_password(body.new_password)
+    await _log_user_action(db, user=user, action_type="password_changed", target_type="user", target_id=user.id)
+    await db.flush()
+    return Response(status_code=204)
 
 
 # --- ALERTS ---

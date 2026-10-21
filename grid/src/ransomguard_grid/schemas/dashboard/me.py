@@ -45,9 +45,11 @@ class UserPreferences(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    language: Literal["fr", "en"] = Field(
-        default="fr",
-        description="Preferred UI language. Defaults to French per product spec.",
+    # Null = never chosen: the console then follows its own default (English since 2026-10-21)
+    # and the browser's language; a value is what the user chose in Settings.
+    language: Literal["fr", "en"] | None = Field(
+        default=None,
+        description="Preferred UI language chosen in Settings; null until chosen.",
     )
     timezone: str = Field(
         default="Africa/Douala",
