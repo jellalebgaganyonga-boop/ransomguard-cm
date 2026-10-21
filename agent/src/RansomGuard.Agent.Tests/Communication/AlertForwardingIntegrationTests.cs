@@ -184,7 +184,7 @@ public sealed class AlertForwardingIntegrationTests : IDisposable
         });
 
         _service.TryEnqueue(request);
-        await Task.Delay(2000, cts.Token);
+        await WaitForPendingUploadsAsync(1, cts.Token);
 
         await StopServiceAsync(cts);
         await IgnoreCancellation(serviceTask);
@@ -242,7 +242,7 @@ public sealed class AlertForwardingIntegrationTests : IDisposable
 
         _service.TryEnqueue(request);
         _service.TryEnqueueAttribution(request.ClientMessageId, new AttributionComplementRequest { State = "unavailable", Reason = "system_pid" });
-        await Task.Delay(2000, cts.Token);
+        await WaitForPendingUploadsAsync(2, cts.Token);
 
         await StopServiceAsync(cts);
         await IgnoreCancellation(serviceTask);
@@ -311,7 +311,7 @@ public sealed class AlertForwardingIntegrationTests : IDisposable
         });
 
         _service.TryEnqueue(request);
-        await Task.Delay(2000, cts.Token);
+        await WaitForPendingUploadsAsync(1, cts.Token);
 
         await StopServiceAsync(cts);
         await IgnoreCancellation(serviceTask);
@@ -435,6 +435,23 @@ public sealed class AlertForwardingIntegrationTests : IDisposable
     {
         await cts.CancelAsync();
         await Task.Delay(100); // Let cleanup finish
+    }
+
+    /// <summary>
+    /// Polls the retry table until <paramref name="expected"/> rows exist (8 s at most). A fixed
+    /// 2 s delay used to stand here: on a loaded runner the service had not persisted the row yet
+    /// when the test stopped it, and the assertion found nothing (one red run on 2026-10-21).
+    /// </summary>
+    private async Task WaitForPendingUploadsAsync(int expected, CancellationToken ct)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(8);
+        while (DateTime.UtcNow < deadline && !ct.IsCancellationRequested)
+        {
+            using var scope = _serviceProvider.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AgentDbContext>();
+            if (await db.PendingAlertUploads.CountAsync(ct) >= expected) return;
+            await Task.Delay(50, ct);
+        }
     }
 
     private async Task WaitForAlertsAsync(int expected, CancellationToken ct)
