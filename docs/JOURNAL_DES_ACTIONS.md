@@ -307,13 +307,32 @@ Le scénario 4 utilise l'injection de panne `7f741d7`, réservée à l'environne
 | 1 | `EtwFileIoSession` : session dédiée de 64 Mo, flush toutes les 100 ms ; raisons d'indisponibilité ; arrêt de l'extérieur détecté (log Critical, audit, redémarrage à 30 s, 2 min, puis toutes les 10 min) ; session orpheline recréée | `2efc548` | 14 sur traces simulées + 2 sur une vraie session noyau ; l'orpheline est aussi recréée par le vrai service d'`agent-full` après un kill |
 | 2 | `EtwCanaryFilter` : ne laisse passer que les écritures sur les canaris ; canal de 1 024 places, les pertes sont comptées | `49ae90b` | 100 000 refus sans attente |
 | 3 | `CanaryCorrelator` : watcher et ETW ne font qu'une détection par opération, fenêtre de 2 s ; branché dans `SentinelMonitor` (`Sentinel:EtwEnabled`) | `ede6e0f` | Corrélateur ; SENTINEL avec une trace simulée |
-| 4 à 8 | Attribution, endpoint GRID, repli, état, mesure « après » | — | — |
+| 4 | `CanaryAttributor` : 1,5 s après le premier signal, un seul écrivain → `resolved` (PID, heure de création, nom, image) ; plusieurs → `ambiguous` ; aucun → `unavailable` avec une raison fermée (`no_write_event`, `system_pid`, `pid_reused`, `process_exited`, `etw_unavailable`) ; complément envoyé derrière l'alerte (`PendingAlertUpload.Kind`) ; Restart Manager retiré | `9de3762` | 13 attributeur, 3 file, 4 SENTINEL, 1 heartbeat |
+| 5 | GRID : `POST /agents/{id}/alerts/{client_message_id}/attribution` cloisonné (403 / 404 / corps borné / idempotent) ; console « Qui l'a fait ? » sur la fiche d'alerte | `48ab1df` | 21 GRID, 18 console, E2E |
+| 6 à 8 | Repli, état, mesure « après » | — | **En dette, après la démo** (décision du 2026-10-21). |
 
 **Pendant la même période :** `3b830a4` met à jour `follow-redirects` en 1.16.1, à cause de deux avis « high » (GHSA-q3jh-wrc6-jgq8, GHSA-8r9p-f939-6h3c).
 
 #### LOT 5 — moteurs d'action A1 à A3
 
-Pas commencé au 2026-10-21.
+Commencé le 2026-10-21 par le plan de finition en 4 jours (ci-dessous) : A1 (suspendre le processus qui a écrit un canari) est fait ; A2 et A3 restent ouverts.
+
+#### Plan de finition en 4 jours (2026-10-21 → en cours)
+
+**Règle du plan :** test rouge d'abord, correction, vert, mutation ; un commit poussé à la fois ; CI et `agent-full` verts avant la fusion ; le lead relit les diffs sensibles.
+
+| Quoi | SHA | Test rouge (run) | Preuve |
+|---|---|---|---|
+| **AGT-PATH-001** — les canaris vont chez les vrais utilisateurs : `WatchedPathPolicy` refuse tout profil système ou de service (jamais surveillé, jamais créé) ; `%EACHUSERPROFILE%` énumère `HKLM\…\ProfileList` (comptes `S-1-5-21-*`), suit les *User Shell Folders* si la ruche est chargée, Warning sinon | `29efb2a` | 39588015385 : 9 canaris dans `systemprofile`, 0 chez l'utilisateur | job `agent-full` « installed by install.ps1 » : 3 canaris Bureau, 3 Documents, 0 système (39608980830) |
+| **ADR-026** — SENTINEL suspend le processus qui a écrit un canari : `NtSuspendProcess` sur attribution `resolved` seulement, paire (PID, heure de création) relue à 50 ms, jamais l'agent ni PID 0/4 ; rien ne reprend seul (escalade `SentinelProcessSuspendedNoDecision`) ; rafale sans attribution → `SentinelIsolationRecommended` | `db22eec` | 39611755109 | service installé, ETW réel : `cmd.exe` PID 1272 écrit un canari, tous ses threads suspendus (39619250972) |
+| **Console « Suspendre / Reprendre »** — commandes lues et exécutées par l'agent (`GET /agents/{id}/commands`, `POST …/result`), l'alerte décide (PID pris sur son attribution), statut réel : envoyée → reçue → exécutée / non exécutée + raison ; bouton « Isoler » retiré (il ne faisait rien) | `7bce4ca` | — | 8 tests GRID, 9 vue, 3 E2E |
+| **EXFIL-REG-001** — `DataVolumeTracker` enregistré (Singleton), chaîne prouvée avant `active` (`init_failed` sinon), réponse sur un scope vivant, `degraded / learning_phase` | `f6d114c` | 39584961535 : 2 échecs sur 809 | 39619392396 |
+| **V7** — USB GUARD `degraded / actions_not_implemented` dans les trois modes | `fe34ed3` | 39618497195 | 39619302026 |
+| **V4** — un canari modifié ou renommé reste surveillé (contenu remis, empreinte reprise) | prêt (`review/v4-canary-restore`) | 39651837577 : 3 rouges | fusion à venir |
+| **V5** — un filtre anti-doublon par consommateur (Transient) ; la perte d'écritures n'a **pas** été observée en CI (20/20 sur l'ancien code) | prêt (`review/v5-dedup-per-consumer`) | 39652508279 : test d'identité rouge | fusion à venir |
+| **ADR-027** — installeur à double-clic (plan approuvé, 5 étapes) | doc | — | — |
+
+**Défauts trouvés en plus, corrigés dans ces commits :** la réponse EXFIL WATCH mourait sur un scope libéré (bridage et blocage pare-feu n'arrivaient jamais) ; le moteur de réponse suspendait le `pwsh` de l'étape de rafale de la CI ; `install.ps1` sous `pwsh` 7 ne peut pas télécharger depuis un GRID local (callback TLS) ; les compléments d'attribution comptaient dans `pending_alerts`.
 
 ---
 
@@ -323,11 +342,11 @@ Pas commencé au 2026-10-21.
 
 | Module | Son rôle, en clair | Son état réel (2026-10-21) | Sa limite |
 |---|---|---|---|
-| **SENTINEL** | Dépose de faux dossiers médicaux (canaris). Toute modification, renommage ou suppression déclenche une alerte critique. | Actif : watcher, vérification d'intégrité toutes les secondes et, depuis `ede6e0f`, session ETW quand l'agent est administrateur. | Ne désigne pas encore le processus coupable de façon fiable (0/60 sur les patrons de rançongiciel). Sans ETW, une réécriture par fichier mappé n'est vue qu'à la vérification d'intégrité, en 1 s au plus. |
+| **SENTINEL** | Dépose de faux dossiers médicaux (canaris). Toute modification, renommage ou suppression déclenche une alerte critique. | Actif : watcher, vérification d'intégrité toutes les secondes, session ETW quand l'agent est administrateur ; depuis `db22eec`, **suspend** le processus nommé par l'ETW (paire PID + heure de création relue). | Suspension seulement quand l'ETW a vu l'écriture et qu'un seul processus l'a faite ; jamais garantie (ADR-026 § 4). Un canari modifié quitte la surveillance jusqu'à V4. |
 | **ENTROPY** | Repère les écritures dont le contenu est devenu aléatoire, signe d'un chiffrement. | Actif. | Ses signaux portent le PID 0 (AGT-ATTR-001). Faux positifs non mesurés sur l'agent complet (AGT-EN-001). |
 | **GENEALOGY** | Reconstitue l'arbre des processus pour enrichir une alerte. | Affiché `dégradé / attribution non fiable`. Ce n'est pas un moniteur : c'est un service appelé à la demande. | Dépend de l'attribution, qui n'est pas fiable aujourd'hui. Il n'entre pas dans le verdict. |
-| **USB GUARD** | Détecte les clés USB, analyse leur contenu, applique la liste blanche. | Actif en mode Permissive ; `dégradé / blocage non implémenté` en Strict. | Il ne bloque rien : lecture seule, quarantaine et éjection répondent « non implémenté » (AGT-USB-001). |
-| **EXFIL WATCH** | Surveille le réseau (ETW TCP/IP, DNS) pour repérer une fuite de données. 8 règles. | Actif si l'agent est administrateur, sinon `inactif / droits administrateur manquants`. | Ses seules réponses sont le bridage d'un processus et le blocage d'une IP par le pare-feu. |
+| **USB GUARD** | Détecte les clés USB, analyse leur contenu, applique la liste blanche. | `dégradé / blocage non implémenté` dans les trois modes (`fe34ed3`). | Il ne bloque rien : lecture seule, quarantaine et éjection répondent « non implémenté » (AGT-USB-001). Seule la coupure IRONCLAD agit. Vraies actions prévues après l'installeur. |
+| **EXFIL WATCH** | Surveille le réseau (ETW TCP/IP, DNS) pour repérer une fuite de données. 4 règles enregistrées (DnsTunneling, AfterHoursExfil, LolbasExfil, VolumeAnomaly), 4 présentes mais non branchées par choix écrit (AGT-EXF-002). | Actif si l'agent est administrateur, `dégradé / en phase d'apprentissage` les 7 premiers jours (VolumeAnomaly muette), `inactif / init_failed` si sa chaîne n'est pas branchée (`f6d114c`). | Jusqu'au 2026-10-21 il n'évaluait **aucune** règle en se disant actif (EXFIL-REG-001). La phase d'apprentissage recommence à chaque redémarrage (AGT-EXF-001). |
 | **IRONCLAD** | Coupe électriquement un port USB par un relais piloté par un Arduino. | Logiciel seul, sur un Arduino simulé ; désactivé par défaut. | Le pilotage du vrai matériel (port série) n'est pas implémenté. Aucun chemin pour rétablir un port coupé (AGT-IRC-001). |
 | **ANTI_TAMPERING** | Doit protéger l'agent contre les tentatives de le neutraliser. | `inactif / non implémenté`. Les classes existent, mais rien ne les démarre. | Exclu du verdict (AGT-ATP-001). L'arrêt externe de la session ETW est un signal à reprendre. |
 
@@ -354,11 +373,12 @@ Le verdict est calculé par la GRID (`grid/src/ransomguard_grid/services/agent_p
 | `stopped_unexpectedly` | arrêt inattendu | Le module est tombé en cours de route. |
 | `not_implemented` | non implémenté | Le module n'existe pas encore (ANTI_TAMPERING). |
 | `attribution_unreliable` | attribution non fiable | GENEALOGY : le processus désigné n'est pas fiable. |
-| `actions_not_implemented` | blocage non implémenté | USB GUARD en Strict : il détecte, mais ne bloque pas. |
+| `actions_not_implemented` | blocage non implémenté | USB GUARD, tous modes : il détecte, mais les actions promises n'existent pas. |
 | `starting` | démarrage en cours | Le module démarre. |
 | `no_watch_directory` | aucun dossier surveillé | Aucun des dossiers configurés n'existe. |
 | `integrity_check_failing` | vérification d'intégrité en échec | La vérification périodique de SENTINEL échoue en boucle. |
 | `etw_session_stopped_externally` | session de surveillance noyau arrêtée de l'extérieur | La session ETW a été coupée sans que l'agent le demande. **L'agent ne l'envoie pas encore** (prévu au commit 7 de l'ADR-025). |
+| `learning_phase` | en phase d'apprentissage | EXFIL WATCH apprend ses bases (7 jours) : VolumeAnomaly est muette, les autres règles tirent. |
 | `not_reported` | non transmis par l'agent | Code ajouté par la GRID quand un heartbeat omet un détecteur. |
 
 **Raisons du verdict** (calculées par la GRID) : `never_connected`, `agent_update_required`, `signal_lost`, `starting`, `no_detector_active`, `transmission_blocked`, `transmission_unknown`, `restart_loop`, `alerts_rejected`, `audit_write_failed`.
@@ -367,10 +387,15 @@ Le verdict est calculé par la GRID (`grid/src/ransomguard_grid/services/agent_p
 
 | Identifiant | Priorité | En clair |
 |---|---|---|
-| AGT-ATTR-001 | **Bloque le moteur d'action** | Les signaux ENTROPY ne disent pas quel processus écrit (PID 0). Sera traité par l'attribution ETW. |
+| AGT-ATTR-001 | Était bloquant | Les signaux ENTROPY ne disent pas quel processus écrit (PID 0). L'attribution SENTINEL par ETW existe depuis `9de3762` ; celle d'ENTROPY reste à faire. |
+| AGT-ISO-001 | Haute, hors des 4 jours | L'isolement réseau du poste n'existe pas ; une rafale de canaris sans attribution donne une alerte `SentinelIsolationRecommended`, rien n'est isolé. |
+| AGT-RESP-001 | Normale | Un processus suspendu que `NtResumeProcess` ne peut pas reprendre reste suspendu jusqu'au redémarrage du poste. |
+| AGT-PATH-002 | Normale | Les profils utilisateurs sont lus au démarrage ; un profil créé ensuite n'est surveillé qu'au redémarrage de l'agent. |
+| AGT-EXF-001, AGT-EXF-002 | Normale | La phase d'apprentissage d'EXFIL WATCH recommence à chaque redémarrage ; quatre règles existent sans être branchées (listes de menaces non alimentées, PID 0 d'ENTROPY). |
+| AGT-FWD-001 | Normale | Un complément d'attribution dont l'alerte a été refusée est retenté sans fin (toutes les 5 min au plus). |
 | AGT-ETW-001 | **Condition avant le pilote** | Rejouer la mesure ETW sur un vrai vieux poste d'hôpital, avec Bitdefender actif. |
 | AGT-AUD-001 | Haute | Le journal d'audit de l'agent n'est jamais envoyé à la GRID ; les formats de signature diffèrent. |
-| AGT-USB-001, 002, 003 | Haute | USB GUARD ne bloque rien ; une liste blanche illisible saute l'analyse ; aucun moyen d'ajouter un périphérique. |
+| AGT-USB-001, 002, 003 | Haute | USB GUARD ne bloque rien (tous modes `dégradé`) ; une liste blanche illisible saute l'analyse ; aucun chemin pour rétablir. Vraies actions prévues après l'installeur. |
 | AGT-IRC-001 | Haute | Aucun chemin pour rétablir un port USB coupé par IRONCLAD. |
 | AGT-PKI-001 | Haute (installateur, Sprint 12) | La CA de la GRID doit être installée à la main sur chaque poste. |
 | AGT-INST-001 | Haute (avant l'installateur) | `install.ps1` ne vérifie le paquet que par TLS ; pas de signature. |
@@ -734,12 +759,12 @@ sequenceDiagram
 
 | Sujet | Où on en est réellement |
 |---|---|
-| **Attribution ETW** | Les commits 1 à 3 sur 8 sont fusionnés : session, filtre, corrélation. Restent l'attribution elle-même (paire PID et heure de création, règles), l'endpoint GRID et la console, le repli et le plafond CPU, l'état et le heartbeat, puis la mesure « après ». Aujourd'hui, 0/60 sur les patrons de rançongiciel. |
-| **Moteur d'action** (suspendre un processus, isoler un poste) | Aucune classe n'existe. La GRID met la commande « isoler » en file (`CommandQueue`), mais l'agent ne l'exécute pas (`GridCommandService` : « deferred to Sprint 9 »). Le LOT 5 n'est pas commencé. |
+| **Attribution ETW** | Les commits 1 à 5 sur 8 sont fusionnés : session, filtre, corrélation, attribution (`9de3762`), route GRID et console (`48ab1df`). Les commits 6 à 8 (repli, état, mesure « après ») sont en dette, après la démo. |
+| **Moteur d'action** | Suspendre le processus qui a écrit un canari : **fait** (`db22eec`, ADR-026) et commandable depuis la console (`7bce4ca`), seulement quand l'ETW a nommé un seul écrivain. Isoler un poste : n'existe pas (AGT-ISO-001) ; une rafale sans attribution ne fait qu'une alerte. |
 | **IRONCLAD réaligné sur la sauvegarde** | IRONCLAD coupe des ports USB, en simulation seulement. La fonction de sauvegarde isolée du design (« Module 4 — Backup (SNAPSHOT) », `docs/architecture/02-design-doc.md`) n'a aucun code. Le pilote du vrai matériel n'est pas implémenté. |
 | **MFA** | Absente : aucun code dans la GRID, la console ou la base. Elle est décidée (TOTP obligatoire pour `tenant_admin`, après le Sprint 8). |
 | **Enrôlement depuis la console** | Partiel. La console génère l'OTP et une commande d'installation vérifiée (empreinte SHA-256), mais il faut encore installer la CA à la main (AGT-PKI-001) et lancer `install.ps1` à la main, en administrateur ; le paquet n'est pas signé (AGT-INST-001). |
-| **Installateur** | Seuls `agent/install.ps1` et `scripts/install-service.ps1` existent. Le `setup.exe` signé et préconfiguré est prévu au Sprint 12. |
+| **Installateur** | `agent/install.ps1` existe (lancé par la one-liner de la console). L'installeur à double-clic (ADR-027 : stub .NET + charge utile, code d'enrôlement et adresse embarqués, certificat de l'autorité ajouté au magasin racine, SmartScreen « éditeur inconnu » assumé) est approuvé et en cours ; le `setup.exe` signé reste en dette (AGT-INST-002). |
 | **Journal d'audit de l'agent vers la GRID** | L'endpoint existe des deux côtés, mais l'agent ne l'appelle jamais (AGT-AUD-001). |
 | **ANTI_TAMPERING et Watchdog** | Les classes existent, mais rien ne les démarre (AGT-ATP-001, AGT-WD-001). |
 | **Windows 7** | Non pris en charge : l'agent tourne sur .NET 8, qui exclut Windows 7. Le PR/FAQ ne le promet plus. |
