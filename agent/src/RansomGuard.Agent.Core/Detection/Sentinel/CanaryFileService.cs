@@ -104,6 +104,32 @@ public sealed class CanaryFileService : ICanaryFileService
     }
 
     /// <inheritdoc />
+    public async Task RestoreCanaryAsync(SentinelCanary canary, CancellationToken cancellationToken = default)
+    {
+        ICanaryFileGenerator generator = CanaryFileGeneratorFactory.GetGenerator(Path.GetExtension(canary.FilePath));
+        byte[] content = generator.Generate(canary.TemplateUsed);
+
+        if (File.Exists(canary.FilePath))
+        {
+            // Hidden | System (and read-only, if the attacker set it) would refuse the rewrite.
+            File.SetAttributes(canary.FilePath, FileAttributes.Normal);
+        }
+
+        await File.WriteAllBytesAsync(canary.FilePath, content, cancellationToken);
+        File.SetAttributes(canary.FilePath, FileAttributes.Hidden | FileAttributes.System);
+
+        canary.OriginalContentHash = CanaryContentGenerator.ComputeHash(content);
+        canary.FileSize = content.Length;
+        canary.Status = CanaryStatus.Active;
+        canary.LastCheckedAt = DateTime.UtcNow;
+        canary.UpdatedAt = DateTime.UtcNow;
+        await _repository.UpdateAsync(canary, cancellationToken);
+
+        _logger.LogInformation("SENTINEL canary restored: {FilePath} (template: {Template}, {Size} bytes), still watched",
+            canary.FilePath, canary.TemplateUsed, content.Length);
+    }
+
+    /// <inheritdoc />
     public async Task DeleteCanaryAsync(SentinelCanary canary, CancellationToken cancellationToken = default)
     {
         if (File.Exists(canary.FilePath))

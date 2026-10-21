@@ -99,6 +99,19 @@ presented as guaranteed. A sync client or a restore that rewrites a canary would
 resume exists for that, and no exclusion list is planned (an exclusion by image path is a bypass for
 an attacker who names itself like the sync client).
 
+## After an alert: the canary stays watched (V4)
+
+A modified or renamed canary is **put back** right after its alert: fresh content from its template at
+its own path, hash taken again, status still `Active` -- so a second write on it, 5 s later, is a second
+alert. Until 2026-10-21 the first alert set the status to `Modified`, the repository only returns
+`Active`, and the canary silently left the surveillance (test `SentinelCanaryRestoreTests`, red on the
+old code). The agent's own rewrite is not an attack: the path is marked for 3 s before the write and the
+watcher ignores its events; ETW leaves the agent's PID out already. A renamed copy made by the
+attacker is left where it is (nothing in user space is deleted). The restoration shares the hourly limit
+of the regeneration after deletion (`MaxRegenerationsPerHourPerDirectory`): past it, `SustainedAttack`
+is recorded and the canary leaves the surveillance with its `Modified` / `Renamed` status, said in the
+log. With `EnableRealTimeRegeneration` false nothing is put back and the old behaviour stands.
+
 ## Templates
 
 5 templates generate realistic French-language medical content:

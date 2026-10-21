@@ -49,6 +49,12 @@ public sealed class SentinelMonitor : BackgroundService
     private readonly List<FileSystemWatcher> _watchers = [];
     private readonly Channel<CanaryFileEvent> _eventChannel;
     private readonly ConcurrentDictionary<string, RegenerationStats> _regenTracking = new();
+
+    /// <summary>Paths the agent itself is rewriting (V4 restoration), with the moment the grace ends.</summary>
+    private readonly ConcurrentDictionary<string, DateTime> _ownWrites = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>How long after a restoration the watcher's events on that path are the agent's own.</summary>
+    private static readonly TimeSpan OwnWriteGrace = TimeSpan.FromSeconds(3);
     private readonly EtwFileIoSession? _etwSession;
     private readonly EtwCanaryFilter _etwFilter = new();
     private readonly CanaryCorrelator _correlator;
@@ -382,6 +388,18 @@ public sealed class SentinelMonitor : BackgroundService
 
     private void EnqueueEvent(string filePath, CanaryAlertType alertType, WatcherChangeTypes changeType)
     {
+        // The agent's own restoration write (V4) is not an attack. ETW already leaves the agent's
+        // PID out; the watcher does not know who wrote, so the path is marked before the rewrite.
+        if (_ownWrites.TryGetValue(filePath, out DateTime graceUntil))
+        {
+            if (DateTime.UtcNow < graceUntil)
+            {
+                return;
+            }
+
+            _ownWrites.TryRemove(filePath, out _);
+        }
+
         if (!_deduplicator.ShouldProcess(filePath, changeType))
         {
             return;
@@ -471,6 +489,65 @@ public sealed class SentinelMonitor : BackgroundService
 
         _logger.LogInformation("SENTINEL canary regenerated in {Directory} after deletion (template: {Template})",
             deletedCanary.Directory, deletedCanary.TemplateUsed);
+    }
+
+    /// <summary>
+    /// Puts a modified or renamed canary back (V4): fresh content from its template at its own path,
+    /// hash taken again, status Active, so the next write on it is detected too. Bounded by the same
+    /// hourly limit as the regeneration after deletion: past it, SustainedAttack is recorded and the
+    /// canary leaves the surveillance with its Modified / Renamed status, said in the log.
+    /// </summary>
+    private async Task TryRestoreCanaryAsync(SentinelCanary canary, CanaryAlertType alertType, IServiceProvider services)
+    {
+        SentinelOptions sentinel = _config.Sentinel!;
+        var canaryRepo = services.GetRequiredService<ISentinelCanaryRepository>();
+        var audit = services.GetRequiredService<IAuditLogRepository>();
+        CanaryStatus failed = alertType == CanaryAlertType.CanaryRenamed ? CanaryStatus.Renamed : CanaryStatus.Modified;
+
+        RegenerationStats stats = _regenTracking.GetOrAdd(canary.Directory, _ => new RegenerationStats());
+        stats.CleanupOlderThan(TimeSpan.FromHours(1));
+        if (stats.Count >= sentinel.MaxRegenerationsPerHourPerDirectory)
+        {
+            canary.Status = failed;
+            _logger.LogCritical(
+                "SENTINEL SUSTAINED ATTACK: {Count} restorations in 1 hour for {Directory}; canary {Path} leaves the surveillance. Manual intervention required.",
+                stats.Count, canary.Directory, canary.FilePath);
+            await RecordStatusAsync(canaryRepo, canary);
+            await audit.AppendAsync("SustainedAttack",
+                $"Canary restoration limit exceeded ({stats.Count}/{sentinel.MaxRegenerationsPerHourPerDirectory}) in {canary.Directory}",
+                "SentinelCanary", canary.Id, CancellationToken.None);
+            return;
+        }
+
+        try
+        {
+            // The agent's own write must not come back as a detection: the path is marked first.
+            _ownWrites[canary.FilePath] = DateTime.UtcNow.Add(OwnWriteGrace);
+            var canaryService = services.GetRequiredService<ICanaryFileService>();
+            await canaryService.RestoreCanaryAsync(canary, CancellationToken.None);
+            stats.RecordRegeneration();
+            await audit.AppendAsync("CanaryRestored",
+                $"Canary restored after {alertType} at {canary.FilePath} (template: {canary.TemplateUsed}); still watched",
+                "SentinelCanary", canary.Id, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            canary.Status = failed;
+            _logger.LogError(ex, "SENTINEL: canary {Path} could not be restored after {AlertType}; it leaves the surveillance", canary.FilePath, alertType);
+            await RecordStatusAsync(canaryRepo, canary);
+        }
+    }
+
+    private async Task RecordStatusAsync(ISentinelCanaryRepository canaryRepo, SentinelCanary canary)
+    {
+        try
+        {
+            await canaryRepo.UpdateAsync(canary, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "SENTINEL: status {Status} of {Path} not recorded", canary.Status, canary.FilePath);
+        }
     }
 
     private async Task PeriodicIntegrityCheckAsync(CancellationToken cancellationToken)
@@ -622,7 +699,13 @@ public sealed class SentinelMonitor : BackgroundService
             _ = AttributeAsync(detection!, alert.Id, request.ClientMessageId);
         }
 
-        canary.Status = alertType switch
+        // A modified or renamed canary stays watched (V4): its content is put back and its hash
+        // taken again below, within the hourly limit. Before, the first alert set the status to
+        // Modified, the repository only returns Active, and the canary left the surveillance: a
+        // second write on it, 5 s later, raised nothing.
+        bool restorable = alertType is CanaryAlertType.CanaryModified or CanaryAlertType.CanaryRenamed
+            && _config.Sentinel?.EnableRealTimeRegeneration == true;
+        canary.Status = restorable ? CanaryStatus.Active : alertType switch
         {
             CanaryAlertType.CanaryModified => CanaryStatus.Modified,
             CanaryAlertType.CanaryDeleted => CanaryStatus.Deleted,
@@ -646,6 +729,11 @@ public sealed class SentinelMonitor : BackgroundService
 
         // One INSERT, never a wait on the chain; never throws when it cannot record.
         await auditRepo.AppendAsync("CanaryAlert", details, "CanaryAlert", alert.Id, CancellationToken.None);
+
+        if (restorable)
+        {
+            await TryRestoreCanaryAsync(canary, alertType, services);
+        }
 
         // Fire-and-forget genealogy enrichment for process attribution
         _ = Task.Run(async () =>

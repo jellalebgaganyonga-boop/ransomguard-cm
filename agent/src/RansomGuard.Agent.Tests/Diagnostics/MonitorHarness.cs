@@ -213,6 +213,9 @@ internal sealed class SwitchableCanaryFileService(CanaryFileService inner, Integ
     public Task DeleteCanaryAsync(SentinelCanary canary, CancellationToken cancellationToken = default) =>
         inner.DeleteCanaryAsync(canary, cancellationToken);
 
+    public Task RestoreCanaryAsync(SentinelCanary canary, CancellationToken cancellationToken = default) =>
+        inner.RestoreCanaryAsync(canary, cancellationToken);
+
     public Task<IReadOnlyList<SentinelCanary>> GetAllCanariesAsync(CancellationToken cancellationToken = default)
     {
         check.Called();
