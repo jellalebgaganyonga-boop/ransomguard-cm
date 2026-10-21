@@ -66,8 +66,8 @@ test.describe('Logout', () => {
     await setupMocks(page, 'tenant_admin');
     await loginAs(page, 'tenant_admin');
 
-    // Trigger logout via header dropdown
-    await page.getByRole('button', { name: /profil|déconnect/i }).first().click();
+    // Trigger logout via the header user menu
+    await page.getByTestId('user-menu').click();
     // The logout button may be nested in a dropdown
     const logoutBtn = page.getByRole('menuitem', { name: /se déconnecter/i })
       .or(page.getByRole('button', { name: /se déconnecter/i }));
@@ -93,7 +93,7 @@ test.describe('Logout of every device (US1.2.2)', () => {
     });
     await loginAs(page, 'tenant_admin');
 
-    await page.getByRole('button', { name: /profil|déconnect/i }).first().click();
+    await page.getByTestId('user-menu').click();
     await page.getByRole('menuitem', { name: /tous les appareils/i }).click();
 
     const dialog = page.getByRole('dialog');
@@ -143,7 +143,7 @@ test.describe('Two tabs of the same browser (GRID-SEC-005 rotation)', () => {
 
     for (const page of pages) {
       await expect(page).toHaveURL(/\/dashboard/);
-      await expect(page.getByRole('button', { name: /profil|déconnect/i }).first()).toBeVisible();
+      await expect(page.getByTestId('user-menu')).toBeVisible();
     }
     expect(revocations, 'a consumed refresh token was presented: the family would be revoked').toEqual([]);
     expect(rotations).toBe(2);

@@ -16,7 +16,9 @@
   "header": {
     "notifications": "Notifications",
     "language": "Langue",
-    "profile": "Profil",
+    "userMenu": "Menu du compte",
+    "mySettings": "Mes paramètres",
+    "switchLanguage": "Passer en {language}",
     "logout": "Se déconnecter",
     "logoutAll": "Se déconnecter de tous les appareils",
     "logoutAllTitle": "Se déconnecter de tous les appareils ?",

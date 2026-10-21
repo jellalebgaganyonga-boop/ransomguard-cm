@@ -4,7 +4,7 @@
 // US1.2 AC1.2.4 — Logout always succeeds client-side
 // ============================================================
 
-import { Bell, Globe, LogOut, User as UserIcon, Menu } from 'lucide-react';
+import { Bell, Globe, LogOut, Menu, Settings } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -28,11 +28,14 @@ import {
 } from '@/components/ui/dialog';
 import { useUIStore } from '@/stores/ui.store';
 import { useLogout } from '@/hooks/use-auth';
+import { useLanguage } from '@/hooks/use-language';
 import type { MeResponse } from '@/api/me';
 
 interface HeaderProps {
   me: MeResponse;
 }
+
+const LANGUAGE_NAMES = { en: 'English', fr: 'Français' } as const;
 
 function initials(fullName: string): string {
   const parts = fullName.trim().split(/\s+/);
@@ -42,16 +45,11 @@ function initials(fullName: string): string {
 }
 
 export function Header({ me }: HeaderProps) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const toggleMobileSidebar = useUIStore((s) => s.toggleMobileSidebar);
-  const setLanguage = useUIStore((s) => s.setLanguage);
   const logoutMutation = useLogout();
   const navigate = useNavigate();
-
-  const handleLanguageChange = (lang: 'fr' | 'en') => {
-    void i18n.changeLanguage(lang);
-    setLanguage(lang);
-  };
+  const language = useLanguage();
 
   // AC1.2.1 + AC1.2.4: logout wired to backend, always clears client state
   const handleLogout = () => logoutMutation.mutate();
@@ -94,30 +92,15 @@ export function Header({ me }: HeaderProps) {
           <Bell className="size-5" aria-hidden="true" />
         </Button>
 
-        {/* Language switcher */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm" aria-label={t('header.language')}>
-              <Globe className="size-4" aria-hidden="true" />
-              {(i18n.language ?? 'fr').toUpperCase().slice(0, 2)}
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onSelect={() => handleLanguageChange('fr')}>
-              Français
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => handleLanguageChange('en')}>
-              English
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        {/* User menu */}
+        {/* User menu (Fix D): my settings, the other language, sign out. The language used to be a
+            dropdown of its own that changed this browser only; the choice is stored on the GRID now
+            (use-language.ts), the same as in Settings. */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
-              className="flex items-center gap-2 rounded-md px-2 py-1 text-sm text-text-primary transition-colors hover:bg-hover-bg"
-              aria-label={t('header.profile')}
+              className="flex min-h-[44px] items-center gap-2 rounded-md px-2 py-1 text-sm text-text-primary transition-colors hover:bg-hover-bg"
+              aria-label={t('header.userMenu')}
+              data-testid="user-menu"
             >
               <Avatar>
                 <AvatarFallback>{initials(me.full_name)}</AvatarFallback>
@@ -127,15 +110,19 @@ export function Header({ me }: HeaderProps) {
               </span>
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="min-w-[200px]">
+          <DropdownMenuContent align="end" className="min-w-[220px]">
             <DropdownMenuLabel className="font-normal">
               <p className="text-sm font-medium text-text-primary">{me.full_name}</p>
-              <p className="truncate text-xs text-text-tertiary">{me.email}</p>
+              <p className="truncate text-xs text-text-secondary">{me.email}</p>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
-              <UserIcon className="size-4" aria-hidden="true" />
-              {t('header.profile')}
+            <DropdownMenuItem onSelect={() => navigate('/settings')}>
+              <Settings className="size-4" aria-hidden="true" />
+              {t('header.mySettings')}
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => void language.choose(language.other)} disabled={language.isPending}>
+              <Globe className="size-4" aria-hidden="true" />
+              {t('header.switchLanguage', { language: LANGUAGE_NAMES[language.other] })}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             {/* AC1.2.1: single session logout */}

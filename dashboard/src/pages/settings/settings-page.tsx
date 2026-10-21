@@ -13,9 +13,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NotificationPreferencesPanel } from '@/components/settings/notification-preferences-panel';
-import { useMe, useUpdateMe, useUpdatePreferences, useChangePassword } from '@/hooks/use-me';
+import { useMe, useUpdateMe, useChangePassword } from '@/hooks/use-me';
+import { useLanguage } from '@/hooks/use-language';
 import { useToast } from '@/lib/toast-context';
-import { useUIStore } from '@/stores/ui.store';
 import type { MeResponse } from '@/api/me';
 import { isLegacyNotificationsPath, tabFrom, type SettingsTab } from '@/lib/settings-tab';
 
@@ -141,22 +141,8 @@ function ProfileTab({ me }: { me: MeResponse }) {
 }
 
 function LanguageTab({ me }: { me: MeResponse }) {
-  const { t, i18n } = useTranslation();
-  const toast = useToast();
-  const mutation = useUpdatePreferences();
-  const setLanguage = useUIStore((s) => s.setLanguage);
-  const current = (me.preferences.language ?? i18n.resolvedLanguage ?? 'en').slice(0, 2) as 'en' | 'fr';
-
-  const choose = async (language: 'en' | 'fr') => {
-    try {
-      await mutation.mutateAsync({ language });
-      await i18n.changeLanguage(language);
-      setLanguage(language);
-      toast.success(t('settings.language.saved'));
-    } catch {
-      toast.error(t('settings.language.saveFailed'));
-    }
-  };
+  const { t } = useTranslation();
+  const { current, choose, isPending } = useLanguage();
 
   return (
     <div className="space-y-3 rounded-lg border border-border-subtle bg-canvas p-4">
@@ -165,8 +151,8 @@ function LanguageTab({ me }: { me: MeResponse }) {
         <Label htmlFor="language">{t('settings.language.title')}</Label>
         <select
           id="language"
-          value={current}
-          disabled={mutation.isPending}
+          value={me.preferences.language ?? current}
+          disabled={isPending}
           onChange={(e) => void choose(e.target.value as 'en' | 'fr')}
           className="min-h-[44px] rounded-md border border-border-default bg-canvas px-3 text-sm text-text-primary"
         >

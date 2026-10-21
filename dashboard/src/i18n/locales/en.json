@@ -16,7 +16,9 @@
   "header": {
     "notifications": "Notifications",
     "language": "Language",
-    "profile": "Profile",
+    "userMenu": "Account menu",
+    "mySettings": "My settings",
+    "switchLanguage": "Switch to {language}",
     "logout": "Sign out",
     "logoutAll": "Log out of every device",
     "logoutAllTitle": "Log out of every device?",
