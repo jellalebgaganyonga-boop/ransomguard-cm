@@ -91,6 +91,9 @@ public sealed class AgentDbContext : DbContext
     /// </summary>
     public DbSet<ExfilAlert> ExfilAlerts => Set<ExfilAlert>();
 
+    /// <summary>When EXFIL WATCH began learning this endpoint's traffic; one row (AGT-EXF-001).</summary>
+    public DbSet<ExfilLearningPhase> ExfilLearningPhases => Set<ExfilLearningPhase>();
+
     /// <summary>
     /// Network activity baselines for adaptive detection.
     /// </summary>

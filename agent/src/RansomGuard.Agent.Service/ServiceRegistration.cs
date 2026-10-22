@@ -200,9 +200,18 @@ public static class ServiceRegistration
         // network event; Scoped, every event would get an empty tracker and no sliding window or
         // baseline would ever fill. Until 2026-10-21 it was registered nowhere: the consumer
         // resolved null and skipped every rule while the module read active (EXFIL-REG-001).
-        services.AddSingleton<IDataVolumeTracker>(sp => new DataVolumeTracker(
-            sp.GetRequiredService<ILogger<DataVolumeTracker>>(),
-            (sp.GetRequiredService<IOptionsMonitor<AgentConfiguration>>().CurrentValue.ExfilWatch ?? new ExfilWatchOptions()).LearningPhaseDays));
+        services.AddScoped<IExfilLearningPhaseStore, ExfilLearningPhaseStore>();
+        services.AddSingleton<IDataVolumeTracker>(sp =>
+        {
+            int days = (sp.GetRequiredService<IOptionsMonitor<AgentConfiguration>>().CurrentValue.ExfilWatch
+                ?? new ExfilWatchOptions()).LearningPhaseDays;
+            // The learning start is read from the database, not from the clock: a restart must not
+            // begin the seven days again (AGT-EXF-001). This Singleton is built once, so one scope
+            // here is enough; the first run of the module writes the row.
+            using IServiceScope scope = sp.GetRequiredService<IServiceScopeFactory>().CreateScope();
+            DateTime startedAt = scope.ServiceProvider.GetRequiredService<IExfilLearningPhaseStore>().StartedAtOrBegin(days);
+            return new DataVolumeTracker(sp.GetRequiredService<ILogger<DataVolumeTracker>>(), days, startedAt);
+        });
 
         // EXFIL WATCH — Rule engine
         services.AddScoped<ExfilRuleEngine>();
