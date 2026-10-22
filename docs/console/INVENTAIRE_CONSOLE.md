@@ -1,4 +1,4 @@
-# Inventaire de la console — état au 2026-10-14
+# Inventaire de la console — état au 2026-10-14, mis à jour le 2026-10-22
 
 Ce document sert à cadrer le lot « Console » après la clôture du Sprint 8. Il compare, écran par écran et story par story, la console et la GRID au PRD du Sprint 7 v2 (`docs/sprint7/SPRINT_7_PRD_v2.md`). Chaque constat donne sa preuve en fichier:ligne.
 
@@ -15,6 +15,38 @@ Ce document sert à cadrer le lot « Console » après la clôture du Sprint 8. 
 - **Partiel** : au moins un critère n'est pas tenu.
 - **Absent** : rien n'est implémenté.
 - *(adapté)* : le critère est tenu, mais sur un contrat différent du PRD. Le PRD prévoyait par exemple les statuts new/acknowledged/closed ; la GRID utilise New/Investigating/Resolved/FalsePositive/Suppressed (`BE/db/models/enums.py:32-39`).
+
+---
+
+## Mise à jour au 2026-10-22
+
+Le corps de ce document est la photographie du 2026-10-14 ; il n'est pas réécrit. Ce tableau dit ce qui a changé depuis, constat par constat, avec le commit. Ce qui n'y figure pas est inchangé.
+
+| Constat du 2026-10-14 | État au 2026-10-22 | Commit, preuve |
+|---|---|---|
+| GRID-SEC-003 — la GRID fabrique la clé d'audit de l'agent | **Corrigé.** L'agent envoie à l'enrôlement la clé publique de sa propre `audit.key` ; la GRID ne génère plus aucune clé et ne détient aucune clé privée. | `7350683` ; `enrollment.py:68-82` |
+| GRID-SEC-004, GRID-SEC-005 — sessions révocables sur un seul worker, refresh token volé valable 7 jours | **Corrigé.** Sessions et révocation dans Redis, partagées par tous les workers ; rotation du refresh token ; un seul refresh à la fois entre les onglets. | `1ac2734`, `e63d272` |
+| GRID-ENR-001 — OTP d'enrôlement en mémoire, perdus au redémarrage | **Corrigé.** OTP dans Redis, à usage unique, vus par tous les workers. | `1ac2734` ; `enrollment_otp_service.py` |
+| GRID-SEC-006 — commande d'installation sans TLS, écrite dans `C:\` | **Corrigé, puis remplacé.** La commande validait TLS et vérifiait l'empreinte du script (`ecb938f`) ; depuis ADR-027 la console donne un installeur à double-clic fabriqué par la GRID pour le code d'enrôlement : plus rien n'est tapé (`review/adr-027-installer`, relecture du lead avant fusion). | `ecb938f` ; ADR-027 |
+| GRID-SEC-002 — un administrateur peut se désactiver lui-même | **Corrigé.** 403 sur soi-même, 409 si le dernier administrateur actif disparaîtrait. | `1088561` ; `dashboard.py:689` |
+| GRID-USR-001 — e-mail en double accepté | **Corrigé.** Contrainte d'unicité (tenant, e-mail), 409 à la création. | `154eb85` ; migration `b52d0e8c4a91` |
+| GRID-AUD-001 — changements de rôle non journalisés | **Corrigé.** Action `user_roles_change`. | `154eb85` ; `dashboard.py:806` |
+| GRID-ALR-001 — toute transition d'alerte acceptée | **Corrigé.** Table fermée des transitions, 409 sinon. | `154eb85` ; `core/alert_transitions.py` |
+| US1.2 — « Déconnecter tous les appareils » absent | **Fait.** `POST /auth/logout-all`, confirmation dans le menu du compte, E2E. | `1ac2734` ; `auth.py:265` ; `e2e/auth.spec.ts` |
+| US1.1 — la préférence de langue n'est pas mémorisée ; français par défaut | **Fait, et décision inverse du propriétaire : anglais par défaut, français conservé.** Choix enregistré sur la GRID (`PATCH /dashboard/me/preferences`), appliqué à chaque connexion, mémorisé aussi dans le navigateur. | `8873d14`, `ccc8571` ; `i18n/index.ts` |
+| US3.3 — aucun système de notification (toast) | **Fait.** `ToastProvider`, succès et échecs dits (préférences, profil, langue, mot de passe). | `ccc8571` ; `components/ui/toast.tsx` |
+| Section 3 — « 98 % », « Conforme », « 487 » codés en dur | **Retirés.** Un test statique refuse toute affirmation sans source dans `src/pages`. | `9d5e35a` ; `pages/no-unsourced-claims.test.ts` |
+| Section 3 — onglets Heartbeats et Configuration « Disponible à partir de Sprint 8 » | **Masqués** plutôt qu'inertes (GAP-03 reste ouvert : aucune route). | `agent-detail-page.tsx:6-7` |
+| US4.3 — la commande n'atteint jamais le poste | **Changé.** L'agent lit et exécute les commandes (`GET /agents/{id}/commands`, `POST …/result`) : « Suspendre / Reprendre » agissent, statut réel envoyée → reçue → exécutée / non exécutée. L'isolement, lui, est reçu et refusé `not_implemented` (AGT-ISO-001) ; le bouton « Isoler » a été retiré. | `7bce4ca`, `db22eec` |
+| Section 2 — enrôlement : copier-coller en deux étapes | **Changé.** Installeur à double-clic : code d'enrôlement, adresse de la GRID et CA embarqués ; le poste passe vert sans rien taper. Le suivi « code émis → poste enrôlé » reste absent. | ADR-027 (`review/adr-027-installer`) |
+| 5.2 — `/settings/notifications` jamais scanné ; aucune modale scannée | **En partie.** Page Paramètres (profil, langue, notifications, sécurité) scannée par axe ; menu du compte scanné ; modale d'ajout d'agent couverte par un E2E. Les autres modales restent non scannées. | `ccc8571`, `f823b78`, `89283b5` |
+| 5.2 — projets mobiles jamais lancés en CI ; accueil opérationnel en échec en `mobile-small` | **Fait.** `mobile-chrome` et `mobile-small` tournent en CI avec chromium ; les tableaux défilants sont des régions atteignables au clavier (accueil opérationnel compris) ; aucun débordement horizontal à 320 px (vérifié par les specs). | `1530b5d` ; `.github/workflows/ci.yml` |
+| US2.2, 5.3 — cibles tactiles sous 44 px | **En partie.** Entrées de la barre latérale, onglets des paramètres, menu du compte et bouton de la cloche à 44 px ; les boutons `sm`/`md` (`button.tsx:42-45`) restent à 32 et 40 px. | `a4656f2`, `ccc8571`, `f823b78` |
+| 4.6 — préférences de notification non journalisées | **Fait.** `notification_preferences_updated`, `profile_updated`, `preferences_updated`, `password_changed`, `password_change_refused`. | `8873d14`, `ccc8571` |
+| 4.6 — `user-actions` et `settings` sans test | **En partie.** `settings.spec.ts`, `header.spec.ts`, tests GRID `/me` ; `user-actions` reste sans test. | `ccc8571`, `f823b78` |
+| 2 — authentification des agents : mode `agent_id` forcé | **Décision du propriétaire (J3 § 3.3 réduit) :** la GRID refusera le mode `agent_id` hors développement ; le secret par agent et le mTLS restent en dette (ADR à venir). | plan de finition |
+
+**Toujours ouverts, tels que décrits plus bas :** GAP-01 (`enrolled_at`), GAP-03, GAP-08 (rôles dans la liste), le tri des alertes (la GRID n'a pas de paramètre de tri), la recherche par nom de poste, l'historique et les notes d'alerte côté GRID, le CSV des actions utilisateur, la politique de mot de passe à la création, la gestion de la liste blanche USB depuis la console (AGT-USB-003), la MFA, la navigation au clavier et les lecteurs d'écran, les mesures de performance, la couverture unitaire.
 
 ---
 

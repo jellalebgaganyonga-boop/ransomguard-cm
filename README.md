@@ -15,13 +15,15 @@
 
 RansomGuard-CM is the first cybersecurity solution designed natively for healthcare facilities in Francophone Sub-Saharan Africa. It addresses a documented gap: no existing solution combines offline-first operation, native French language, Windows legacy support, affordable pricing, and compliance with Cameroon's Law N°2024/017.
 
-The platform protects hospital workstations against ransomware attacks through a multi-layered defense system combining behavioral machine learning, deception technology (canary files), hardware-based backup isolation (IRONCLAD), and centralized management.
+> **What this README promises and what exists (2026-10-22).** The agent (SENTINEL canaries, ENTROPY, GENEALOGY, USB GUARD, EXFIL WATCH, the suspension of a process that wrote a canary), the GRID (FastAPI, MySQL, Redis) and the console (React) exist and are tested. The lines marked below are **not implemented** or **not verified**; each carries its debt identifier, listed in `docs/JOURNAL_DES_ACTIONS.md` § 3.4. Nothing here is deleted: the promise stays visible next to its status.
+
+The platform protects hospital workstations against ransomware attacks through a multi-layered defense system combining behavioral machine learning (**Not implemented as of 2026-10-22** — no model, no training data, no ML dependency in the GRID or the agent; debt PROD-003), deception technology (canary files), hardware-based backup isolation (IRONCLAD — **Not implemented as of 2026-10-22** as a backup air-gap: IRONCLAD exists only as the cut of a USB port through a mock Arduino server, there is no backup disk and no backup; debt PROD-001), and centralized management.
 
 **Innovation differentiators:**
-- 🧠 **Per-hospital behavioral learning** — each hospital has its own normal-behavior profile
+- 🧠 **Per-hospital behavioral learning** — each hospital has its own normal-behavior profile (**Not implemented as of 2026-10-22** — the only baselines are ENTROPY's per-file entropy and EXFIL WATCH's 7-day volume baseline on one workstation; debt PROD-003)
 - 🛡️ **IRONCLAD physical air-gap** — automated USB relay isolation of backup disk
-- 🔄 **Collective threat intelligence** — attacks detected at one hospital immunize all others
-- 🌐 **Offline-first architecture** — full protection without permanent internet
+- 🔄 **Collective threat intelligence** — attacks detected at one hospital immunize all others (**Not implemented as of 2026-10-22** — the GRID pulls public feeds (ThreatFox, Tor exit nodes) and signs them for its own agents; nothing goes from one hospital to another, `cloud/` holds a README only; debt PROD-004)
+- 🌐 **Offline-first architecture** — full protection without permanent internet (**Partly held, not verified as of 2026-10-22** — the GRID runs on the LAN and the agent keeps detecting and queues its alerts while the GRID is unreachable (sequence 4.8 of the journal); the threat-intelligence feeds need Internet, and no measurement of "full protection" without Internet exists; debt PROD-007)
 - 🇨🇲 **Native French + Cameroon legal compliance** — Loi 2024/017 + ANTIC ready
 
 ---
@@ -31,9 +33,9 @@ The platform protects hospital workstations against ransomware attacks through a
 \\\
 ┌─────────────────────────────────────────────────────────────────┐
 │              CLOUD RANSOMGUARD (AWS af-south-1)                 │
-│  • Threat intelligence aggregation                              │
-│  • Signed update distribution (Ed25519)                         │
-│  • License validation                                           │
+│  • Threat intelligence aggregation      (not implemented)       │
+│  • Signed update distribution (Ed25519) (not implemented)       │
+│  • License validation                   (not implemented)       │
 └──────────────────────────┬──────────────────────────────────────┘
                            │ HTTPS + Ed25519 signed
 ┌──────────────────────────▼──────────────────────────────────────┐
@@ -50,6 +52,8 @@ The platform protects hospital workstations against ransomware attacks through a
    └─────────┘        └─────────┘       └─────────┘
 \\\
 
+The cloud tier of this diagram does not exist as of 2026-10-22: `cloud/` holds a README, no service (debts PROD-004, PROD-005). The agent-to-GRID link is HTTPS with the GRID's own CA and an `agent_id` mode, not mTLS (see `docs/console/INVENTAIRE_CONSOLE.md`, § 2, "Authentification des agents").
+
 Full architecture documentation: [docs/architecture/](docs/architecture/)
 
 ---
@@ -60,12 +64,12 @@ Full architecture documentation: [docs/architecture/](docs/architecture/)
 |---|---|---|
 | **Agent (Windows endpoint)** | C# .NET 8 LTS | Native Windows APIs (ETW, WMI), Microsoft code signing |
 | **Management Server** | Python 3.12 + FastAPI | Productivity, async/await, ML ecosystem |
-| **Cloud Backend** | Python 3.12 + FastAPI | Stack consistency |
+| **Cloud Backend** | Python 3.12 + FastAPI | Stack consistency (**Not implemented as of 2026-10-22**; PROD-004) |
 | **Dashboard** | React 18 + TypeScript + Tailwind | Industry standard, type-safe |
 | **Database** | MySQL 8 | Robust, ACID, widely supported |
 | **Cache / Queue** | Redis 7 | High performance |
-| **Object Storage** | MinIO | S3-compatible, on-premise |
-| **ML** | scikit-learn (Isolation Forest + DBSCAN) | Compatible with Windows 7+ legacy |
+| **Object Storage** | MinIO | S3-compatible, on-premise (**Not implemented as of 2026-10-22** — not deployed, not a dependency; it was meant for the backups, PROD-001) |
+| **ML** | scikit-learn (Isolation Forest + DBSCAN) | Compatible with Windows 7+ legacy (**Not implemented as of 2026-10-22** — not a dependency, no model; PROD-003. Windows 7 is not supported either: the agent runs on .NET 8) |
 | **Crypto** | libsodium + Ed25519 | Modern, audited cryptography |
 | **Containerization** | Docker + Docker Compose | Reproducible deployment |
 

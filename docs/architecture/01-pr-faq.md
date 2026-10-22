@@ -31,12 +31,14 @@ Cameroon, like the rest of sub-Saharan Africa, faces a wave of cybercriminal att
 
 > *"Before RansomGuard, we were at the mercy of the first ransomware that came along. We were afraid of every USB key plugged in by staff. Today, the system detects, isolates, backs up, and sends us a report in French — without us needing to intervene. It's exactly what we needed."*
 > — Dr Mballa, Director, Yaoundé Central Hospital
+>
+> *This quote is the imagined testimonial of the PR-FAQ format, not a customer's words. As of 2026-10-22 the system detects and, on a canary write, suspends the writing process; it does not isolate the workstation (AGT-ISO-001), does not back anything up (PROD-001) and sends no report (PROD-002).*
 
-**How it works.** A lightweight agent installs on the hospital's Windows 10 and Windows 11 workstations. Older Windows 7 machines coupled with medical equipment are not covered today: the agent runs on .NET 8, which does not support Windows 7. A Linux server centralizes supervision. When a ransomware attack is detected — even one never seen before — RansomGuard automatically isolates the infected workstation from the network within 3 seconds, triggers an emergency backup to a physically isolated disk (IRONCLAD technology), and generates a bilingual PDF report for the director. The doctor arriving the next morning doesn't discover a disaster — they discover a report.
+**How it works.** A lightweight agent installs on the hospital's Windows 10 and Windows 11 workstations. Older Windows 7 machines coupled with medical equipment are not covered today: the agent runs on .NET 8, which does not support Windows 7. A Linux server centralizes supervision. When a ransomware attack is detected — even one never seen before — RansomGuard automatically isolates the infected workstation from the network within 3 seconds (**Not implemented as of 2026-10-22** — the console's isolation command reaches the agent and is refused `not_implemented`; what exists is the suspension of the process that wrote a canary, ADR-026; debt AGT-ISO-001), triggers an emergency backup to a physically isolated disk (IRONCLAD technology) (**Not implemented as of 2026-10-22** — no backup exists; IRONCLAD is a USB-port cut on a mock Arduino; debt PROD-001), and generates a bilingual PDF report for the director (**Not implemented as of 2026-10-22** — no report of any kind; debt PROD-002). The doctor arriving the next morning doesn't discover a disaster — they discover a report.
 
 **The price factor.** Where a solution like CrowdStrike costs USD 35,000 per year for an average hospital, RansomGuard-CM is available starting at FCFA 850,000 per year (approximately USD 1,400) for a 50-workstation hospital. Payable via Mobile Money through MTN MoMo and Orange Money.
 
-**Cameroon legal compliance.** RansomGuard-CM is compliant with Law N°2024/017 on personal data protection and Law N°2010/012 on cybersecurity. The software automatically generates compliance reports required by ANTIC.
+**Cameroon legal compliance.** RansomGuard-CM is compliant with Law N°2024/017 on personal data protection and Law N°2010/012 on cybersecurity (**Not assessed as of 2026-10-22** — the repository records no assessment against either law beyond the Sprint 7 privacy notes, `docs/sprint7/05_stride_csp_privacy_data.md`; the console displays no compliance verdict for that reason, `9d5e35a`). The software automatically generates compliance reports required by ANTIC (**Not implemented as of 2026-10-22**; debt PROD-002).
 
 **Availability.** RansomGuard-CM is available immediately for Cameroonian hospitals. A 30-day free trial period is offered to public and confessional facilities.
 
@@ -106,7 +108,7 @@ Three converging signals:
 **Q6 — Why a separate product and not a module in an existing antivirus?**
 
 Three reasons:
-- Existing antivirus solutions don't cover ransomware-specific blind spots (IRONCLAD, semantic canaries, 3-second automatic isolation)
+- Existing antivirus solutions don't cover ransomware-specific blind spots (IRONCLAD, semantic canaries, 3-second automatic isolation — the isolation is **not implemented as of 2026-10-22**, AGT-ISO-001; see above)
 - No existing antivirus is designed offline-first
 - None are natively bilingual French/English with ANTIC compliance
 
