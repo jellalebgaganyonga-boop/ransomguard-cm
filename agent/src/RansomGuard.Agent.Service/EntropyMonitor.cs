@@ -99,7 +99,7 @@ public sealed class EntropyMonitor : BackgroundService
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        bool reachedActive = false;
+        bool reachedRunningState = false;
         Task? consumerTask = null;
 
         // Every task of the module runs on this token, so that after a failure
@@ -170,9 +170,32 @@ public sealed class EntropyMonitor : BackgroundService
                 return;
             }
 
-            _logger.LogInformation("ENTROPY monitor active on {DirCount} directories", _watchers.Count);
-            _moduleState.Publish(ModuleCode.Entropy, ModuleState.Active);
-            reachedActive = true;
+            _logger.LogInformation("ENTROPY monitor watching {DirCount} directories", _watchers.Count);
+
+            // What ENTROPY may claim about itself (B4, 2026-10-22). The detection is real: every
+            // write on a watched folder is read, its Shannon entropy computed, and rules 1 and 2
+            // (absolute threshold, delta against the file's baseline) decide. Two gaps are open,
+            // and a module that reads "active" would hide both from whoever looks at the console:
+            //
+            //   AGT-ATTR-001 -- an ENTROPY signal names no process: it carries PID 0. The console
+            //                   shows "a file was encrypted" and cannot say by whom.
+            //   AGT-EN-002   -- rule 3, the directory-wide entropy shift, has no caller. It is the
+            //                   mass-encryption signal, and DirectoryShiftThreshold,
+            //                   DirectoryShiftWindowSeconds and DirectoryShiftMinFiles are read
+            //                   from the configuration and change nothing.
+            //
+            // So: degraded, with the reason the operator can act on. It becomes active when a
+            // signal names its writer and rule 3 is evaluated.
+            _logger.LogWarning(
+                "ENTROPY degraded: its signals carry PID 0, no process is named (AGT-ATTR-001). "
+                + "An encrypted write is reported without its author.");
+            _logger.LogWarning(
+                "ENTROPY degraded: rule 3 (directory-wide entropy shift, the mass-encryption signal) is not "
+                + "evaluated (AGT-EN-002). DirectoryShiftThreshold {Shift}, DirectoryShiftWindowSeconds {Window} "
+                + "and DirectoryShiftMinFiles {MinFiles} are read and change nothing.",
+                entropy.DirectoryShiftThreshold, entropy.DirectoryShiftWindowSeconds, entropy.DirectoryShiftMinFiles);
+            _moduleState.Publish(ModuleCode.Entropy, ModuleState.Degraded, ModuleReasonCode.AttributionUnreliable);
+            reachedRunningState = true;
 
             await ModuleTaskObserver.ObserveUntilStoppedAsync(
                 stoppingToken,
@@ -189,7 +212,7 @@ public sealed class EntropyMonitor : BackgroundService
             // Swallowed on purpose: one module going down must not take the host —
             // and every other module — with it. The reporter leaves the three
             // traces: registry state, Critical log, audit entry.
-            await _failureReporter.ReportStoppedAsync(ModuleCode.Entropy, reachedActive, ex);
+            await _failureReporter.ReportStoppedAsync(ModuleCode.Entropy, reachedRunningState, ex);
         }
         finally
         {

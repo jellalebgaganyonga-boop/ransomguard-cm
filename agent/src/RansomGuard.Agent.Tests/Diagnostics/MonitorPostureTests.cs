@@ -218,14 +218,16 @@ public sealed class MonitorPostureTests : IDisposable
     }
 
     [Fact(Timeout = 30_000)]
-    public async Task Entropy_with_some_folders_missing_is_active_and_names_each_missing_one()
+    // "Running" for ENTROPY is degraded since 2026-10-22 (B4): it watches and computes entropy,
+    // names no process (AGT-ATTR-001) and does not evaluate rule 3 (AGT-EN-002). See EntropyPostureTests.
+    public async Task Entropy_with_some_folders_missing_still_runs_and_names_each_missing_one()
     {
         string missing = MonitorHarness.MissingFolder();
         var log = new RecordingLogger<EntropyMonitor>();
         using EntropyMonitor monitor = Entropy([_h.Folder, missing], log);
 
         await monitor.StartAsync(CancellationToken.None);
-        await Eventually.HoldsAsync(() => _h.State(ModuleCode.Entropy).State == ModuleState.Active, "ENTROPY active");
+        await Eventually.HoldsAsync(() => _h.State(ModuleCode.Entropy).State == ModuleState.Degraded, "ENTROPY running (degraded: AGT-ATTR-001, AGT-EN-002)");
         await monitor.StopAsync(CancellationToken.None);
 
         log.Entries.ShouldContain(e => e.Level == LogLevel.Warning && e.Message.Contains(missing));

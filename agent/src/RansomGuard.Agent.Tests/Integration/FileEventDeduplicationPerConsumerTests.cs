@@ -71,7 +71,7 @@ public sealed class FileEventDeduplicationPerConsumerTests : IDisposable
         await worker.StartAsync(CancellationToken.None);
         await entropy.StartAsync(CancellationToken.None);
         IModuleStateRegistry registry = provider.GetRequiredService<IModuleStateRegistry>();
-        await WaitUntilAsync(() => registry.Snapshot().Single(e => e.Code == ModuleCode.Entropy).State == ModuleState.Active, "ENTROPY active");
+        await WaitUntilAsync(() => registry.Snapshot().Single(e => e.Code == ModuleCode.Entropy).State == ModuleState.Degraded, "ENTROPY running (degraded: AGT-ATTR-001, AGT-EN-002)");
         await Task.Delay(500); // both watchers armed
 
         byte[] content = new byte[2048];

@@ -135,7 +135,7 @@ public sealed class ModuleFaultInjectionTests : IDisposable
         using EntropyMonitor monitor = Entropy(reporter, injector);
 
         await monitor.StartAsync(CancellationToken.None);
-        await Eventually.HoldsAsync(() => _h.State(ModuleCode.Entropy).State == ModuleState.Active, "ENTROPY active");
+        await Eventually.HoldsAsync(() => _h.State(ModuleCode.Entropy).State == ModuleState.Degraded, "ENTROPY running (degraded: AGT-ATTR-001, AGT-EN-002)");
         string trigger = Path.Combine(_triggers, "ENTROPY.stop");
         await File.WriteAllTextAsync(trigger, "");
 
@@ -158,7 +158,7 @@ public sealed class ModuleFaultInjectionTests : IDisposable
         using EntropyMonitor monitor = Entropy(_h.Reporter, injector);
 
         await monitor.StartAsync(CancellationToken.None);
-        await Eventually.HoldsAsync(() => _h.State(ModuleCode.Entropy).State == ModuleState.Active, "ENTROPY active");
+        await Eventually.HoldsAsync(() => _h.State(ModuleCode.Entropy).State == ModuleState.Degraded, "ENTROPY running (degraded: AGT-ATTR-001, AGT-EN-002)");
         foreach (string name in new[] { "GENEALOGY.stop", "entropy.stop", "NOT_A_MODULE.stop" })
         {
             await File.WriteAllTextAsync(Path.Combine(_triggers, name), "");
