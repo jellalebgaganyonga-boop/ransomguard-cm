@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, ValidationError, field_validator
+from pydantic import Field, ValidationError, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # JWT keys that have been published in this repository (old default, .env.example placeholder,
@@ -103,7 +103,23 @@ class Settings(BaseSettings):
     # whose plumbing is not built yet -- and every agent heartbeat started
     # returning 401. A security control has to be chosen explicitly, not fall
     # out of an environment label.
+    #
+    # Since 2026-10-22 (plan de finition, J3 § 3.3, reduced by the owner) the two settings are
+    # checked against each other: "agent_id" is accepted with environment "development" only.
+    # A staging or production GRID on a guessable identity does not start; it says which two
+    # variables disagree. A per-agent secret and the mTLS chain are the way out (ADR to come).
     agent_auth_mode: str = Field(default="mtls", pattern="^(mtls|agent_id)$")
+
+    @model_validator(mode="after")
+    def _agent_id_only_in_development(self) -> "Settings":
+        if self.agent_auth_mode == "agent_id" and self.environment != "development":
+            raise ValueError(
+                "GRID_AGENT_AUTH_MODE=agent_id is accepted with GRID_ENVIRONMENT=development only: "
+                f"this GRID is labelled '{self.environment}' and would identify every agent by the id in "
+                "its URL, which anyone who learns it can use. Either set GRID_AGENT_AUTH_MODE=mtls "
+                "(agents then need client certificates) or label the deployment development and say so."
+            )
+        return self
 
     # The directory nginx serves at /agent/ (install.ps1, the agent package), mounted read-only
     # into grid-api too: the console shows the SHA-256 of the very installer that is served, and
@@ -127,8 +143,12 @@ def get_settings() -> Settings:
     try:
         return Settings()  # type: ignore[call-arg,unused-ignore]
     except ValidationError as error:
-        fields = [str(item["loc"][0]) if item["loc"] else "?" for item in error.errors()]
-        problems = [f"GRID_{field.upper()}: {item['msg']}" for field, item in zip(fields, error.errors(), strict=True)]
+        fields = [str(item["loc"][0]) if item["loc"] else "" for item in error.errors()]
+        problems = [
+            # A model-level refusal (two settings that disagree) names its variables itself.
+            f"GRID_{field.upper()}: {item['msg']}" if field else item["msg"].removeprefix("Value error, ")
+            for field, item in zip(fields, error.errors(), strict=True)
+        ]
         message = "GRID configuration refused -- " + "; ".join(problems)
         if "jwt_secret_key" in fields:
             message += f". Generate a JWT key with: {_GENERATE_JWT_SECRET}"

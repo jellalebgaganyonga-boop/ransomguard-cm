@@ -89,13 +89,20 @@ MYSQL_USER=grid
 MYSQL_PASSWORD=$(rnd 48 32)
 REDIS_PASSWORD=$(rnd 48 32)
 GRID_JWT_SECRET_KEY=$(rnd 96 64)
-GRID_ENVIRONMENT=production
 
 # How agents authenticate on /agents/*. "mtls" is the target (Sprint 10), but
 # nginx does not verify client certificates yet and agents hold none, so a
 # deployment set to "mtls" today answers 401 to every heartbeat. "agent_id" is
 # the posture every release has shipped with: defensible only because the
 # channel is confined to the tailnet.
+#
+# Since 2026-10-22 the GRID accepts agent_id with GRID_ENVIRONMENT=development
+# only, and refuses to start otherwise: a server on a guessable identity is not
+# called production. This deployment is therefore labelled development until the
+# mTLS chain (or a per-agent secret) exists. Consequence to know: the seed's
+# refusal of the development password applies to production-labelled GRIDs only,
+# so GRID_SEED_ADMIN_PASSWORD must be set by hand here (deploy.sh step 5).
+GRID_ENVIRONMENT=development
 GRID_AGENT_AUTH_MODE=agent_id
 GRID_LOG_LEVEL=INFO
 GRID_ALIENVAULT_OTX_API_KEY=

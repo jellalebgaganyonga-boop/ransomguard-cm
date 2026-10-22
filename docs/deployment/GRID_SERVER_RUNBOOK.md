@@ -203,6 +203,8 @@ emporterait les sauvegardes avec lui — copiez `backups/` sur un support extern
 | `grid-api` en boucle de redémarrage | migration Alembic en échec | `docker logs grid-api`, corriger, redéployer |
 | `grid-api` refuse de démarrer : « GRID threat-intel signing key not found at … » | clé de signature absente de `shared/pki` | restaurer la sauvegarde hors machine ; sur un serveur neuf seulement, `init-signing-key.sh` (section 2) |
 | `grid-api` refuse de démarrer : « GRID configuration refused -- GRID_… » | variable obligatoire absente ou invalide dans `shared/.env` (ex. `GRID_JWT_SECRET_KEY`, GRID-SEC-007) | compléter `.env` avec la variable nommée, puis `deploy.sh` |
+| `grid-api` refuse de démarrer : « GRID_AGENT_AUTH_MODE=agent_id is accepted with GRID_ENVIRONMENT=development only » | depuis le 2026-10-22, un serveur qui identifie ses agents par l'UUID de l'URL n'est pas appelé production ; un `.env` d'avant porte `GRID_ENVIRONMENT=production` avec `agent_id` | mettre `GRID_ENVIRONMENT=development` dans `shared/.env` (le mode `agent_id` reste défendable sur le tailnet seulement), ou passer en `mtls` quand la chaîne existera ; puis `deploy.sh` |
+| `deploy.sh` échoue à l'étape 5 : « GRID_SEED_ADMIN_PASSWORD must be set » | le mot de passe d'amorçage est absent ou vaut celui du développement | mettre `GRID_SEED_ADMIN_PASSWORD` dans `shared/.env`, puis `deploy.sh` |
 | Serveur injoignable | VM éteinte | rallumer : la stack remonte seule |
 
 ## 9. Dette d'exploitation

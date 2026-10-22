@@ -108,6 +108,13 @@ log "5/6 Seeding initial tenant/admin (idempotent)"
 # The GRID_SEED_* values are deployment inputs, not runtime configuration, so
 # they are deliberately absent from the compose service environment. Pass them
 # to this one command instead of widening the container's environment.
+# A deployed GRID never seeds the development password, whatever its label: since the GRID
+# accepts agent_id with GRID_ENVIRONMENT=development only (config.py), a tailnet deployment is
+# labelled development, and the seed's own refusal (production only) would no longer cover it.
+if [ -z "${GRID_SEED_ADMIN_PASSWORD:-}" ] || [ "$GRID_SEED_ADMIN_PASSWORD" = "ChangeMe123!" ]; then
+    echo "[FAIL] GRID_SEED_ADMIN_PASSWORD must be set in $SHARED_DIR/.env to a real password: a deployed GRID never seeds the development password" >&2
+    exit 1
+fi
 seed_env=(-e PYTHONPATH=/app/src -e "GRID_ENVIRONMENT=${GRID_ENVIRONMENT:-production}")
 for var in GRID_SEED_TENANT_NAME GRID_SEED_TENANT_CODE GRID_SEED_TENANT_EMAIL            GRID_SEED_ADMIN_EMAIL GRID_SEED_ADMIN_NAME GRID_SEED_ADMIN_PASSWORD            GRID_SEED_ANALYST_EMAIL GRID_SEED_ANALYST_PASSWORD            GRID_SEED_AUDITOR_EMAIL GRID_SEED_AUDITOR_PASSWORD; do
     [ -n "${!var:-}" ] && seed_env+=(-e "$var=${!var}")

@@ -56,6 +56,7 @@ async def test_production_without_a_key_refuses_to_start_and_names_the_path(
 ) -> None:
     missing = tmp_path / "pki" / "threat-intel-ed25519.key"
     monkeypatch.setenv("GRID_ENVIRONMENT", "production")
+    monkeypatch.setenv("GRID_AGENT_AUTH_MODE", "mtls")  # production + agent_id is refused before the key is looked at
     monkeypatch.setenv("GRID_THREAT_INTEL_SIGNING_KEY_PATH", str(missing))
 
     with pytest.raises(ConfigurationError) as refused:
