@@ -34,7 +34,7 @@ export const MOCK_ME = {
     tenant: { id: TENANT_ID, name: 'Hôpital Régional de Yaoundé', status: 'active' },
     roles: ['tenant_admin'],
     last_login_at: '2026-06-21T12:00:00+00:00',
-    preferences: { language: 'fr', timezone: 'Africa/Douala' },
+    preferences: { language: null, timezone: 'Africa/Douala' }, // no stored choice: the browser's language (en-US here)
   },
   security_analyst: {
     user_id: 'a0e2e000-0000-0000-0000-000000000020',
@@ -44,7 +44,7 @@ export const MOCK_ME = {
     tenant: { id: TENANT_ID, name: 'Hôpital Régional de Yaoundé', status: 'active' },
     roles: ['security_analyst'],
     last_login_at: '2026-06-21T11:00:00+00:00',
-    preferences: { language: 'fr', timezone: 'Africa/Douala' },
+    preferences: { language: null, timezone: 'Africa/Douala' }, // no stored choice: the browser's language (en-US here)
   },
   read_only_auditor: {
     user_id: 'a0e2e000-0000-0000-0000-000000000030',
@@ -54,7 +54,7 @@ export const MOCK_ME = {
     tenant: { id: TENANT_ID, name: 'Hôpital Régional de Yaoundé', status: 'active' },
     roles: ['read_only_auditor'],
     last_login_at: '2026-06-20T10:00:00+00:00',
-    preferences: { language: 'fr', timezone: 'Africa/Douala' },
+    preferences: { language: null, timezone: 'Africa/Douala' }, // no stored choice: the browser's language (en-US here)
   },
 };
 
@@ -197,12 +197,6 @@ export const MOCK_COMMAND = {
  *
  * Use this instead of page.goto() for all post-login navigation in tests.
  */
-/** The page fits its viewport: nothing wider than the screen (Fix E, phones). */
-export async function expectNoHorizontalOverflow(page: Page): Promise<void> {
-  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-  expect(overflow, 'horizontal overflow in px').toBeLessThanOrEqual(0);
-}
-
 export async function navigateTo(page: Page, path: string): Promise<void> {
   await page.evaluate((p) => {
     window.history.pushState({}, '', p);
@@ -310,10 +304,10 @@ export async function setupMocks(page: Page, role: Role): Promise<void> {
  */
 export async function loginAs(page: Page, role: Role): Promise<void> {
   await page.goto('/auth/login');
-  await page.getByLabel(/code établissement/i).fill('hopital-yde');
+  await page.getByLabel(/organization code/i).fill('hopital-yde');
   await page.getByLabel(/^email/i).fill(MOCK_ME[role].email);
   await page.locator('#password').fill('MotDePasseTest123!');
-  await page.getByRole('button', { name: /se connecter/i }).click();
+  await page.getByRole('button', { name: /^sign in$/i }).click();
   await page.waitForURL('**/dashboard');
 }
 

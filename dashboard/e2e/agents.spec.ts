@@ -3,7 +3,7 @@
  * AC4.x: List, detail, isolate command (admin-only).
  */
 
-import { test, expect, AxeBuilder, setupMocks, loginAs, navigateTo, expectNoHorizontalOverflow, MOCK_AGENT } from './fixtures/index';
+import { test, expect, AxeBuilder, setupMocks, loginAs, navigateTo, MOCK_AGENT } from './fixtures/index';
 
 test.describe('Agents list', () => {
   test('tenant_admin sees agent list with hostname', async ({ page }) => {
@@ -19,8 +19,8 @@ test.describe('Agents list', () => {
     await loginAs(page, 'tenant_admin');
 
     await navigateTo(page, '/agents');
-    // Status badge "Actif" visible for the mock agent
-    await expect(page.getByText(/actif/i).first()).toBeVisible();
+    // Status badge "Active" visible for the mock agent
+    await expect(page.getByText(/active/i).first()).toBeVisible();
   });
 
   test('@a11y accessibility: agents list', async ({ page }) => {
@@ -47,7 +47,7 @@ test.describe('Agent detail — no isolate command (ADR-026)', () => {
 
     await expect(page.getByText(MOCK_AGENT.hostname).first()).toBeVisible();
     // It queued a command the agent never executed; nothing here may suggest an isolation exists.
-    await expect(page.getByRole('button', { name: /isoler/i })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /isolate/i })).toHaveCount(0);
   });
 
   test('@a11y accessibility: agent detail', async ({ page }) => {
@@ -74,13 +74,13 @@ test.describe('Agent detail — posture (R8)', () => {
 
     await expect(
       page.getByRole('heading', {
-        name: 'Protection partielle — EXFIL WATCH inactif : droits administrateur manquants',
+        name: 'Partial protection — EXFIL WATCH inactive: administrator rights missing',
       }),
     ).toBeVisible();
     for (const name of ['SENTINEL', 'ENTROPY', 'GENEALOGY', 'USB GUARD', 'EXFIL WATCH', 'ANTI-TAMPERING']) {
       await expect(page.getByRole('cell', { name, exact: true })).toBeVisible();
     }
-    await expect(page.getByText('Alertes non transmises')).toBeVisible();
+    await expect(page.getByText('Alerts not transmitted')).toBeVisible();
   });
 
   // WCAG 2.2 AA contrast of every banner colour, not only the orange one of MOCK_AGENT.
@@ -119,7 +119,7 @@ test.describe('Agent detail — posture (R8)', () => {
 
     const transmission = page.getByTestId('posture-transmission');
     // received_at 11:55 UTC = 12:55 in Douala.
-    await expect(transmission.getByText('dernière valeur reçue à 12:55')).toHaveCount(5);
+    await expect(transmission.getByText('last value received at 12:55')).toHaveCount(5);
     const values = transmission.locator('dd');
     await expect(values).toHaveCount(5);
     for (const value of await values.all()) {
@@ -139,7 +139,7 @@ test.describe('Agent detail — posture (R8)', () => {
 
     const transmission = page.getByTestId('posture-transmission');
     await expect(transmission.locator('dd')).toHaveCount(5);
-    await expect(transmission.getByText(/dernière valeur reçue/)).toHaveCount(0);
+    await expect(transmission.getByText(/last value received/)).toHaveCount(0);
     await expect(transmission.locator('dd[data-stale]')).toHaveCount(0);
   });
 
@@ -148,7 +148,7 @@ test.describe('Agent detail — posture (R8)', () => {
     await loginAs(page, 'tenant_admin');
     await navigateTo(page, '/agents');
 
-    await expect(page.getByText('Partielle', { exact: true })).toBeVisible();
+    await expect(page.getByText('Partial', { exact: true })).toBeVisible();
   });
 });
 
@@ -162,7 +162,7 @@ test.describe('Agent detail — security_analyst RBAC (AC4.1.3)', () => {
     await navigateTo(page, '/agents/agent-e2e-aaa');
 
     // Isolate button must not be in DOM
-    await expect(page.getByRole('button', { name: /isoler/i })).not.toBeAttached();
+    await expect(page.getByRole('button', { name: /isolate/i })).not.toBeAttached();
   });
 });
 
@@ -176,12 +176,11 @@ test.describe('Add agent — install command (GRID-SEC-006)', () => {
     await loginAs(page, 'tenant_admin');
     await navigateTo(page, '/agents');
 
-    await page.getByRole('button', { name: /ajouter un agent/i }).click();
+    await page.getByRole('button', { name: /add agent/i }).click();
 
     const command = page.getByTestId('install-command');
     await expect(command).toContainText(`(Get-FileHash -Algorithm SHA256 $f).Hash -ne '${SHA}'`);
     await expect(page.getByTestId('installer-sha256')).toHaveText(SHA);
-    await expectNoHorizontalOverflow(page);
     const text = (await command.textContent()) ?? '';
     expect(text).not.toMatch(/(^|\s)-k(\s|$)/);
     expect(text).not.toMatch(/C:\\/i);
@@ -200,9 +199,9 @@ test.describe('Add agent — install command (GRID-SEC-006)', () => {
     await loginAs(page, 'tenant_admin');
     await navigateTo(page, '/agents');
 
-    await page.getByRole('button', { name: /ajouter un agent/i }).click();
+    await page.getByRole('button', { name: /add agent/i }).click();
 
-    await expect(page.getByRole('alert')).toContainText("Aucun programme d'installation n'est publié");
+    await expect(page.getByRole('alert')).toContainText('No installer is published');
     await expect(page.getByTestId('install-command')).toHaveCount(0);
   });
 });

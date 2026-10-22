@@ -45,40 +45,40 @@ test.describe('Users list — tenant_admin', () => {
     await navigateTo(page, '/users');
 
     // Open create modal
-    await page.getByRole('button', { name: /créer un utilisateur/i }).click();
+    await page.getByRole('button', { name: /create user/i }).click();
     const modal = page.getByRole('dialog');
     await expect(modal).toBeVisible();
 
     // Fill form
-    await modal.getByLabel(/nom complet/i).fill('Nouveau Utilisateur');
+    await modal.getByLabel(/full name/i).fill('Nouveau Utilisateur');
     await modal.getByLabel(/^email/i).fill('nouveau@hopital-yde.cm');
-    await modal.getByLabel(/mot de passe provisoire/i).fill('MotDePasse123!');
+    await modal.getByLabel(/temporary password/i).fill('MotDePasse123!');
 
     // Submit
-    await modal.getByRole('button', { name: /^créer$/i }).click();
+    await modal.getByRole('button', { name: /^create$/i }).click();
 
     // List refreshes — new user appears
     await expect(page.getByText('nouveau@hopital-yde.cm')).toBeVisible();
   });
 
-  test('self-disable: Désactiver button ABSENT from own row (GRID-SEC-002)', async ({ page }) => {
+  test('self-disable: Disable button ABSENT from own row (GRID-SEC-002)', async ({ page }) => {
     await setupMocks(page, 'tenant_admin');
     await loginAs(page, 'tenant_admin');
     await navigateTo(page, '/users');
 
     // First row = admin (same as logged-in user = ADMIN_ID)
-    // The "vous" badge should be visible on that row
-    await expect(page.getByText(/vous/i)).toBeVisible();
+    // The "you" badge should be visible on that row
+    await expect(page.getByText('you', { exact: true })).toBeVisible();
 
-    // "Désactiver" must NOT exist in DOM for own row
-    // The whole-page check: at most one Désactiver for the other user
-    const disableButtons = page.getByRole('button', { name: /désactiver/i });
+    // "Disable" must NOT exist in DOM for own row
+    // The whole-page check: at most one Disable for the other user
+    const disableButtons = page.getByRole('button', { name: /^disable$/i });
     const count = await disableButtons.count();
 
-    // If any Désactiver exists, none must be for the current user's row
-    // Simplest guard: confirm the "vous" row cell contains no Désactiver
-    const adminRow = page.locator('tr').filter({ hasText: /vous/i });
-    await expect(adminRow.getByRole('button', { name: /désactiver/i })).not.toBeAttached();
+    // If any Disable exists, none must be for the current user's row
+    // Simplest guard: confirm the "you" row cell contains no Disable
+    const adminRow = page.locator('tr').filter({ has: page.getByText('you', { exact: true }) }); // the "you" badge sits right after the name
+    await expect(adminRow.getByRole('button', { name: /^disable$/i })).not.toBeAttached();
 
     // Belt-and-suspenders: even if we had 1 button (for the other user), that's fine
     expect(count).toBeLessThanOrEqual(1);
@@ -99,7 +99,7 @@ test.describe('Users list — tenant_admin', () => {
     await loginAs(page, 'tenant_admin');
     await navigateTo(page, '/users');
 
-    // The Désactiver button for own user is not in the DOM —
+    // The Disable button for own user is not in the DOM —
     // confirm no API call is made through normal user interaction
     await page.waitForTimeout(500); // let page settle
     expect(disableCalled).toBe(false);
@@ -113,9 +113,9 @@ test.describe('Users list — tenant_admin', () => {
     await loginAs(page, 'tenant_admin');
     await navigateTo(page, '/users');
 
-    // Open role editor for own row (Rôles button on admin's row)
-    const adminRow = page.locator('tr').filter({ hasText: /vous/i });
-    await adminRow.getByRole('button', { name: /rôles/i }).click();
+    // Open role editor for own row (Roles button on admin's row)
+    const adminRow = page.locator('tr').filter({ has: page.getByText('you', { exact: true }) }); // the "you" badge sits right after the name
+    await adminRow.getByRole('button', { name: /^roles$/i }).click();
 
     const modal = page.getByRole('dialog');
     await expect(modal).toBeVisible();
@@ -129,7 +129,7 @@ test.describe('Users list — tenant_admin', () => {
     await saveBtn.click();
 
     // Self-demotion error should appear (since tenant_admin not checked = removing own admin)
-    await expect(modal.getByText(/vous ne pouvez pas retirer/i)).toBeVisible();
+    await expect(modal.getByText(/you cannot remove/i)).toBeVisible();
   });
 
   test('@a11y accessibility: users list', async ({ page }) => {
@@ -153,7 +153,7 @@ test.describe('Users — security_analyst RBAC', () => {
     await navigateTo(page, '/users');
     // UsersListPage redirects analyst to /dashboard
     await expect(page).toHaveURL(/\/dashboard/);
-    // The users page "Créer un utilisateur" button should NOT be present
-    await expect(page.getByRole('button', { name: /créer un utilisateur/i })).not.toBeAttached();
+    // The users page "Create user" button should NOT be present
+    await expect(page.getByRole('button', { name: /create user/i })).not.toBeAttached();
   });
 });

@@ -43,8 +43,8 @@ test.describe('Audit log — authorized roles', () => {
     await loginAs(page, 'tenant_admin');
     await navigateTo(page, '/audit');
 
-    await page.getByPlaceholder(/uuid agent/i).fill('agent-e2e-aaa');
-    await page.getByRole('button', { name: /rechercher/i }).click();
+    await page.getByPlaceholder(/agent uuid/i).fill('agent-e2e-aaa');
+    await page.getByRole('button', { name: /^search$/i }).click();
 
     await page.waitForTimeout(300);
     expect(filteredRequest).toBe(true);

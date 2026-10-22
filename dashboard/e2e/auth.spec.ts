@@ -9,10 +9,10 @@ test.describe('Login', () => {
   test('valid credentials → redirect to /dashboard', async ({ page }) => {
     await setupMocks(page, 'tenant_admin');
     await page.goto('/auth/login');
-    await page.getByLabel(/code établissement/i).fill('hopital-yde');
+    await page.getByLabel(/organization code/i).fill('hopital-yde');
     await page.getByLabel(/^email/i).fill('admin@hopital-yde.cm');
     await page.locator('#password').fill('MotDePasseTest123!');
-    await page.getByRole('button', { name: /se connecter/i }).click();
+    await page.getByRole('button', { name: /^sign in$/i }).click();
     await page.waitForURL('**/dashboard');
     await expect(page).toHaveURL(/\/dashboard/);
   });
@@ -24,15 +24,15 @@ test.describe('Login', () => {
       r.fulfill({ status: 401, json: { detail: 'Invalid credentials' } }));
 
     await page.goto('/auth/login');
-    await page.getByLabel(/code établissement/i).fill('hopital-yde');
+    await page.getByLabel(/organization code/i).fill('hopital-yde');
     await page.getByLabel(/^email/i).fill('wrong@example.cm');
     await page.locator('#password').fill('mauvais-mdp');
-    await page.getByRole('button', { name: /se connecter/i }).click();
+    await page.getByRole('button', { name: /^sign in$/i }).click();
 
     // Should stay on login page
     await expect(page).toHaveURL(/\/auth\/login/);
     // Error message visible (i18n key: auth.login.errors.invalidCredentials)
-    await expect(page.getByText(/email ou mot de passe incorrect/i)).toBeVisible();
+    await expect(page.getByText(/incorrect email or password/i)).toBeVisible();
   });
 
   test('empty form → required field errors, no API call', async ({ page }) => {
@@ -44,7 +44,7 @@ test.describe('Login', () => {
     });
 
     await page.goto('/auth/login');
-    await page.getByRole('button', { name: /se connecter/i }).click();
+    await page.getByRole('button', { name: /^sign in$/i }).click();
 
     // HTML5 / react-hook-form validation fires before submission
     await expect(page).toHaveURL(/\/auth\/login/);
@@ -69,8 +69,8 @@ test.describe('Logout', () => {
     // Trigger logout via the header user menu
     await page.getByTestId('user-menu').click();
     // The logout button may be nested in a dropdown
-    const logoutBtn = page.getByRole('menuitem', { name: /se déconnecter/i })
-      .or(page.getByRole('button', { name: /se déconnecter/i }));
+    const logoutBtn = page.getByRole('menuitem', { name: /^sign out$/i })
+      .or(page.getByRole('button', { name: /^sign out$/i }));
     await logoutBtn.first().click();
 
     await page.waitForURL('**/auth/login');
@@ -94,15 +94,15 @@ test.describe('Logout of every device (US1.2.2)', () => {
     await loginAs(page, 'tenant_admin');
 
     await page.getByTestId('user-menu').click();
-    await page.getByRole('menuitem', { name: /tous les appareils/i }).click();
+    await page.getByRole('menuitem', { name: /every device/i }).click();
 
     const dialog = page.getByRole('dialog');
-    await expect(dialog).toContainText('Toutes vos sessions ouvertes');
+    await expect(dialog).toContainText('Every open session');
     const results = await new AxeBuilder({ page }).include('[role="dialog"]').analyze();
     const critical = results.violations.filter((v) => v.impact === 'critical' || v.impact === 'serious');
     expect(critical, `Critical/serious a11y violations: ${JSON.stringify(critical, null, 2)}`).toEqual([]);
 
-    await dialog.getByRole('button', { name: /tout déconnecter/i }).click();
+    await dialog.getByRole('button', { name: /log out everywhere/i }).click();
     await page.waitForURL('**/auth/login');
     expect(called).toBe(true);
   });

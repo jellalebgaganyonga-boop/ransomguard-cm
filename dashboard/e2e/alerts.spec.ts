@@ -53,21 +53,21 @@ test.describe('Alert detail — security_analyst happy path', () => {
     await navigateTo(page, '/alerts/alert-e2e-001');
 
     // Click acknowledge button (AC3.3.1)
-    await page.getByRole('button', { name: /prendre en charge/i }).click();
+    await page.getByRole('button', { name: /^acknowledge$/i }).click();
 
     // Modal opens
     await expect(page.getByRole('dialog')).toBeVisible();
 
     // Confirm without note (default justification sent)
-    await page.getByRole('dialog').getByRole('button', { name: /confirmer|prendre en charge/i }).click();
+    await page.getByRole('dialog').getByRole('button', { name: /confirm|acknowledge/i }).click();
 
     // After mutation: detail refetch returns Investigating -> the status badge
-    // reads "En cours".
+    // reads "Investigating".
     // exact: true is required. Once the refetched status history renders, a
-    // loose /en cours/i also matches the history line "Nouveau -> En cours"
+    // loose /investigating/i also matches the history line "New -> Investigating"
     // and Playwright's strict mode rejects the two-element match. Locally the
     // assertion usually ran before the history painted; on CI it did not.
-    await expect(page.getByText('En cours', { exact: true }).first()).toBeVisible();
+    await expect(page.getByText('Investigating', { exact: true }).first()).toBeVisible();
   });
 
   test('Close (Investigating → Resolved): requires category + 20+ char notes', async ({ page }) => {
@@ -84,22 +84,22 @@ test.describe('Alert detail — security_analyst happy path', () => {
     await loginAs(page, 'security_analyst');
     await navigateTo(page, '/alerts/alert-e2e-001');
 
-    await page.getByRole('button', { name: /fermer l'incident/i }).click();
+    await page.getByRole('button', { name: /close incident/i }).click();
     await expect(page.getByRole('dialog')).toBeVisible();
 
     // Select resolution category (shadcn Select — click trigger then option)
     await page.getByRole('combobox').click();
-    await page.getByRole('option', { name: /vrai positif.*contenu/i }).click();
+    await page.getByRole('option', { name: /true positive.*contained/i }).click();
 
     // Type resolution notes (min 20 chars)
     const notes = 'Investigation complète : processus isolé et neutralisé avec succès.';
     await page.getByRole('textbox').fill(notes);
 
     // Submit
-    await page.getByRole('dialog').getByRole('button', { name: /fermer l'incident/i }).click();
+    await page.getByRole('dialog').getByRole('button', { name: /close incident/i }).click();
 
-    // Use exact match: "Résolu" is the status badge; "résolution" in modal labels also matches /résolu/i
-    await expect(page.getByText('Résolu', { exact: true })).toBeVisible();
+    // Use exact match: "Resolved" is the status badge; "Resolution notes" in modal labels also matches /resol/i
+    await expect(page.getByText('Resolved', { exact: true })).toBeVisible();
   });
 
   test('Close submit disabled until notes >= 20 chars (AC3.4.1)', async ({ page }) => {
@@ -109,16 +109,16 @@ test.describe('Alert detail — security_analyst happy path', () => {
 
     await loginAs(page, 'security_analyst');
     await navigateTo(page, '/alerts/alert-e2e-001');
-    await page.getByRole('button', { name: /fermer l'incident/i }).click();
+    await page.getByRole('button', { name: /close incident/i }).click();
 
-    const submitBtn = page.getByRole('dialog').getByRole('button', { name: /fermer l'incident/i });
+    const submitBtn = page.getByRole('dialog').getByRole('button', { name: /close incident/i });
 
     // Before category + notes: submit is disabled
     await expect(submitBtn).toBeDisabled();
 
     // Fill category but short notes (< 20 chars) — shadcn Select inside Dialog: force click on option
     await page.getByRole('combobox').click();
-    await page.getByRole('option', { name: /vrai positif.*contenu/i }).click({ force: true });
+    await page.getByRole('option', { name: /true positive.*contained/i }).click({ force: true });
     await page.getByRole('textbox').fill('Trop court');
     await expect(submitBtn).toBeDisabled();
 
@@ -142,11 +142,11 @@ test.describe('Alert detail — read_only_auditor RBAC', () => {
     await navigateTo(page, '/alerts/alert-e2e-001');
 
     // AC3.3.3 / AC3.4.3: no write actions for auditor
-    await expect(page.getByRole('button', { name: /prendre en charge/i })).not.toBeAttached();
-    await expect(page.getByRole('button', { name: /fermer l'incident/i })).not.toBeAttached();
+    await expect(page.getByRole('button', { name: /^acknowledge$/i })).not.toBeAttached();
+    await expect(page.getByRole('button', { name: /close incident/i })).not.toBeAttached();
 
     // Read-only notice visible instead
-    await expect(page.getByText(/mode lecture seule/i)).toBeVisible();
+    await expect(page.getByText(/read-only mode/i)).toBeVisible();
   });
 
   test('@a11y accessibility: alert detail', async ({ page }) => {
@@ -165,17 +165,17 @@ test.describe('Alert detail — read_only_auditor RBAC', () => {
   });
 });
 
-// ADR-025: the alert arrives first; "Qui l'a fait ?" follows, from the agent's complement.
+// ADR-025: the alert arrives first; "Who did it?" follows, from the agent's complement.
 test.describe('Alert detail — attribution (ADR-025)', () => {
   for (const [label, attribution, expected] of [
-    ['pending', { state: 'pending' }, 'Attribution en cours…'],
+    ['pending', { state: 'pending' }, 'Attribution in progress…'],
     [
       'resolved',
       { state: 'resolved', process_id: 4242, process_name: 'evil', process_path: String.raw`C:\Temp\evil.exe`, process_created_at: '2026-10-21T09:57:00+00:00' },
       '— PID 4242',
     ],
-    ['unavailable', { state: 'unavailable', reason: 'system_pid' }, '— écriture faite par le système (écriture différée ou fichier mappé)'],
-    ['ambiguous', { state: 'ambiguous' }, "Plusieurs processus ont écrit ce fichier : aucun n'est désigné"],
+    ['unavailable', { state: 'unavailable', reason: 'system_pid' }, '— written by the system (deferred write or memory-mapped file)'],
+    ['ambiguous', { state: 'ambiguous' }, 'Several processes wrote this file: none is named'],
   ] as const) {
     test(`@a11y ${label}`, async ({ page }) => {
       await setupMocks(page, 'security_analyst');
@@ -185,7 +185,7 @@ test.describe('Alert detail — attribution (ADR-025)', () => {
       await navigateTo(page, '/alerts/alert-e2e-001');
 
       const section = page.getByTestId('alert-attribution');
-      await expect(section.getByText("Qui l'a fait ?")).toBeVisible();
+      await expect(section.getByText('Who did it?')).toBeVisible();
       await expect(section.getByText(expected)).toBeVisible();
 
       const results = await new AxeBuilder({ page }).include('[data-testid="alert-attribution"]').analyze();
@@ -224,9 +224,9 @@ test.describe('Alert detail — response (ADR-026, J1 § 1.3)', () => {
 
     const section = page.getByTestId('alert-response');
     await expect(section).toHaveAttribute('data-state', 'suspended');
-    await expect(section.getByText(/Processus suspendu : evil \(PID 4242\)/)).toBeVisible();
-    await expect(section.getByRole('button', { name: /reprendre le processus/i })).toBeVisible();
-    await expect(section.getByRole('button', { name: /suspendre le processus/i })).toHaveCount(0);
+    await expect(section.getByText(/Process suspended: evil \(PID 4242\)/)).toBeVisible();
+    await expect(section.getByRole('button', { name: /resume the process/i })).toBeVisible();
+    await expect(section.getByRole('button', { name: /suspend the detected process/i })).toHaveCount(0);
   });
 
   test('"Suspend" sends the command, then shows the agent\'s own answer: not executed, with its reason', async ({ page }) => {
@@ -251,8 +251,8 @@ test.describe('Alert detail — response (ADR-026, J1 § 1.3)', () => {
     await navigateTo(page, '/alerts/alert-e2e-001');
 
     const section = page.getByTestId('alert-response');
-    await section.getByRole('button', { name: /suspendre le processus détecté/i }).click();
-    await section.getByRole('button', { name: /confirmer la suspension/i }).click();
+    await section.getByRole('button', { name: /suspend the detected process/i }).click();
+    await section.getByRole('button', { name: /confirm the suspension/i }).click();
 
     // The console sends the alert id only: the PID comes from the alert's attribution, on the GRID.
     expect(sent).toEqual({ agent_id: MOCK_ALERT_NEW.agent_id, command_type: 'suspend_process', parameters: { alert_id: 'alert-e2e-001' } });
@@ -262,8 +262,8 @@ test.describe('Alert detail — response (ADR-026, J1 § 1.3)', () => {
 
     phase = 2; // the page polls every 5 s while a command is open
     await expect(status).toHaveAttribute('data-status', 'not_executed', { timeout: 15_000 });
-    await expect(status).toContainText('non exécutée par l\'agent');
-    await expect(status).toContainText('le numéro de processus a été réattribué');
+    await expect(status).toContainText('not executed by the agent');
+    await expect(status).toContainText('the process number was reassigned');
   });
 
   test('security_analyst sees the response but no command button', async ({ page }) => {
@@ -274,7 +274,7 @@ test.describe('Alert detail — response (ADR-026, J1 § 1.3)', () => {
     await navigateTo(page, '/alerts/alert-e2e-001');
 
     const section = page.getByTestId('alert-response');
-    await expect(section.getByText(/Processus suspendu/)).toBeVisible();
+    await expect(section.getByText(/Process suspended/)).toBeVisible();
     await expect(section.getByRole('button')).toHaveCount(0);
   });
 });

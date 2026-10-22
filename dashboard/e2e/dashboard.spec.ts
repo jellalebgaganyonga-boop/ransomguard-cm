@@ -6,30 +6,30 @@
 import { test, expect, AxeBuilder, setupMocks, loginAs } from './fixtures/index';
 
 test.describe('Dashboard routing by role', () => {
-  test('tenant_admin → Executive dashboard (Actions rapides visible)', async ({ page }) => {
+  test('tenant_admin → Executive dashboard (Quick actions visible)', async ({ page }) => {
     await setupMocks(page, 'tenant_admin');
     await loginAs(page, 'tenant_admin');
 
-    // Executive dashboard quick actions (fr.json: dashboard.exec.quickActions). The compliance
+    // Executive dashboard quick actions (en.json: dashboard.exec.quickActions). The compliance
     // card is gone: no regulatory verdict is shown without a real computation behind it.
-    await expect(page.getByText(/actions rapides/i)).toBeVisible();
-    await expect(page.getByText(/conforme/i)).toHaveCount(0);
+    await expect(page.getByText(/quick actions/i)).toBeVisible();
+    await expect(page.getByText(/compliant/i)).toHaveCount(0);
   });
 
-  test('security_analyst → Operational dashboard (FLUX D\'ALERTES visible)', async ({ page }) => {
+  test('security_analyst → Operational dashboard (LIVE ALERT FEED visible)', async ({ page }) => {
     await setupMocks(page, 'security_analyst');
     await loginAs(page, 'security_analyst');
 
-    // Operational dashboard has live alert feed (fr.json: dashboard.ops.feed.title)
-    await expect(page.getByText(/flux d'alertes/i)).toBeVisible();
+    // Operational dashboard has live alert feed (en.json: dashboard.ops.feed.title)
+    await expect(page.getByText(/live alert feed/i)).toBeVisible();
   });
 
-  test('read_only_auditor → Read-only dashboard (Mode auditeur notice visible)', async ({ page }) => {
+  test('read_only_auditor → Read-only dashboard (auditor mode notice visible)', async ({ page }) => {
     await setupMocks(page, 'read_only_auditor');
     await loginAs(page, 'read_only_auditor');
 
-    // Read-only dashboard has auditor notice (fr.json: dashboard.readonly.notice)
-    await expect(page.getByText(/mode auditeur/i)).toBeVisible();
+    // Read-only dashboard has auditor notice (en.json: dashboard.readonly.notice)
+    await expect(page.getByText(/auditor mode/i)).toBeVisible();
     // No compliance percentage made up by the console.
     await expect(page.getByText(/\d+\s?%/)).toHaveCount(0);
   });

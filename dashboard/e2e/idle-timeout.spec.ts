@@ -39,10 +39,10 @@ test.describe('Idle timeout', () => {
 
     // Perform login
     await page.goto('/auth/login');
-    await page.getByLabel(/code établissement/i).fill('hopital-yde');
+    await page.getByLabel(/organization code/i).fill('hopital-yde');
     await page.getByLabel(/^email/i).fill(MOCK_ME.tenant_admin.email);
     await page.locator('#password').fill('MotDePasseTest123!');
-    await page.getByRole('button', { name: /se connecter/i }).click();
+    await page.getByRole('button', { name: /^sign in$/i }).click();
     await page.waitForURL('**/dashboard');
     await waitForIdleTimerArmed(page);
 
@@ -55,8 +55,8 @@ test.describe('Idle timeout', () => {
     await expect(modal).toBeVisible({ timeout: 5000 });
     await expect(modal).toContainText(/session.*expir|expir.*session/i);
 
-    // Click the CTA button (fr: "Se reconnecter")
-    await modal.getByRole('button', { name: /se reconnecter|reconnect/i }).click();
+    // Click the CTA button (en: "Sign in again")
+    await modal.getByRole('button', { name: /sign in again/i }).click();
 
     // Should redirect to login
     await expect(page).toHaveURL(/\/auth\/login/);
@@ -67,19 +67,17 @@ test.describe('Idle timeout', () => {
     await setupMocks(page, 'tenant_admin');
 
     await page.goto('/auth/login');
-    await page.getByLabel(/code établissement/i).fill('hopital-yde');
+    await page.getByLabel(/organization code/i).fill('hopital-yde');
     await page.getByLabel(/^email/i).fill(MOCK_ME.tenant_admin.email);
     await page.locator('#password').fill('MotDePasseTest123!');
-    await page.getByRole('button', { name: /se connecter/i }).click();
+    await page.getByRole('button', { name: /^sign in$/i }).click();
     await page.waitForURL('**/dashboard');
     await waitForIdleTimerArmed(page);
 
     // Advance 20 minutes
     await page.clock.fastForward(20 * 60 * 1000);
 
-    // Simulate user activity (mousemove / keypress resets the timer). Inside every viewport:
-    // (400, 300) fell outside the 320 px mobile-small one, no event reached the page, and the
-    // modal showed up -- a test bug, not a product one.
+    // Simulate user activity (mousemove / keypress resets the timer)
     await page.mouse.move(100, 100);
 
     // Advance another 20 minutes (total 40 min, but 20 min since last activity)

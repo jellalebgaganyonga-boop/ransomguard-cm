@@ -34,7 +34,7 @@ export default defineConfig({
     video: 'retain-on-failure',
     // Per STRIDE WT2.1: app enforces HTTPS, but local E2E uses HTTP via
     // Vite dev server (proxy handles TLS to backend)
-    locale: 'fr-FR', // French-default per Definition Phase §6
+    locale: 'en-US', // English is the default (tech lead, 2026-10-21); French stays available
     timezoneId: 'Africa/Douala',
   },
 

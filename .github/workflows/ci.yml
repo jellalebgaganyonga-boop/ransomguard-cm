@@ -158,9 +158,9 @@ jobs:
           # reachable from a runner. Point the dev proxy at a closed port so a
           # request that escapes the mocks fails at once instead of hanging.
           VITE_PROXY_TARGET: http://127.0.0.1:9
-        # Desktop and the two phone viewports (412 px and 320 px): until Fix E the phone projects
-        # existed in playwright.config.ts and never ran in CI.
-        run: npm run test:e2e -- --project=chromium --project=mobile-chrome --project=mobile-small
+        # Desktop only (tech lead, 2026-10-21): the console is for desktop computers; the phone
+        # projects stay in playwright.config.ts for a local look, never in CI.
+        run: npm run test:e2e -- --project=chromium
 
       - uses: actions/upload-artifact@v4
         if: failure()

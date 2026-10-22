@@ -5,7 +5,7 @@
  * the bell in the header is its quick link.
  */
 
-import { test, expect, AxeBuilder, setupMocks, loginAs, navigateTo, expectNoHorizontalOverflow, MOCK_ME } from './fixtures/index';
+import { test, expect, AxeBuilder, setupMocks, loginAs, navigateTo, MOCK_ME } from './fixtures/index';
 import type { Page } from '@playwright/test';
 
 const PREFS = { id: 'pref-e2e-1', email_critical: true, email_high: true, email_medium: false, email_low: false, email_delivery_configured: false };
@@ -29,20 +29,19 @@ test.describe('Settings', () => {
     await loginAs(page, 'read_only_auditor');
     await navigateTo(page, '/settings');
 
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Paramètres');
-    await expect(page.getByRole('tab', { name: 'Profil' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Settings');
+    await expect(page.getByRole('tab', { name: 'Profile' })).toHaveAttribute('aria-selected', 'true');
     await expect(page.getByTestId('profile-name')).toHaveText('Auditeur E2E');
-    await expectNoHorizontalOverflow(page);
     const panel = page.getByRole('tabpanel');
     await expect(panel.getByText('auditor@hopital-yde.cm')).toBeVisible();
     await expect(panel.getByText('Hôpital Régional de Yaoundé')).toBeVisible();
 
-    await page.getByRole('button', { name: 'Modifier' }).click();
-    await page.getByLabel('Nom affiché').fill('  Auditrice E2E ');
-    await page.getByRole('button', { name: 'Enregistrer' }).click();
+    await page.getByRole('button', { name: 'Edit' }).click();
+    await page.getByLabel('Display name').fill('  Auditrice E2E ');
+    await page.getByRole('button', { name: 'Save' }).click();
 
     expect(patched).toEqual({ full_name: 'Auditrice E2E' });
-    await expect(page.getByTestId('toast')).toContainText('Nom enregistré.');
+    await expect(page.getByTestId('toast')).toContainText('Name saved.');
     await expect(page.getByTestId('profile-name')).toHaveText('Auditrice E2E');
 
     const results = await new AxeBuilder({ page }).analyze();
@@ -64,17 +63,17 @@ test.describe('Settings', () => {
     await loginAs(page, 'security_analyst');
     await navigateTo(page, '/settings?tab=language');
 
-    await expect(page.getByRole('tab', { name: 'Langue' })).toHaveAttribute('aria-selected', 'true');
-    await page.getByRole('tabpanel').getByRole('combobox').selectOption('en');
+    await expect(page.getByRole('tab', { name: 'Language' })).toHaveAttribute('aria-selected', 'true');
+    await page.getByRole('tabpanel').getByRole('combobox').selectOption('fr');
 
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Settings');
-    expect(sent).toEqual({ language: 'en' });
-    await expect(page.getByTestId('toast')).toContainText('Language saved.');
-    await expect(page.getByText('Choice stored on the GRID.')).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Paramètres');
+    expect(sent).toEqual({ language: 'fr' });
+    await expect(page.getByTestId('toast')).toContainText('Langue enregistrée.');
+    await expect(page.getByText('Choix enregistré sur le GRID.')).toBeVisible();
 
-    // Stored on the GRID: a fresh load comes up in English before any click.
+    // Stored on the GRID: a fresh load comes up in French before any click, in an English browser.
     await page.reload();
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Settings');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Paramètres');
   });
 
   test('the bell leads every role to the notifications tab; a preference is stored on the GRID', async ({ page }) => {
@@ -94,14 +93,14 @@ test.describe('Settings', () => {
     await expect(page).toHaveURL(/\/settings\?tab=notifications$/);
     await expect(page.getByRole('tab', { name: 'Notifications' })).toHaveAttribute('aria-selected', 'true');
 
-    await expect(page.getByTestId('email-delivery-not-configured')).toContainText("n'est pas configuré");
+    await expect(page.getByTestId('email-delivery-not-configured')).toContainText('is not configured');
     const medium = page.getByRole('switch', { name: /moyen|medium/i });
     await expect(medium).toHaveAttribute('aria-checked', 'false');
     await medium.click();
 
     expect(sent).toEqual({ email_critical: true, email_high: true, email_medium: true, email_low: false });
     await expect(medium).toHaveAttribute('aria-checked', 'true');
-    await expect(page.getByTestId('toast')).toContainText('Préférence enregistrée.');
+    await expect(page.getByTestId('toast')).toContainText('Preference saved.');
   });
 
   test('a failed preference save is said, never pretended', async ({ page }) => {
@@ -135,28 +134,27 @@ test.describe('Settings', () => {
     await loginAs(page, 'tenant_admin');
     await navigateTo(page, '/settings?tab=security');
 
-    const submit = page.getByRole('button', { name: 'Changer le mot de passe' });
+    const submit = page.getByRole('button', { name: 'Change the password' });
     await expect(submit).toBeDisabled();
 
-    await expectNoHorizontalOverflow(page);
-    await page.getByLabel('Mot de passe actuel').fill('wrong');
-    await page.getByLabel(/^Nouveau mot de passe/).fill('short');
-    await expect(page.getByText('8 caractères au moins.')).toBeVisible();
+    await page.getByLabel('Current password').fill('wrong');
+    await page.getByLabel(/^New password/).fill('short');
+    await expect(page.getByText('At least 8 characters.')).toBeVisible();
     await expect(submit).toBeDisabled();
 
-    await page.getByLabel(/^Nouveau mot de passe/).fill('NouveauMotDePasse1!');
-    await page.getByLabel('Confirmer le nouveau mot de passe').fill('NouveauMotDePasse1?');
-    await expect(page.getByText('Les deux saisies diffèrent.')).toBeVisible();
+    await page.getByLabel(/^New password/).fill('NouveauMotDePasse1!');
+    await page.getByLabel('Confirm the new password').fill('NouveauMotDePasse1?');
+    await expect(page.getByText('The two entries differ.')).toBeVisible();
     await expect(submit).toBeDisabled();
 
-    await page.getByLabel('Confirmer le nouveau mot de passe').fill('NouveauMotDePasse1!');
+    await page.getByLabel('Confirm the new password').fill('NouveauMotDePasse1!');
     await submit.click();
-    await expect(page.getByRole('alert')).toHaveText('Mot de passe actuel incorrect.');
+    await expect(page.getByRole('alert')).toHaveText('Current password incorrect.');
 
-    await page.getByLabel('Mot de passe actuel').fill('MotDePasseTest123!');
+    await page.getByLabel('Current password').fill('MotDePasseTest123!');
     await submit.click();
-    await expect(page.getByTestId('toast')).toContainText('Mot de passe changé.');
-    await expect(page.getByLabel('Mot de passe actuel')).toHaveValue('');
+    await expect(page.getByTestId('toast')).toContainText('Password changed.');
+    await expect(page.getByLabel('Current password')).toHaveValue('');
     expect(attempts).toHaveLength(2);
   });
 });
