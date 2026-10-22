@@ -582,7 +582,7 @@ async def list_agent_suspensions(
             Alert.agent_id == agent_id,
             AlertDetail.tenant_id == user.tenant_id,
             AlertDetail.key.in_((
-                "suspension_id", "response", "process_id", "process_name", "canary_path",
+                "suspension_id", "response", "process_id", "process_name", "canary_path", "response_to",
             )),
         )
         .order_by(Alert.detected_at)
@@ -606,7 +606,10 @@ async def list_agent_suspensions(
             pid = entry.get("process_id")
             open_suspensions[suspension_id] = SuspendedProcessItem(
                 suspension_id=suspension_id,
-                alert_id=entry["alert_id"],
+                # The canary alert, not this response: it is the one the console names to resume,
+                # and the one whose attribution the GRID reads. Filled just below.
+                alert_id="",
+                response_to=entry.get("response_to"),
                 process_id=int(pid) if pid and pid.isdigit() else None,
                 process_name=entry.get("process_name") or None,
                 canary_path=entry.get("canary_path") or None,
@@ -623,7 +626,23 @@ async def list_agent_suspensions(
         if suspension_id in open_suspensions:
             open_suspensions[suspension_id].escalations = count
 
-    return [item for key, item in open_suspensions.items() if key not in closed]
+    live = [item for key, item in open_suspensions.items() if key not in closed]
+
+    # response_to is the canary alert's client_message_id; the console needs the alert id itself.
+    wanted = {item.response_to for item in live if item.response_to}
+    if wanted:
+        canary_ids = dict((await db.execute(
+            select(Alert.client_message_id, Alert.id).where(
+                Alert.tenant_id == user.tenant_id,
+                Alert.agent_id == agent_id,
+                Alert.client_message_id.in_(wanted),
+            )
+        )).all())
+        for item in live:
+            item.alert_id = canary_ids.get(item.response_to or "", "")
+
+    # A suspension whose canary alert is not in this tenant cannot be acted on: it is not listed.
+    return [item for item in live if item.alert_id]
 
 
 # --- METRICS ---

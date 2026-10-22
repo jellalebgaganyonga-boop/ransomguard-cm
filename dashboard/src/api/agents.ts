@@ -121,6 +121,30 @@ export async function fetchAgentDetail(id: string): Promise<AgentDetail> {
   return AgentDetailSchema.parse(res.data);
 }
 
+// ── Suspended processes (ADR-026) ───────────────────────────
+// What the agent says is frozen right now. The GRID builds it from the agent's own reports, so a
+// command the agent never carried out appears nowhere here.
+
+export const SuspendedProcessSchema = z.object({
+  suspension_id: z.string(),
+  /** The canary alert to name when asking for the resume; the PID comes from its attribution. */
+  alert_id: z.string(),
+  process_id: z.number().int().nullable(),
+  process_name: z.string().nullable(),
+  canary_path: z.string().nullable(),
+  suspended_at: z.string(),
+  /** A resume was asked and failed: still frozen, and nothing can unfreeze it before a restart. */
+  resume_failed: z.boolean(),
+  /** How many times the agent asked again for a decision. */
+  escalations: z.number().int(),
+});
+export type SuspendedProcess = z.infer<typeof SuspendedProcessSchema>;
+
+export async function fetchAgentSuspensions(agentId: string): Promise<SuspendedProcess[]> {
+  const res = await apiClient.get(`/dashboard/agents/${agentId}/suspensions`);
+  return z.array(SuspendedProcessSchema).parse(res.data);
+}
+
 // ── CommandStatus — PascalCase matching backend enum ────────
 
 export const CommandStatusSchema = z.enum([

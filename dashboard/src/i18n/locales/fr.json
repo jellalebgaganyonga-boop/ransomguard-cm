@@ -331,6 +331,20 @@
       "hint": "Après l'enrôlement, l'agent apparaîtra ici dans les 60 secondes (prochain rafraîchissement auto).",
       "regenerate": "Générer un nouveau code"
     },
+    "suspended": {
+      "title": "Processus suspendus",
+      "subtitle": "Ce que ce poste déclare gelé en ce moment. Un processus que l'agent a repris, ou qui s'est arrêté, sort de cette liste parce que l'agent l'a dit.",
+      "unnamedProcess": "processus sans nom connu",
+      "since": "Suspendu",
+      "file": "Fichier leurre écrit",
+      "escalations": "Rappels envoyés sans décision",
+      "resume": "Reprendre",
+      "confirmBody": "Ceci laissera le processus repartir. S'il chiffrait des fichiers, il continuera. Rien ne reprend tout seul : c'est votre décision.",
+      "confirmResume": "Reprendre le processus",
+      "asked": "Reprise demandée ; l'agent répond sur l'alerte.",
+      "sendFailed": "La demande n'a pas pu être envoyée.",
+      "resumeFailed": "Une reprise a été demandée et a échoué : le processus reste gelé, et rien ne peut le dégeler avant le redémarrage de ce poste."
+    },
     "detail": {
       "notFound": "Agent non trouvé",
       "backToList": "Retour aux agents",

@@ -65,9 +65,11 @@ class SuspendedProcessItem(BaseModel):
     """
 
     suspension_id: str
-    # The suspension alert itself: the console opens it to resume, where the PID comes from the
-    # alert's own attribution and never from the client.
+    # The canary alert the suspension answers: what the console names to ask for a resume, and
+    # whose attribution the GRID reads. The PID never comes from the client.
     alert_id: str
+    # Its client_message_id, used to find it; not useful to the console.
+    response_to: str | None = None
     process_id: int | None = None
     process_name: str | None = None
     canary_path: str | None = None

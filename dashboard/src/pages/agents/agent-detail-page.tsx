@@ -21,11 +21,13 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { ChevronLeft, FileQuestion } from 'lucide-react';
 import { useAgentDetail } from '@/hooks/use-agents';
+import { useMe, resolvePrimaryRole } from '@/hooks/use-me';
 import { useAlertList } from '@/hooks/use-alerts';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { SeverityBadge } from '@/components/ui/severity-badge';
 import { AgentPostureSection } from '@/components/agents/agent-posture-section';
+import { SuspendedProcessesSection } from '@/components/agents/suspended-processes-section';
 import { agentStatusVariant } from '@/lib/agent-status';
 import { formatDistanceToNow, formatDateTime } from '@/lib/format-date';
 
@@ -58,6 +60,8 @@ export function AgentDetailPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const { data: agent, isLoading, isError, error } = useAgentDetail(id);
+  const { data: me } = useMe();
+  const role = me ? resolvePrimaryRole(me.roles) : 'read_only_auditor'; // fail closed
 
   const [activeTab, setActiveTab] = useState<Tab>('overview');
 
@@ -154,6 +158,11 @@ export function AgentDetailPage() {
       {/* R8: is this endpoint protected, why not, did everything arrive? */}
       <div className="mb-6">
         <AgentPostureSection agent={agent} />
+      </div>
+
+      {/* ADR-026: what this endpoint says is frozen right now, and the way to let it run again. */}
+      <div className="mb-6">
+        <SuspendedProcessesSection agentId={agent.id} role={role} />
       </div>
 
       {/* Tabs */}

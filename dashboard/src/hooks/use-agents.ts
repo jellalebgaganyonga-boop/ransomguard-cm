@@ -10,6 +10,7 @@ import { saveBlob } from '@/lib/installer-download';
 import {
   downloadInstaller,
   fetchAgentDetail,
+  fetchAgentSuspensions,
   fetchAgentList,
   issueCommand,
   provisionAgent,
@@ -60,6 +61,19 @@ export function useAgentDetail(id: string | undefined) {
       if (status === 404) return false;
       return count < 2;
     },
+  });
+}
+
+// ── Suspended processes of one agent (ADR-026) ──────────────
+
+export function useAgentSuspensions(id: string | undefined) {
+  const tenantId = useTenantId();
+  return useQuery({
+    queryKey: ['agents', 'suspensions', tenantId, id],
+    queryFn: () => fetchAgentSuspensions(id!),
+    enabled: !!tenantId && !!id,
+    ...AGENT_REFRESH,
+    staleTime: 25_000,
   });
 }
 

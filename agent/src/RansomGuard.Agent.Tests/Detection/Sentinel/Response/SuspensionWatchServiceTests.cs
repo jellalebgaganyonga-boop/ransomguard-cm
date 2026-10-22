@@ -99,7 +99,10 @@ public sealed class SuspensionWatchServiceTests : IDisposable
         await service.SweepAsync(CancellationToken.None);
 
         Reload(record.Id).State.ShouldBe(SuspensionState.Ended);
-        Alerts().ShouldBeEmpty();
+        // No escalation: there is nothing left to decide. One alert, and only one: the GRID is told
+        // the suspension is closed, or the console would keep listing a process that is gone.
+        Alerts().ShouldAllBe(a => a.AlertType == "SentinelSuspensionEnded");
+        Alerts().Count.ShouldBe(1);
     }
 
     [Fact]

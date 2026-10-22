@@ -331,6 +331,20 @@
       "hint": "After the agent enrolls, it will appear here within 60 seconds (next auto-refresh).",
       "regenerate": "Generate a new code"
     },
+    "suspended": {
+      "title": "Suspended processes",
+      "subtitle": "What this endpoint reports as frozen right now. A process the agent has resumed, or that has exited, leaves this list because the agent said so.",
+      "unnamedProcess": "process with no known name",
+      "since": "Suspended",
+      "file": "Decoy file written",
+      "escalations": "Reminders sent with no decision",
+      "resume": "Resume",
+      "confirmBody": "This will let the process run again. If it was encrypting files, it will carry on. Nothing resumes by itself: this is your decision.",
+      "confirmResume": "Resume the process",
+      "asked": "Resume asked; the agent answers on the alert.",
+      "sendFailed": "The request could not be sent.",
+      "resumeFailed": "A resume was asked and failed: the process is still frozen, and nothing can unfreeze it before this machine restarts."
+    },
     "detail": {
       "notFound": "Agent not found",
       "backToList": "Back to agents",

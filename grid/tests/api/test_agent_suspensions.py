@@ -55,7 +55,7 @@ async def test_a_suspension_the_agent_reported_open_is_listed(
 ) -> None:
     ids = await _tenant_and_agent(db_session)
     message_id = f"rg-{uuid4().hex}"
-    await _alert(db_session, ids, message_id, state="resolved")
+    canary_alert_id = await _alert(db_session, ids, message_id, state="resolved")
     await _response_alert(
         db_session, ids, alert_type="SentinelProcessSuspended", response="process_suspended",
         response_to=message_id,
@@ -73,6 +73,9 @@ async def test_a_suspension_the_agent_reported_open_is_listed(
     assert item["canary_path"].endswith("0001_x.txt")
     assert item["resume_failed"] is False
     assert item["escalations"] == 0
+    # The canary alert, not the response alert: it is what the console names to ask for a
+    # resume, and whose attribution the GRID reads for the PID.
+    assert item["alert_id"] == canary_alert_id
 
 
 @pytest.mark.asyncio
