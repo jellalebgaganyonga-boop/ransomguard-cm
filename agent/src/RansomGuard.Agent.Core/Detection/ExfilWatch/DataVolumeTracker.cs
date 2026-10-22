@@ -29,12 +29,24 @@ public sealed class DataVolumeTracker : IDataVolumeTracker
     public long TotalEventsRecorded => Interlocked.Read(ref _totalEventsRecorded);
 
     /// <summary>Initializes the data volume tracker.</summary>
-    public DataVolumeTracker(ILogger<DataVolumeTracker> logger, int learningPhaseDays = 7)
+    /// <param name="logger">Logger.</param>
+    /// <param name="learningPhaseDays">Length of the learning phase.</param>
+    /// <param name="startedAt">
+    /// When the learning phase began on this endpoint, read from the database by
+    /// <see cref="IExfilLearningPhaseStore"/>. Null starts it now, which is what a test wants and
+    /// what production did until 2026-10-22: every restart began the seven days again, so an
+    /// endpoint restarted weekly never left the phase and never raised a volume anomaly
+    /// (AGT-EXF-001).
+    /// </param>
+    public DataVolumeTracker(ILogger<DataVolumeTracker> logger, int learningPhaseDays = 7, DateTime? startedAt = null)
     {
         _logger = logger;
         _learningPhaseDays = learningPhaseDays;
-        _startedAt = DateTime.UtcNow;
+        _startedAt = startedAt ?? DateTime.UtcNow;
     }
+
+    /// <summary>When the learning phase began on this endpoint (UTC).</summary>
+    public DateTime LearningStartedAt => _startedAt;
 
     /// <inheritdoc />
     public void RecordEvent(NetworkEvent networkEvent)

@@ -28,9 +28,13 @@ inputs would add rules that never fire while the module reads "8 rules".
 
 - While learning, the module reads **`degraded / learning_phase`** in the posture: three rules
   fire, `VolumeAnomaly` does not. Once the phase ends, the module re-reads `active` within a minute.
-- The phase is measured from the **tracker's creation**, in memory: **every agent restart starts
-  the 7 days again** and empties the baselines (AGT-EXF-001). A machine restarted weekly never
-  leaves the learning phase. The fix is a persisted baseline; it is not done.
+- The phase is measured from a **start stored on the endpoint** (`ExfilLearningPhases`, one row,
+  written the first time the module runs and never moved). A restart reads it back, so the seven
+  days run once and end on time even on a workstation switched off every night (2026-10-22).
+  **The baselines themselves are still in memory** and are emptied by a restart: after one, the
+  module is out of the learning phase with baselines it has to fill again, so `VolumeAnomaly` has
+  nothing to compare against until traffic has been seen (the rest of AGT-EXF-001). Persisting the
+  baselines is not done.
 
 ## What "active" means
 

@@ -396,6 +396,26 @@ namespace RansomGuard.Agent.Core.Persistence.Migrations
                     b.ToTable("ExfilAlerts");
                 });
 
+            modelBuilder.Entity("RansomGuard.Agent.Core.Persistence.Entities.ExfilLearningPhase", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("LearningPhaseDays")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("StartedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("ExfilLearningPhases");
+                });
+
             modelBuilder.Entity("RansomGuard.Agent.Core.Persistence.Entities.GenealogyRecord", b =>
                 {
                     b.Property<Guid>("Id")

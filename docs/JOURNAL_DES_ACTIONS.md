@@ -394,7 +394,8 @@ Le verdict est calculé par la GRID (`grid/src/ransomguard_grid/services/agent_p
 | AGT-ISO-001 | Haute, hors des 4 jours | L'isolement réseau du poste n'existe pas ; une rafale de canaris sans attribution donne une alerte `SentinelIsolationRecommended`, rien n'est isolé. |
 | AGT-RESP-001 | Normale | Un processus suspendu que `NtResumeProcess` ne peut pas reprendre reste suspendu jusqu'au redémarrage du poste. |
 | AGT-PATH-002 | Normale | Les profils utilisateurs sont lus au démarrage ; un profil créé ensuite n'est surveillé qu'au redémarrage de l'agent. |
-| AGT-EXF-001, AGT-EXF-002 | Normale | La phase d'apprentissage d'EXFIL WATCH recommence à chaque redémarrage ; quatre règles existent sans être branchées (listes de menaces non alimentées, PID 0 d'ENTROPY). |
+| AGT-EXF-001 | Normale, en partie corrigé (2026-10-22) | Le début de la phase d'apprentissage d'EXFIL WATCH est stocké sur le poste : un redémarrage ne recommence plus les 7 jours. Les lignes de base restent en mémoire et sont vidées par un redémarrage. |
+| AGT-EXF-002 | Normale | Quatre règles EXFIL WATCH existent sans être branchées, par choix écrit (listes de menaces non alimentées, PID 0 d'ENTROPY). |
 | AGT-FWD-001 | Normale | Un complément d'attribution dont l'alerte a été refusée est retenté sans fin (toutes les 5 min au plus). |
 | AGT-ETW-001 | **Condition avant le pilote** | Rejouer la mesure ETW sur un vrai vieux poste d'hôpital, avec Bitdefender actif. |
 | AGT-AUD-001 | Haute | Le journal d'audit de l'agent n'est jamais envoyé à la GRID : `SendAuditLogBatchAsync` n'a aucun appelant ; les formats de signature diffèrent. |
