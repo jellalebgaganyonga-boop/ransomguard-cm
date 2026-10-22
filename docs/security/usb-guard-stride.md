@@ -5,7 +5,7 @@
 1. **UsbDeviceMonitor** — WMI event subscriber (`Win32_DiskDrive` arrival via `ManagementEventWatcher`) plus SetupAPI for device metadata extraction. Runs as a BackgroundService consuming device events through a bounded channel.
 2. **UsbContentScanner** — Filesystem-level scanning engine that orchestrates MagicByteValidator, AutorunInfDetector, SuspiciousLnkDetector, ArchiveScanner, and UsbEntropyScanner. Iterates files on mounted USB volumes with configurable size limits and rate limiting.
 3. **UsbWhitelistService** — Persistence layer for approved USB device serial numbers. Uses HMAC-SHA256 with a salt derived from the database encryption key. Comparison uses `CryptographicOperations.FixedTimeEquals` (CWE-208 mitigation).
-4. **QuarantineService** — Moves suspicious files to an encrypted quarantine vault with DACL-protected directory structure (**Not implemented — AGT-USB-001**: quarantine is not wired, and no DACL is applied to any agent directory today). Files are AES-256-GCM encrypted before storage.
+4. **QuarantineService** — Moves suspicious files to an encrypted quarantine vault with DACL-protected directory structure (wired since 2026-10-22 for the files a scan flags at High or above, under `%ProgramData%\RansomGuard-CM\quarantine`; **no DACL is applied to any agent directory today**). Files are AES-256-GCM encrypted before storage.
 5. **UsbActionEngine** — Coordinates response actions: logging, quarantine, device eject via CM_Request_Device_Eject P/Invoke. Severity-based decision matrix similar to ExfilActionEngine.
 
 ## Threat Matrix

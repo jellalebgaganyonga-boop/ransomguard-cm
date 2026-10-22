@@ -26,14 +26,15 @@ public static class UsbGuardStartupCheck
         "blocked, in every mode including Strict (see docs/modules/usb-guard.md)";
 
     /// <summary>
-    /// Posture USB GUARD reports once running: Degraded / actions_not_implemented in every mode
-    /// while the actions are missing (V7, AGT-USB-001). Strict promises eject and block,
-    /// Permissive promises read-only and quarantine, and none of them happens (only the IronClad
-    /// cut is real); Audit promises alert only and reads the same, so that "active" never means
-    /// "USB GUARD acts" anywhere. It becomes Active when the actions of the mode exist.
+    /// Posture USB GUARD reports once running. Since 2026-10-22 the actions exist: Audit promises
+    /// the alert, Permissive promises read-only and quarantine, and they happen (Active). Strict
+    /// promises ejection, which happens, and the block of the key on re-insertion, which does not
+    /// exist (AGT-USB-001): it stays Degraded / actions_not_implemented until that block exists.
     /// </summary>
     public static (ModuleState State, string? ReasonCode) RunningPosture(UsbOperatingMode mode) =>
-        (ModuleState.Degraded, ModuleReasonCode.ActionsNotImplemented);
+        mode == UsbOperatingMode.Strict
+            ? (ModuleState.Degraded, ModuleReasonCode.ActionsNotImplemented)
+            : (ModuleState.Active, null);
 
     /// <summary>
     /// In Strict mode, reads the whitelist and logs a warning when it holds no active entry or

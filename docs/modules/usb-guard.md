@@ -1,14 +1,14 @@
 # USB GUARD Module — Removable Media Control
 
 **Module:** USB GUARD
-**Status:** Detection operational. Blocking not implemented (see below).
+**Status:** Detection operational. Read-only, ejection and quarantine real since 2026-10-22; the block of a key on re-insertion is not implemented (see below).
 
 > **Ne pas activer Strict en production tant que la gestion de la whitelist
-> depuis la console n'existe pas et que le blocage n'est pas implémenté.**
+> depuis la console n'existe pas.** Strict éjecte dès Medium : sans liste
+> blanche, les clés légitimes de l'établissement aussi.
 >
 > *Do not enable Strict in production until whitelist management from the
-> console exists and blocking is implemented.* (debts AGT-USB-001,
-> AGT-USB-003)
+> console exists.* (debt AGT-USB-003)
 
 ## What USB GUARD Does
 
@@ -38,42 +38,45 @@ takes; what each action actually does today is below.
 
 ### Implementation status of each action — read this first
 
-| Action | Selected for | What happens today |
+| Action | Selected for | What happens (since 2026-10-22) |
 |---|---|---|
 | Alert | every mode | Alert persisted, logged and forwarded. **Real.** |
 | IRONCLAD physical port cut | Strict + Critical, IRONCLAD available, drive mapped to a port | Command sent to IRONCLAD. **Real**, but IRONCLAD defaults to the mock server (see below). |
-| `ReadOnlyUsb` (key set read-only) | Permissive + Critical | **Not implemented**: nothing is changed on the device. |
-| `QuarantineFile` | Permissive + High | **Not implemented** in the action engine: no file is moved. |
-| `EjectUsb` | Strict + High/Medium | **Not implemented**: `CM_Request_Device_Eject` is not called, the device stays mounted. |
-| `BlockAndEject` (software) | Strict + Critical without IRONCLAD cut | **Not implemented**: no blacklist, no ejection. |
+| `ReadOnlyUsb` | Permissive + Critical | **Real.** The physical disk behind the drive letter is set read-only (`IOCTL_DISK_SET_DISK_ATTRIBUTES`, what `diskpart attributes disk set readonly` does), not persisted: every later write on the key fails with "write protected" until it is unplugged. The attribute is read back before "done" is reported. |
+| `QuarantineFile` | Permissive + High | **Real.** Every file the scan flagged at High or above leaves the key, encrypted (AES-256-GCM) into `%ProgramData%\RansomGuard-CM\quarantine`, restorable from there (`QuarantineService`, 30 days). The result counts what went and what did not, file by file. |
+| `EjectUsb` | Strict + High/Medium | **Real.** `CM_Request_Device_Eject` on the device node, what "Safely remove" does. A veto (an open file, a process) is reported with the system's reason. |
+| `BlockAndEject` (software) | Strict + Critical without IRONCLAD cut | **Ejects for real; the block does not exist.** The same key plugged again is scanned again, not refused. The result says so (`Success = false`, reason `block_not_implemented`): the ejection is never dressed up as a block. (AGT-USB-001) |
 
-These four actions report what really happened: `Success = false` with the
-reason code `not_implemented`. The alert carries it in `action_taken` (for
-example `EjectUsb (not_implemented)`), and the **signed audit log** records
-every USB action outcome as it is (`UsbAction` entry,
-`outcome=executed | not_implemented`). Neither ever claims an action that did
-not happen. Until they are implemented (debt AGT-USB-001 in
-`agent/README.md`), **the only action that changes anything on the workstation
-is the IRONCLAD cut.**
+Each device call is bounded (10 s): a driver that never answers gives `device_control_failed`, never
+a hang of the monitor. An action that was not carried out always says why, in the result, in the
+alert (`action_taken`, for example `EjectUsb (device_control_failed)`) and in the **signed audit log**
+(`UsbAction` entry, `outcome=executed | <reason code>`). Reason codes: `block_not_implemented`,
+`no_device_control`, `no_drive_letter`, `device_control_failed`, `no_quarantine_service`,
+`no_file_to_quarantine`, `quarantine_failed`.
+
+**What has been exercised where.** The engine (what is asked of the system, what is reported) is
+covered by `UsbRealActionsTests` with a stand-in for the device calls; the Windows calls themselves
+refuse a bad argument before any call (`WindowsUsbDeviceControlTests`). A CI runner has no USB key:
+read-only, ejection and quarantine on a real key are checked on the two demonstration machines
+(TESTS_JURY.md), not in CI. Until that run is recorded there, treat them as implemented and
+unit-tested, not as field-proven.
 
 ### Module posture
 
 | Mode | Posture reported in the heartbeat | Why |
 |---|---|---|
-| Strict | `degraded`, reason `actions_not_implemented` (FR « Blocage non implémenté », EN « Blocking not implemented ») | Promises eject and block; neither happens. |
-| Permissive | `degraded`, reason `actions_not_implemented` | Promises read-only and quarantine; neither happens. |
-| Audit | `degraded`, reason `actions_not_implemented` | Promises alert only, and reads the same as the others (2026-10-21, V7): `active` must never mean "USB GUARD acts" in any mode while AGT-USB-001 stands. |
-
-The module reads `active` again, mode by mode, when the actions of that mode exist and are tested.
+| Audit | `active` | Promises the alert; it happens. |
+| Permissive | `active` | Promises read-only and quarantine; they happen (2026-10-22). |
+| Strict | `degraded`, reason `actions_not_implemented` (FR « Blocage non implémenté », EN « Blocking not implemented ») | Promises ejection, which happens, and the block of the key on re-insertion, which does not exist (AGT-USB-001). |
 
 ### What Strict does exactly
 
 - **Critical**: USB GUARD first asks IRONCLAD to cut the USB port physically.
   If IRONCLAD is unavailable, if the drive letter does not map to a port, or
-  if the cut fails, it falls back to the software action `BlockAndEject`
-  (not implemented, see above).
-- **High and Medium**: software ejection (`EjectUsb`, not implemented), without
-  IRONCLAD.
+  if the cut fails, it falls back to the software action `BlockAndEject`:
+  the key is ejected; the block on re-insertion does not exist and the
+  result says so.
+- **High and Medium**: software ejection (`EjectUsb`), without IRONCLAD.
 
 Two facts to know before relying on the physical cut:
 
@@ -132,14 +135,14 @@ an alert is raised) is debt AGT-USB-002.
 
 | Situation | Without restarting the agent? |
 |---|---|
-| Key ejected (`EjectUsb`) | Nothing is ejected today (not implemented). Once implemented: replugging the key re-scans it and ejects it again; with no whitelist enrolment path, there is no way to let it through. |
+| Key ejected (`EjectUsb`) | The key is ejected (real since 2026-10-22). Replugging it re-scans it and ejects it again; with no whitelist enrolment path, there is no way to let it through. |
 | Port cut by IRONCLAD | **No, and a restart does not restore it either** (debt AGT-IRC-001). `RestoreUsbPortAsync` exists but no command calls it. At agent start, `IronCladStateReconciliationService` restores cut ports only when `FailSafeRestoreOnDisconnect` is on (default `true`) **and** the stored state disagrees with the device — the crash case. A port cut normally, and recorded as cut, stays cut across restarts. |
 | Leaving Strict (back to Permissive) | **No.** The configuration is read once, when the USB monitor is built: change `Agent:UsbGuard:OperatingMode` and restart the agent service. |
 
 The development configuration runs Strict. On a development machine, the
-owner's own keys are therefore exposed to Strict decisions: today only a
-Critical finding on drive `E:` to `H:` triggers a real action (the IRONCLAD
-cut, sent to the mock server by default); everything else is logged only.
+owner's own keys are therefore exposed to Strict decisions: a Medium finding
+ejects the key, a Critical one on drive `E:` to `H:` asks IRONCLAD for the cut
+(sent to the mock server by default) and ejects otherwise.
 To work without it, set `OperatingMode` to `Permissive` or `Audit` in
 `appsettings.Development.json` and restart the agent.
 

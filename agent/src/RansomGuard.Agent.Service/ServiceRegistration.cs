@@ -25,6 +25,7 @@ using RansomGuard.Agent.Core.Detection.IronClad;
 using RansomGuard.Agent.Core.Detection.IronClad.Actions;
 using RansomGuard.Agent.Core.Detection.IronClad.Communication;
 using RansomGuard.Agent.Core.Detection.UsbGuard.Actions;
+using RansomGuard.Agent.Core.Detection.UsbGuard.Quarantine;
 using RansomGuard.Agent.Core.Detection.UsbGuard.Scanning;
 using RansomGuard.Agent.Core.Detection.UsbGuard.Wmi;
 using RansomGuard.Agent.Core.Persistence;
@@ -283,8 +284,25 @@ public static class ServiceRegistration
         // Bootable detection
         services.AddSingleton<BootableUsbDetector>();
 
-        // Actions
-        services.AddScoped<IUsbActionEngine, UsbActionEngine>();
+        // Actions (real since 2026-10-22, AGT-USB-001): the Windows calls for read-only and eject, and the
+        // quarantine store (AES-256-GCM, QuarantineService) under %ProgramData%, keyed from the database
+        // key (a derivation, never the key itself). The engine takes both; without them it says so in
+        // every result (no_device_control / no_quarantine_service) instead of claiming an action.
+        services.AddSingleton<IUsbDeviceControl, WindowsUsbDeviceControl>();
+        byte[] quarantineKey = System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes("RansomGuard-CM quarantine:" + dbKey));
+        string quarantineDir = EnvironmentVariableResolver.ResolvePath(@"%ProgramData%\RansomGuard-CM\quarantine");
+        services.AddScoped<IQuarantineService>(sp => new QuarantineService(
+            sp.GetRequiredService<AgentDbContext>(),
+            sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<QuarantineService>>(),
+            quarantineDir,
+            quarantineKey));
+        services.AddScoped<IUsbActionEngine>(sp => new UsbActionEngine(
+            sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<UsbActionEngine>>(),
+            sp.GetRequiredService<IAuditLogRepository>(),
+            sp.GetService<RansomGuard.Agent.Core.Detection.IronClad.Actions.IIronCladActionEngine>(),
+            sp.GetRequiredService<IUsbDeviceControl>(),
+            sp.GetRequiredService<IQuarantineService>()));
 
         // WMI subscriber
         services.AddSingleton<IWmiEventSubscriber, WmiEventSubscriber>();

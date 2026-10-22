@@ -311,6 +311,7 @@ public sealed class UsbDeviceMonitor : BackgroundService, IUsbDeviceMonitor
                     dbContext, actionEngine, connectionLog.Id, device,
                     ScanSeverity.Critical, operatingMode,
                     "Bootable USB blocked by policy",
+                    findings: [],
                     scanCts.Token);
                 return;
             }
@@ -328,6 +329,7 @@ public sealed class UsbDeviceMonitor : BackgroundService, IUsbDeviceMonitor
                             dbContext, actionEngine, connectionLog.Id, device,
                             ScanSeverity.Critical, operatingMode,
                             "Boot signature (MBR/GPT) detected — blocked by policy",
+                            findings: [],
                             scanCts.Token);
                         return;
                     }
@@ -374,6 +376,7 @@ public sealed class UsbDeviceMonitor : BackgroundService, IUsbDeviceMonitor
                     dbContext, actionEngine, scanResult.Id, device,
                     scanReport.OverallSeverity, operatingMode,
                     $"USB scan found {scanReport.Findings.Count} suspicious items (highest: {scanReport.OverallSeverity})",
+                    scanReport.Findings,
                     scanCts.Token);
 
                 // Fire-and-forget genealogy enrichment
@@ -417,9 +420,11 @@ public sealed class UsbDeviceMonitor : BackgroundService, IUsbDeviceMonitor
         ScanSeverity severity,
         UsbOperatingMode mode,
         string description,
+        IReadOnlyList<UsbFileFinding> findings,
         CancellationToken ct)
     {
-        var actionResult = await actionEngine.ExecuteAsync(device, severity, mode, description, ct);
+        // The flagged files travel with the alert: QuarantineFile takes the ones at High or above off the key.
+        var actionResult = await actionEngine.ExecuteAsync(device, severity, mode, description, findings, ct);
 
         var alert = new UsbAlert
         {

@@ -79,8 +79,9 @@ public static class ModuleReasonCode
     public const string AttributionUnreliable = "attribution_unreliable";
 
     /// <summary>
-    /// Detects but cannot carry out the actions its mode promises (USB GUARD, every mode while
-    /// AGT-USB-001 stands). Console labels: FR « Blocage non implémenté », EN « Blocking not implemented ».
+    /// Detects but cannot carry out an action its mode promises (USB GUARD in Strict: the key is
+    /// ejected, the block on re-insertion does not exist, AGT-USB-001). Console labels:
+    /// FR « Blocage non implémenté », EN « Blocking not implemented ».
     /// </summary>
     public const string ActionsNotImplemented = "actions_not_implemented";
 

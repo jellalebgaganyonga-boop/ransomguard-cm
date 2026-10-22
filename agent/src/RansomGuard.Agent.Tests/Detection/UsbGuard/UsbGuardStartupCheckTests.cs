@@ -67,17 +67,24 @@ public sealed class UsbGuardStartupCheckTests
         _whitelist.Verify(w => w.ListActiveAsync(It.IsAny<CancellationToken>()), Times.Never());
     }
 
-    // V7 (plan de finition, J2 § 2.2): while the actions are missing, no mode reads active. Strict
-    // promises eject and block, Permissive promises read-only and quarantine, and none of them
-    // happens (AGT-USB-001); Audit promises alert only, and reads the same so that "active" never
-    // means "USB GUARD acts" anywhere.
+    // Since 2026-10-22 the actions exist (AGT-USB-001, after V7): Audit promises the alert,
+    // Permissive promises read-only and quarantine, and they happen. Strict promises the ejection,
+    // which happens, and the block on re-insertion, which does not: it alone stays degraded.
     [Theory]
-    [InlineData(UsbOperatingMode.Strict)]
     [InlineData(UsbOperatingMode.Permissive)]
     [InlineData(UsbOperatingMode.Audit)]
-    public void Every_mode_runs_degraded_while_the_actions_are_not_implemented(UsbOperatingMode mode)
+    public void Permissive_and_Audit_run_active_now_that_their_actions_exist(UsbOperatingMode mode)
     {
         var (state, reason) = UsbGuardStartupCheck.RunningPosture(mode);
+
+        state.ShouldBe(ModuleState.Active);
+        reason.ShouldBeNull();
+    }
+
+    [Fact]
+    public void Strict_stays_degraded_while_the_block_on_reinsertion_does_not_exist()
+    {
+        var (state, reason) = UsbGuardStartupCheck.RunningPosture(UsbOperatingMode.Strict);
 
         state.ShouldBe(ModuleState.Degraded);
         reason.ShouldBe(ModuleReasonCode.ActionsNotImplemented);

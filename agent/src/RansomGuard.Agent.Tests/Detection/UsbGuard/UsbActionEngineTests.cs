@@ -51,24 +51,25 @@ public sealed class UsbActionEngineTests
         VerifyAudited("action=AlertOnly outcome=executed");
     }
 
-    // ReadOnly, Quarantine, Eject and software BlockAndEject do nothing to the device:
-    // the result and the signed audit entry must both say so, never claim the action.
+    // An engine built without the device calls or the quarantine store (this one) does nothing to
+    // the device: the result and the signed audit entry both say what is missing, never claim the
+    // action. The actions themselves are in UsbRealActionsTests.
     [Theory]
-    [InlineData(UsbOperatingMode.Permissive, ScanSeverity.Critical, UsbActionType.ReadOnlyUsb)]
-    [InlineData(UsbOperatingMode.Permissive, ScanSeverity.High, UsbActionType.QuarantineFile)]
-    [InlineData(UsbOperatingMode.Strict, ScanSeverity.Medium, UsbActionType.EjectUsb)]
-    [InlineData(UsbOperatingMode.Strict, ScanSeverity.High, UsbActionType.EjectUsb)]
-    [InlineData(UsbOperatingMode.Strict, ScanSeverity.Critical, UsbActionType.BlockAndEject)]
-    public async Task Unimplemented_Action_Reports_Not_Implemented_In_Result_And_Audit(
-        UsbOperatingMode mode, ScanSeverity severity, UsbActionType expected)
+    [InlineData(UsbOperatingMode.Permissive, ScanSeverity.Critical, UsbActionType.ReadOnlyUsb, UsbActionReasonCode.NoDeviceControl)]
+    [InlineData(UsbOperatingMode.Permissive, ScanSeverity.High, UsbActionType.QuarantineFile, UsbActionReasonCode.NoQuarantineService)]
+    [InlineData(UsbOperatingMode.Strict, ScanSeverity.Medium, UsbActionType.EjectUsb, UsbActionReasonCode.NoDeviceControl)]
+    [InlineData(UsbOperatingMode.Strict, ScanSeverity.High, UsbActionType.EjectUsb, UsbActionReasonCode.NoDeviceControl)]
+    [InlineData(UsbOperatingMode.Strict, ScanSeverity.Critical, UsbActionType.BlockAndEject, UsbActionReasonCode.NoDeviceControl)]
+    public async Task Without_The_Device_Calls_Nothing_Is_Claimed_In_Result_Or_Audit(
+        UsbOperatingMode mode, ScanSeverity severity, UsbActionType expected, string reasonCode)
     {
         var result = await _engine.ExecuteAsync(CreateDevice(), severity, mode, "Suspicious content");
 
         result.ActionType.ShouldBe(expected);
         result.Success.ShouldBeFalse();
-        result.ReasonCode.ShouldBe(UsbActionReasonCode.NotImplemented);
+        result.ReasonCode.ShouldBe(reasonCode);
         result.Description.ShouldContain("NOT executed");
-        VerifyAudited($"action={expected} outcome=not_implemented");
+        VerifyAudited($"action={expected} outcome={reasonCode}");
     }
 
     [Fact]
@@ -95,7 +96,7 @@ public sealed class UsbActionEngineTests
 
         var results = await Task.WhenAll(tasks);
         results.Length.ShouldBe(10);
-        results.All(r => !r.Success && r.ReasonCode == UsbActionReasonCode.NotImplemented).ShouldBeTrue();
+        results.All(r => !r.Success && r.ReasonCode == UsbActionReasonCode.NoQuarantineService).ShouldBeTrue();
         _audit.Verify(a => a.AppendAsync("UsbAction", It.IsAny<string>(), "UsbDevice",
             It.IsAny<Guid?>(), It.IsAny<CancellationToken>()), Times.Exactly(10));
     }
@@ -103,8 +104,8 @@ public sealed class UsbActionEngineTests
     [Fact]
     public void Action_Timeout_10_Seconds_Configured()
     {
-        // Verify the action engine has a 10-second timeout per the spec. It bounds the
-        // IronClad port cut, the only USB action that is carried out today.
+        // Verify the action engine has a 10-second timeout per the spec. It bounds the IronClad
+        // port cut, each device call (read-only, eject) and each file quarantined.
         var engineType = typeof(UsbActionEngine);
         var field = engineType.GetField("ActionTimeout",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
