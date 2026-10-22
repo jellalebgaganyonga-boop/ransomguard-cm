@@ -203,6 +203,65 @@ public static class AlertMapper
         RawPayload = new Dictionary<string, object> { ["canary_path"] = canaryPath },
     };
 
+    /// <summary>How a suspension stopped being open, as the console must read it.</summary>
+    public static class SuspensionClose
+    {
+        /// <summary>Resumed on a human decision: the process runs again.</summary>
+        public const string Resumed = "process_resumed";
+
+        /// <summary>The process is gone (exited, or the machine restarted): nothing is suspended any more.</summary>
+        public const string Ended = "suspension_ended";
+
+        /// <summary>The resume was asked and failed: the process stays suspended until the machine restarts.</summary>
+        public const string ResumeFailed = "resume_failed";
+    }
+
+    /// <summary>
+    /// A suspension that is no longer open (ADR-026). Without it the GRID only ever hears that a
+    /// process was suspended, and the console would keep listing a process that has since been
+    /// resumed or has exited -- an action claimed that is no longer true.
+    /// </summary>
+    /// <param name="suspension">The suspension, in its new state.</param>
+    /// <param name="close">One of <see cref="SuspensionClose"/>.</param>
+    /// <param name="by">Who closed it: the console command, or "ended" when the process went away.</param>
+    /// <param name="at">When.</param>
+    public static AlertIngestRequest FromSuspensionClosed(SuspendedProcess suspension, string close, string by, DateTime at) => new()
+    {
+        ClientMessageId = $"{DeterministicId(suspension.Id)}-{close}",
+        AlertType = close switch
+        {
+            SuspensionClose.Resumed => "SentinelProcessResumed",
+            SuspensionClose.ResumeFailed => "SentinelProcessResumeFailed",
+            _ => "SentinelSuspensionEnded",
+        },
+        MitreTechniqueId = "T1486",
+        // A resume that failed leaves a process frozen with no way back: that is the critical one.
+        // A resume asked for, or a process that exited by itself, is information.
+        Severity = close == SuspensionClose.ResumeFailed ? "Critical" : "Medium",
+        DetectedAt = at,
+        Summary = Truncate(close switch
+        {
+            SuspensionClose.Resumed =>
+                $"Process resumed on request ({by}): {suspension.ProcessName ?? "(unnamed)"} (PID {suspension.ProcessId})",
+            SuspensionClose.ResumeFailed =>
+                $"Process could NOT be resumed ({by}): {suspension.ProcessName ?? "(unnamed)"} (PID {suspension.ProcessId}) stays suspended until the machine restarts",
+            _ =>
+                $"Suspended process is gone: {suspension.ProcessName ?? "(unnamed)"} (PID {suspension.ProcessId}); nothing is suspended any more",
+        }, 500),
+        Details =
+        [
+            new AlertDetailInput { Key = "response", Value = close },
+            new AlertDetailInput { Key = "suspension_id", Value = suspension.Id.ToString() },
+            new AlertDetailInput { Key = "response_to", Value = suspension.ClientMessageId },
+            new AlertDetailInput { Key = "closed_by", Value = Truncate(by, 260) },
+            new AlertDetailInput { Key = "process_id", Value = suspension.ProcessId.ToString() },
+            new AlertDetailInput { Key = "process_created_at", Value = suspension.ProcessCreatedAt.ToString("o") },
+            new AlertDetailInput { Key = "process_name", Value = Truncate(suspension.ProcessName ?? "", 260) },
+            new AlertDetailInput { Key = "error", Value = Truncate(suspension.LastError ?? "", 2000) },
+        ],
+        RawPayload = new Dictionary<string, object> { ["suspension_id"] = suspension.Id.ToString() },
+    };
+
     /// <summary>A suspended process waiting for a decision past the escalation delay (ADR-026, 2c). One per escalation.</summary>
     public static AlertIngestRequest FromSuspensionEscalation(SuspendedProcess suspension, TimeSpan age, int escalation, DateTime at) => new()
     {

@@ -107,6 +107,8 @@ public sealed class SuspensionWatchService : BackgroundService
                     record.ResumedBy = "ended";
                     _logger.LogWarning("Suspended process gone: {Who} (suspension {Id})", who, record.Id);
                     await audit.AppendAsync("SuspendedProcessEnded", $"{who}: no longer running", "SuspendedProcess", record.Id, CancellationToken.None);
+                    // Told to the GRID: otherwise the console keeps listing a process that is gone.
+                    _alerts.TryEnqueue(AlertMapper.FromSuspensionClosed(record, AlertMapper.SuspensionClose.Ended, "ended", now));
                     continue;
                 }
 

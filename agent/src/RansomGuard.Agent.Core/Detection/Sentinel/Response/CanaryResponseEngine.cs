@@ -328,6 +328,7 @@ public sealed class CanaryResponseEngine
             record.ResumedBy = by;
             await db.SaveChangesAsync(CancellationToken.None).ConfigureAwait(false);
             await audit.AppendAsync("SuspendedProcessEnded", $"{who}: gone before the resume asked by {by}", "SuspendedProcess", record.Id, CancellationToken.None).ConfigureAwait(false);
+            _alerts.TryEnqueue(AlertMapper.FromSuspensionClosed(record, AlertMapper.SuspensionClose.Ended, by, record.ResumedAt.Value));
             return true;
         }
 
@@ -344,6 +345,8 @@ public sealed class CanaryResponseEngine
                 await db.SaveChangesAsync(CancellationToken.None).ConfigureAwait(false);
                 _logger.LogWarning("SENTINEL RESPONSE: {Who} resumed by {By}", who, by);
                 await audit.AppendAsync("ProcessResumed", $"{who} by {by} (attempt {attempt})", "SuspendedProcess", record.Id, CancellationToken.None).ConfigureAwait(false);
+                // The console must stop showing it as suspended: it is not.
+                _alerts.TryEnqueue(AlertMapper.FromSuspensionClosed(record, AlertMapper.SuspensionClose.Resumed, by, record.ResumedAt.Value));
                 return true;
             }
 
@@ -359,6 +362,8 @@ public sealed class CanaryResponseEngine
         await db.SaveChangesAsync(CancellationToken.None).ConfigureAwait(false);
         _logger.LogCritical("SENTINEL RESPONSE: {Who} could not be resumed after {Attempts} attempts; it stays suspended until the machine restarts", who, ResumeAttempts);
         await audit.AppendAsync("ProcessResumeFailed", $"{who} by {by}: {error}", "SuspendedProcess", record.Id, CancellationToken.None).ConfigureAwait(false);
+        // Still suspended, and now with no way back: the console says so rather than showing a resume.
+        _alerts.TryEnqueue(AlertMapper.FromSuspensionClosed(record, AlertMapper.SuspensionClose.ResumeFailed, by, _time.GetUtcNow().UtcDateTime));
         return false;
     }
 
