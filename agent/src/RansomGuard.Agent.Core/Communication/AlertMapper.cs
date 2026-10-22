@@ -170,6 +170,9 @@ public static class AlertMapper
             new AlertDetailInput { Key = "process_created_at", Value = suspension.ProcessCreatedAt.ToString("o") },
             new AlertDetailInput { Key = "process_name", Value = Truncate(suspension.ProcessName ?? "", 260) },
             new AlertDetailInput { Key = "process_path", Value = Truncate(suspension.ImagePath ?? "", 1024) },
+            // A detail, not only raw payload: the console lists the file that triggered each
+            // suspension, and the GRID reads details, not payloads.
+            new AlertDetailInput { Key = "canary_path", Value = Truncate(suspension.CanaryPath, 1024) },
         ],
         RawPayload = new Dictionary<string, object>
         {

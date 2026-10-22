@@ -54,6 +54,29 @@ class AlertResponseItem(BaseModel):
     reason: str | None = None
 
 
+class SuspendedProcessItem(BaseModel):
+    """
+    A process this agent reports as suspended right now (ADR-026).
+
+    Open means: the agent reported the suspension and has not reported it closed. The agent
+    reports a closure when the process is resumed on request, or when it is gone. A resume that
+    failed leaves it open and sets `resume_failed`: the process is still frozen and cannot be
+    unfrozen until the machine restarts.
+    """
+
+    suspension_id: str
+    # The suspension alert itself: the console opens it to resume, where the PID comes from the
+    # alert's own attribution and never from the client.
+    alert_id: str
+    process_id: int | None = None
+    process_name: str | None = None
+    canary_path: str | None = None
+    suspended_at: datetime
+    resume_failed: bool = False
+    # How many times the agent has escalated this suspension for want of a human decision.
+    escalations: int = 0
+
+
 class AlertItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

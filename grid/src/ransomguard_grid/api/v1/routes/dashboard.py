@@ -36,6 +36,7 @@ from ransomguard_grid.api.v1.schemas.dashboard import (
     PaginatedUserResponse,
     PaginatedUserWithRolesResponse,
     ProvisionAgentResponse,
+    SuspendedProcessItem,
     UpdateAlertStatusRequest,
     UpdateMeRequest,
     UpdateNotificationPreferenceRequest,
@@ -546,6 +547,83 @@ async def get_agent(
         raise HTTPException(404, "Agent not found")
     [item] = await _agent_items(db, user.tenant_id, [agent])
     return item
+
+
+# The agent's own words for a suspension that stopped being open (AlertMapper.SuspensionClose).
+# `resume_failed` is deliberately absent: a resume that failed leaves the process suspended.
+SUSPENSION_CLOSED = ("process_resumed", "suspension_ended")
+
+
+@router.get("/agents/{agent_id}/suspensions", response_model=list[SuspendedProcessItem])
+async def list_agent_suspensions(
+    agent_id: str,
+    user: User = Depends(require_roles("tenant_admin", "security_analyst", "read_only_auditor")),
+    db: AsyncSession = Depends(get_db),
+) -> list[SuspendedProcessItem]:
+    """
+    The processes this agent reports as suspended right now (ADR-026).
+
+    Built from what the agent said, never from what the console asked: a suspension is listed while
+    the agent has reported it open and has not reported it closed. A command the agent never carried
+    out therefore shows nothing here. 404 on cross-tenant, as every agent route.
+    """
+    from ransomguard_grid.db.repositories.agent_repository import AgentRepository
+
+    repo = AgentRepository(db, tenant_id=user.tenant_id)
+    if not await repo.get_by_id(agent_id):
+        raise HTTPException(404, "Agent not found")
+
+    # Every response alert of this agent that names a suspension, oldest first.
+    rows = (await db.execute(
+        select(Alert.id, Alert.detected_at, AlertDetail.key, AlertDetail.value)
+        .join(AlertDetail, AlertDetail.alert_id == Alert.id)
+        .where(
+            Alert.tenant_id == user.tenant_id,
+            Alert.agent_id == agent_id,
+            AlertDetail.tenant_id == user.tenant_id,
+            AlertDetail.key.in_((
+                "suspension_id", "response", "process_id", "process_name", "canary_path",
+            )),
+        )
+        .order_by(Alert.detected_at)
+    )).all()
+
+    # Regroup by alert: one row per (alert, detail).
+    by_alert: dict[str, dict[str, Any]] = {}
+    for alert_id_, detected_at, key, value in rows:
+        entry = by_alert.setdefault(alert_id_, {"alert_id": alert_id_, "detected_at": detected_at})
+        entry[key] = value
+
+    open_suspensions: dict[str, SuspendedProcessItem] = {}
+    closed: set[str] = set()
+    escalations: dict[str, int] = {}
+    for entry in sorted(by_alert.values(), key=lambda e: e["detected_at"]):
+        suspension_id = entry.get("suspension_id")
+        response = entry.get("response")
+        if not suspension_id or not response:
+            continue
+        if response == "process_suspended":
+            pid = entry.get("process_id")
+            open_suspensions[suspension_id] = SuspendedProcessItem(
+                suspension_id=suspension_id,
+                alert_id=entry["alert_id"],
+                process_id=int(pid) if pid and pid.isdigit() else None,
+                process_name=entry.get("process_name") or None,
+                canary_path=entry.get("canary_path") or None,
+                suspended_at=entry["detected_at"],
+            )
+        elif response in SUSPENSION_CLOSED:
+            closed.add(suspension_id)
+        elif response == "resume_failed" and suspension_id in open_suspensions:
+            open_suspensions[suspension_id].resume_failed = True
+        elif response == "suspended_no_decision":
+            escalations[suspension_id] = escalations.get(suspension_id, 0) + 1
+
+    for suspension_id, count in escalations.items():
+        if suspension_id in open_suspensions:
+            open_suspensions[suspension_id].escalations = count
+
+    return [item for key, item in open_suspensions.items() if key not in closed]
 
 
 # --- METRICS ---
