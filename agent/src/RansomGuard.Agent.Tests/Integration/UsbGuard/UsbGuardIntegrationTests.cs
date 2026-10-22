@@ -159,9 +159,10 @@ public sealed class UsbGuardIntegrationTests : IDisposable
             "Bootable USB blocked by policy");
 
         result.ActionType.ShouldBe(UsbActionType.BlockAndEject);
-        // No IronClad here: the software block is selected but not implemented.
+        // No IronClad and no device control wired in this engine: the software BlockAndEject is
+        // selected and nothing is claimed (the real calls are in UsbRealActionsTests).
         result.Success.ShouldBeFalse();
-        result.ReasonCode.ShouldBe(UsbActionReasonCode.NotImplemented);
+        result.ReasonCode.ShouldBe(UsbActionReasonCode.NoDeviceControl);
     }
 
     // Test 5: High severity scan triggers action and fires genealogy enrichment
@@ -177,9 +178,9 @@ public sealed class UsbGuardIntegrationTests : IDisposable
             "Malicious PE disguised as PDF");
 
         actionResult.ActionType.ShouldBe(UsbActionType.ReadOnlyUsb);
-        // ReadOnly is selected but not implemented: nothing was done to the device.
+        // ReadOnly is selected; this engine has no device control wired, so nothing is claimed.
         actionResult.Success.ShouldBeFalse();
-        actionResult.ReasonCode.ShouldBe(UsbActionReasonCode.NotImplemented);
+        actionResult.ReasonCode.ShouldBe(UsbActionReasonCode.NoDeviceControl);
 
         // Persist alert
         var alert = new UsbAlert

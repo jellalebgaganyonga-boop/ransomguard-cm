@@ -60,8 +60,8 @@ public sealed class UsbGuardIronCladIntegrationTests
         var result = await engine.ExecuteAsync(
             MakeDevice("E"), ScanSeverity.Critical, UsbOperatingMode.Strict, "malware detected");
 
-        Assert.False(result.Success); // software BlockAndEject is not implemented
-        Assert.Equal(UsbActionReasonCode.NotImplemented, result.ReasonCode);
+        Assert.False(result.Success); // software BlockAndEject: no device control wired in this engine
+        Assert.Equal(UsbActionReasonCode.NoDeviceControl, result.ReasonCode);
         Assert.Equal(0, ironClad.CutCallCount); // IronClad not called because !IsAvailable
         Assert.Equal(UsbActionType.BlockAndEject, result.ActionType);
     }
@@ -75,8 +75,8 @@ public sealed class UsbGuardIronCladIntegrationTests
         var result = await engine.ExecuteAsync(
             MakeDevice("E"), ScanSeverity.Critical, UsbOperatingMode.Strict, "malware detected");
 
-        Assert.False(result.Success); // software BlockAndEject is not implemented
-        Assert.Equal(UsbActionReasonCode.NotImplemented, result.ReasonCode);
+        Assert.False(result.Success); // software BlockAndEject: no device control wired in this engine
+        Assert.Equal(UsbActionReasonCode.NoDeviceControl, result.ReasonCode);
         Assert.Equal(UsbActionType.BlockAndEject, result.ActionType);
     }
 
@@ -89,8 +89,8 @@ public sealed class UsbGuardIronCladIntegrationTests
         var result = await engine.ExecuteAsync(
             MakeDevice("E"), ScanSeverity.High, UsbOperatingMode.Strict, "suspicious file");
 
-        Assert.False(result.Success); // software Eject is not implemented
-        Assert.Equal(UsbActionReasonCode.NotImplemented, result.ReasonCode);
+        Assert.False(result.Success); // software Eject: no device control wired in this engine
+        Assert.Equal(UsbActionReasonCode.NoDeviceControl, result.ReasonCode);
         Assert.Equal(0, ironClad.CutCallCount); // Only Critical triggers IronClad
         Assert.Equal(UsbActionType.EjectUsb, result.ActionType);
     }
@@ -104,8 +104,8 @@ public sealed class UsbGuardIronCladIntegrationTests
         var result = await engine.ExecuteAsync(
             MakeDevice("E"), ScanSeverity.Critical, UsbOperatingMode.Strict, "malware detected");
 
-        Assert.False(result.Success); // software fallback is not implemented
-        Assert.Equal(UsbActionReasonCode.NotImplemented, result.ReasonCode);
+        Assert.False(result.Success); // software fallback: no device control wired in this engine
+        Assert.Equal(UsbActionReasonCode.NoDeviceControl, result.ReasonCode);
         Assert.Equal(1, ironClad.CutCallCount); // IronClad was tried
         Assert.Equal(UsbActionType.BlockAndEject, result.ActionType); // Software fallback
     }

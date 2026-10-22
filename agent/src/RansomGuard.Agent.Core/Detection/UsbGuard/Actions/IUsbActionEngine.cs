@@ -54,9 +54,6 @@ public sealed record UsbActionResult
 /// <summary>Stable reason codes for a USB action that was not carried out.</summary>
 public static class UsbActionReasonCode
 {
-    /// <summary>The action was selected but is not implemented: nothing was done to the device.</summary>
-    public const string NotImplemented = "not_implemented";
-
     /// <summary><c>BlockAndEject</c>: the key was ejected, the block on re-insertion does not exist (AGT-USB-001).</summary>
     public const string BlockNotImplemented = "block_not_implemented";
 
