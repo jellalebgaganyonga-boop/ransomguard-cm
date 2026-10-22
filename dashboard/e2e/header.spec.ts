@@ -61,6 +61,10 @@ test.describe('Header — user menu', () => {
     await expect(page.getByTestId('user-menu')).toHaveAttribute('aria-label', 'Menu du compte');
     expect(sent).toEqual([{ language: 'en' }, { language: 'fr' }]);
 
+    // The page is scanned once the menu has gone: while it unmounts, Radix still keeps the rest of
+    // the page aria-hidden, and a scan then reports every button of the page (CI run 39695870874).
+    await expect(page.getByRole('menu')).toHaveCount(0);
+    await expect(page.locator('body > [aria-hidden="true"]')).toHaveCount(0);
     const closed = await new AxeBuilder({ page }).analyze();
     expect(forbidden(closed.violations), `Page a11y violations: ${JSON.stringify(closed.violations, null, 2)}`).toEqual([]);
   });
