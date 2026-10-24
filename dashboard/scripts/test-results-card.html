@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>RansomGuard-CM — Test results</title>
+<style>
+  :root {
+    --ink: #0f172a;
+    --muted: #64748b;
+    --line: #e2e8f0;
+    --green: #047857;
+    --green-bg: #ecfdf5;
+    --accent: #1e3a5f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    width: 1440px;
+    height: 900px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #f1f5f9;
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    color: var(--ink);
+  }
+  .card {
+    width: 1180px;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 40px 48px;
+  }
+  h1 { font-size: 30px; margin: 0 0 4px; letter-spacing: -0.5px; }
+  .sub { color: var(--muted); font-size: 15px; margin-bottom: 28px; }
+  table { width: 100%; border-collapse: collapse; font-size: 16px; }
+  th {
+    text-align: left;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 0 12px 10px;
+    border-bottom: 1px solid var(--line);
+  }
+  td { padding: 14px 12px; border-bottom: 1px solid var(--line); }
+  td.num { font-variant-numeric: tabular-nums; font-weight: 600; text-align: right; }
+  td.suite { font-weight: 600; }
+  .scope { color: var(--muted); font-size: 13px; font-weight: 400; display: block; margin-top: 2px; }
+  code { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 13px; color: var(--muted); }
+  .pill {
+    display: inline-block;
+    background: var(--green-bg);
+    color: var(--green);
+    border: 1px solid #a7f3d0;
+    border-radius: 999px;
+    padding: 3px 11px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  tr.total td { border-bottom: none; padding-top: 20px; font-size: 19px; }
+  tr.total td.suite { font-weight: 700; }
+  tr.total td.num { font-size: 24px; color: var(--accent); }
+  .foot {
+    margin-top: 26px;
+    padding-top: 18px;
+    border-top: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.6;
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>RansomGuard-CM — test suites</h1>
+    <div class="sub">Branch <code>sprint8/recovery</code> at commit <code>8bd4fe2</code> — every suite green on GitHub Actions</div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Suite</th>
+          <th>Runner</th>
+          <th style="text-align:right">Passed</th>
+          <th style="text-align:right">Failed</th>
+          <th>Evidence</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="suite">Agent — unit &amp; integration
+            <span class="scope">.NET 8, RansomGuard.Agent.Tests, Category!=Stress</span></td>
+          <td>GitHub Actions <code>windows-latest</code></td>
+          <td class="num">938</td>
+          <td class="num">0</td>
+          <td><code>agent-full #40107186567</code></td>
+        </tr>
+        <tr>
+          <td class="suite">Agent — stress subset
+            <span class="scope">Category=Stress</span></td>
+          <td>GitHub Actions <code>windows-latest</code></td>
+          <td class="num">6</td>
+          <td class="num">0</td>
+          <td><code>agent-full #40107186567</code></td>
+        </tr>
+        <tr>
+          <td class="suite">GRID API
+            <span class="scope">pytest, grid/tests/api</span></td>
+          <td>GitHub Actions <code>ubuntu-latest</code></td>
+          <td class="num">418</td>
+          <td class="num">0</td>
+          <td><code>CI #40107186564</code></td>
+        </tr>
+        <tr>
+          <td class="suite">Console — unit
+            <span class="scope">vitest, 16 test files</span></td>
+          <td>GitHub Actions <code>ubuntu-latest</code></td>
+          <td class="num">200</td>
+          <td class="num">0</td>
+          <td><code>CI #40107186564</code></td>
+        </tr>
+        <tr>
+          <td class="suite">Console — end to end
+            <span class="scope">Playwright, chromium, desktop viewport</span></td>
+          <td>GitHub Actions <code>ubuntu-latest</code></td>
+          <td class="num">79</td>
+          <td class="num">0</td>
+          <td><code>CI #40107186564</code></td>
+        </tr>
+        <tr class="total">
+          <td class="suite">Total</td>
+          <td><span class="pill">all green</span></td>
+          <td class="num">1641</td>
+          <td class="num">0</td>
+          <td></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="foot">
+      Counts are read from the two workflow runs named above, on commit <code>8bd4fe2</code>; both concluded <strong>success</strong>.
+      The agent suite is counted on CI rather than locally: endpoint protection on this workstation locks
+      <code>RansomGuard.Agent.Tests.dll</code> during the build, so CI is the evidence path for it.
+      The GRID full suite (<code>grid/tests</code>, including db, services and workers) adds 413 passed and 1 skipped when run locally; the table counts the API suite that runs on CI.
+    </div>
+  </div>
+</body>
+</html>

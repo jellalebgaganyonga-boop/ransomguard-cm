@@ -154,7 +154,10 @@ export function ExecutiveDashboard() {
       {/* AC2.2.2: 4 KPI cards — responsive grid (AC2.2.5) */}
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KPICard
-          label={t('dashboard.exec.kpi.agents', 'Postes protégés')}
+          // active_agents counts agents whose enrolment status is "active", which is
+          // not the protection verdict: an active agent can still be partial or
+          // unprotected. The card is labelled for what it counts.
+          label={t('dashboard.exec.kpi.agents', 'Postes actifs')}
           value={
             summary
               ? `${summary.active_agents} / ${summary.total_agents}`

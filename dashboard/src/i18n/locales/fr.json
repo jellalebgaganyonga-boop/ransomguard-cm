@@ -91,7 +91,7 @@
       "manageUsers": "Gérer les utilisateurs",
       "viewAudit": "Consulter les journaux d'audit",
       "kpi": {
-        "agents": "Postes protégés",
+        "agents": "Postes actifs",
         "alerts24h": "Alertes 24h",
         "critical24h": "Critiques 24h",
         "daysSince": "Jours sans incident critique",

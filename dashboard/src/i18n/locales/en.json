@@ -91,7 +91,7 @@
       "manageUsers": "Manage users",
       "viewAudit": "View audit logs",
       "kpi": {
-        "agents": "Protected endpoints",
+        "agents": "Active endpoints",
         "alerts24h": "Alerts 24h",
         "critical24h": "Critical 24h",
         "daysSince": "Days since last critical",
