@@ -1,0 +1,19 @@
+# Build context for deployment/grid/Dockerfile, whose context is the repository root.
+#
+# Allowlist: send only what the Dockerfile COPYs. Without this file every build shipped the whole
+# repository -- node_modules, the Python venv, the published agent binaries -- and a large file
+# changing during the transfer failed the build with "short read ... unexpected EOF".
+*
+
+!grid/requirements.txt
+!grid/src/
+!grid/alembic/
+!grid/alembic.ini
+!grid/scripts/
+
+# Invented demo rows have no place in a GRID image: the script also refuses to run outside
+# GRID_ENVIRONMENT=development, this keeps it off the image altogether.
+grid/scripts/seed_demo_data.py
+
+**/__pycache__/
+**/*.pyc

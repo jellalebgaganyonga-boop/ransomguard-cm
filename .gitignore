@@ -207,6 +207,11 @@ agent/publish/
 agent/publish-sc/
 agent/*.zip
 agent/**/RansomGuard-Agent-*.zip
+# The installer parts published for a local GRID (deployment/grid/publish-local-installer.ps1),
+# mounted as AGENT_PACKAGES_DIR. Built inside the repo folder on purpose: it is the only folder
+# the endpoint-protection exclusion covers, and the agent's ETW/suspension code would be
+# quarantined anywhere else.
+agent/packages/
 
 # Development PKI material generated locally
 deployment/grid/pki/*.srl
