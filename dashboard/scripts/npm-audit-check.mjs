@@ -47,7 +47,6 @@ process.stdin.on("end", () => {
       if (m) ghsas.add(m[0]);
     }
     const identified = ghsas.size > 0 ? [...ghsas] : ["(no GHSA)"];
-    const alloweds = identified.filter((id) => ALLOWED[id]);
     const unknowns = identified.filter((id) => !ALLOWED[id]);
     if (unknowns.length === 0) {
       allowed.push({ name, severity: v.severity, ghsas: identified });

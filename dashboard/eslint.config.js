@@ -18,6 +18,16 @@ import jsxA11y from 'eslint-plugin-jsx-a11y';
 
 export default [
   { ignores: ['dist', 'node_modules', 'src/types/design-tokens.ts', 'storybook-static'] },
+  // Node scripts run under Node, not the browser or React: give them Node globals so they can use
+  // process, Buffer, console, etc. without pulling in the TypeScript parser's React-aware config.
+  {
+    files: ['scripts/**/*.{js,mjs,cjs}'],
+    languageOptions: {
+      globals: { ...globals.node },
+      ecmaVersion: 2022,
+      sourceType: 'module',
+    },
+  },
   js.configs.recommended,
   {
     files: ['**/*.{ts,tsx}'],
