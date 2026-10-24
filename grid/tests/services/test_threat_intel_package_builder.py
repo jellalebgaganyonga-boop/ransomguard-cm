@@ -4,7 +4,6 @@ import json
 import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
-from tempfile import TemporaryDirectory
 
 import pytest
 
@@ -32,7 +31,7 @@ def _make_aggregated() -> AggregatedThreatIntel:
 def signing_service(tmp_path: Path) -> GridSigningKeyService:
     """Provide an initialized signing service."""
     svc = GridSigningKeyService(tmp_path / "test-key.pem")
-    svc.initialize()
+    svc.initialize(allow_generate=True)
     return svc
 
 

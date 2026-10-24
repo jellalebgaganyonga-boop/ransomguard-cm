@@ -1,0 +1,7 @@
+{
+  "//": "The agent projects build with TreatWarningsAsErrors. A newer SDK ships new analyzer warnings, which would turn a green build red on a CI runner or a developer machine that happens to have .NET 9 or 10 installed. Pin the toolchain to .NET 8 so every machine compiles exactly what CI compiles. Lives at the repo root so it applies whether dotnet is invoked from the root or from agent/src.",
+  "sdk": {
+    "version": "8.0.100",
+    "rollForward": "latestFeature"
+  }
+}

@@ -14,7 +14,7 @@ The RansomGuard-CM database consists of **20 tables** organized in **8 bounded c
 | Domain | Tables | Purpose |
 |---|---|---|
 | Tenancy | hospitals, subscriptions | Multi-tenant root |
-| Identity | users, mfa_devices, sessions | Auth & RBAC |
+| Identity | users, mfa_devices, sessions | Auth & RBAC — `mfa_devices`: **Not implemented** (no table, no migration; see `docs/console/INVENTAIRE_CONSOLE.md` (MFA); decided: mandatory TOTP for tenant_admin, after Sprint 8) |
 | Asset | endpoints, agents | Protected resources |
 | Detection | incidents, alerts, threat_signatures | Security events |
 | Backup | backup_jobs, snapshots, backup_files, restore_requests | Resilience |
@@ -104,7 +104,7 @@ The query `SELECT health_status WHERE last_heartbeat_at < ...` is satisfied enti
 | hospital → users | RESTRICT | Users must be transferred or anonymized first |
 | hospital → endpoints | RESTRICT | Audit obligation under Loi 2024/017 |
 | user → sessions | CASCADE | Sessions are ephemeral |
-| user → mfa_devices | CASCADE | MFA tied to user lifecycle |
+| user → mfa_devices | CASCADE | MFA tied to user lifecycle — **Not implemented** (MFA, see `docs/console/INVENTAIRE_CONSOLE.md`) |
 | endpoint → agent | CASCADE | Agent dies with endpoint |
 | snapshot → backup_files | CASCADE | Files belong to snapshot atomically |
 | backup_job → snapshots | RESTRICT | Audit trail preservation |
@@ -285,7 +285,7 @@ def downgrade():
 | Field | Encryption | Justification |
 |---|---|---|
 | users.password_hash | Argon2id hashed | Industry standard for password storage |
-| mfa_devices.secret_encrypted | AES-256-GCM | TOTP secrets must be reversible |
+| mfa_devices.secret_encrypted | AES-256-GCM | TOTP secrets must be reversible — **Not implemented** (MFA, see `docs/console/INVENTAIRE_CONSOLE.md`) |
 | sessions.token_hash | SHA-256 | Tokens compared by hash, never stored plain |
 | licenses.license_key | Stored + hashed | Original key for display, hash for fast lookup |
 | backup_files.relative_path_encrypted | AES-256-GCM | Patient file paths are sensitive |

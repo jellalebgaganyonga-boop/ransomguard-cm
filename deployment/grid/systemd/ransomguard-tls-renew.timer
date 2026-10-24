@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily renewal check for the GRID dashboard certificate
+
+[Timer]
+# Let's Encrypt certificates last 90 days; Tailscale renews inside the last 14.
+# Checking daily at a jittered hour keeps the renewal well clear of expiry.
+OnCalendar=daily
+RandomizedDelaySec=2h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

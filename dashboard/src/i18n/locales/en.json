@@ -1,0 +1,624 @@
+{
+  "app": {
+    "name": "RansomGuard-CM",
+    "tagline": "Security Console"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "alerts": "Alerts",
+    "agents": "Agents",
+    "users": "Users",
+    "audit": "Audit log",
+    "userActions": "User actions",
+    "notifications": "Notifications",
+    "settings": "Settings"
+  },
+  "header": {
+    "notifications": "Notifications",
+    "language": "Language",
+    "userMenu": "Account menu",
+    "mySettings": "My settings",
+    "switchLanguage": "Switch to {language}",
+    "logout": "Sign out",
+    "logoutAll": "Log out of every device",
+    "logoutAllTitle": "Log out of every device?",
+    "logoutAllBody": "Every open session, on this computer and on every other one, will be closed immediately. You will have to log in again everywhere.",
+    "logoutAllConfirm": "Log out everywhere"
+  },
+  "auth": {
+    "login": {
+      "title": "Sign in",
+      "email": "Email",
+      "password": "Password",
+      "rememberMe": "Remember me",
+      "submit": "Sign in",
+      "showPassword": "Show password",
+      "hidePassword": "Hide password",
+      "capsLockWarning": "Caps Lock is on",
+      "tenantCode": "Organization code",
+      "errors": {
+        "invalidCredentials": "Incorrect email or password",
+        "serverError": "Server error, please try again",
+        "networkError": "Connection lost, check your network",
+        "tenantCodeRequired": "Organization code is required",
+        "emailRequired": "Email is required",
+        "emailInvalid": "Invalid email format",
+        "passwordRequired": "Password is required"
+      }
+    },
+    "sessionExpired": {
+      "title": "Your session has expired",
+      "body": "You were logged out after 30 minutes of inactivity.",
+      "cta": "Sign in again"
+    }
+  },
+  "severity": {
+    "critical": "Critical",
+    "high": "High",
+    "medium": "Medium",
+    "low": "Low",
+    "info": "Info"
+  },
+  "status": {
+    "new": "New",
+    "in_progress": "In progress",
+    "acknowledged": "In progress",
+    "investigating": "Investigating",
+    "resolved": "Resolved",
+    "closed": "Resolved",
+    "falsepositive": "False positive",
+    "suppressed": "Suppressed",
+    "isolated": "Isolated",
+    "online": "Active",
+    "offline": "Offline",
+    "stale": "Stale",
+    "provisioned": "Provisioned",
+    "active": "Active",
+    "disconnected": "Disconnected",
+    "decommissioned": "Decommissioned"
+  },
+  "dashboard": {
+    "exec": {
+      "title": "Executive dashboard",
+      "subtitle": "Hospital security overview",
+      "criticalStatus": "{count} critical incidents require your attention",
+      "highStatus": "{count} alerts to review",
+      "allNormal": "All systems normal",
+      "viewDetails": "View details →",
+      "recentAlerts": "RECENT ALERTS",
+      "noAlerts": "No recent alerts",
+      "quickActions": "Quick actions",
+      "manageUsers": "Manage users",
+      "viewAudit": "View audit logs",
+      "kpi": {
+        "agents": "Active endpoints",
+        "alerts24h": "Alerts 24h",
+        "critical24h": "Critical 24h",
+        "daysSince": "Days since last critical",
+        "offline": "offline",
+        "todayReset": "Reset today"
+      }
+    },
+    "ops": {
+      "title": "Operational console",
+      "commandHint": "for command palette",
+      "staleWarning": "{count} agents have not sent a heartbeat in over 1 hour",
+      "agents": {
+        "title": "AGENTS",
+        "active": "active",
+        "stale": "stale",
+        "offline": "offline"
+      },
+      "feed": {
+        "title": "LIVE ALERT FEED",
+        "refresh": "Every 15s",
+        "lastHour": "Last hour"
+      }
+    },
+    "readonly": {
+      "title": "Auditor view",
+      "subtitle": "Read-only access",
+      "auditBtn": "View audit logs",
+      "auditSub": "Search, date filters, CSV export",
+      "alertsBtn": "View alerts",
+      "alertsSub": "Read-only security alerts",
+      "notice": "You are connected in auditor mode. No modifications are possible.",
+      "kpi": {
+        "alerts24h": "Alerts last 24h",
+        "critical": "including",
+        "auditEntries": "Audit log — last 7 days",
+        "auditSub": "audit entries"
+      }
+    }
+  },
+  "alerts": {
+    "acknowledge": "Acknowledge",
+    "backToList": "Back to alerts",
+    "notFound": "Alert not found",
+    "id": "Alert",
+    "copyId": "Copy ID",
+    "detectedAt": "Detected",
+    "agent": "Agent",
+    "module": "Module",
+    "close": "Close incident",
+    "markFalsePositive": "Mark as false positive",
+    "readOnlyNotice": "Read-only mode — no action available",
+    "whatHappened": "WHAT HAPPENED?",
+    "response": {
+      "title": "Response",
+      "suspended": "Process suspended: {who} — waiting for your decision, nothing resumes by itself",
+      "resumed": "Process resumed at your request: {who}",
+      "suspendFailed": "Suspension failed: {who} still runs ({reason})",
+      "isolationRecommended": "Several canaries written with no process named: isolate this endpoint (the agent does not)",
+      "noneResolved": "No automatic response on this alert",
+      "noneUnresolved": "No response possible: the process is not identified, the agent never acts on a guess",
+      "unnamedProcess": "process with no known name",
+      "commandLine": "Command \"{command}\": {status}",
+      "command": { "suspend": "Suspend", "resume": "Resume", "isolate": "Isolate" },
+      "status": {
+        "sent": "sent, waiting for the agent",
+        "received": "received by the agent, in progress",
+        "executed": "executed by the agent",
+        "not_executed": "not executed by the agent"
+      },
+      "reason": {
+        "not_implemented": "not implemented on the agent",
+        "unsupported_command": "command unknown to the agent",
+        "no_response_engine": "no response engine",
+        "invalid_parameters": "invalid parameters",
+        "not_resolved": "process not identified",
+        "system_pid": "system process",
+        "agent_pid": "the agent itself",
+        "pid_reused": "the process number was reassigned",
+        "process_exited": "the process has exited",
+        "access_denied": "protected process, access denied",
+        "suspend_failed": "kernel call failed",
+        "disabled_by_config": "response disabled in the agent's configuration",
+        "unknown_alert": "alert unknown to the agent",
+        "resume_failed": "resume failed",
+        "error": "error on the agent",
+        "unknown": "unknown reason"
+      },
+      "suspendButton": "Suspend the detected process",
+      "resumeButton": "Resume the process",
+      "confirmSuspend": "Confirm the suspension",
+      "confirmResume": "Confirm the resume",
+      "sendFailed": "The command could not be sent"
+    },
+    "attribution": {
+      "title": "Who did it?",
+      "pending": "Attribution in progress…",
+      "notReceived": "Attribution not received",
+      "unnamed": "process with no known name",
+      "startedAt": "started {when}",
+      "ambiguous": "Several processes wrote this file: none is named",
+      "unavailable": "Process not identified",
+      "reason": {
+        "no_write_event": "no write seen by kernel monitoring",
+        "system_pid": "written by the system (deferred write or memory-mapped file)",
+        "pid_reused": "the process number was reassigned to another program",
+        "process_exited": "the process ended before it could be verified",
+        "etw_unavailable": "kernel monitoring unavailable on this endpoint"
+      }
+    },
+    "confidence": "Detection confidence",
+    "artifacts": "Associated artifacts",
+    "technicalDetails": "Technical details",
+    "timeline": "Timeline",
+    "statusChange": "{from} → {to}",
+    "created": "Alert created",
+    "list": {
+      "searchPlaceholder": "Search (hostname...)",
+      "allSeverities": "All severities",
+      "allStatuses": "All statuses",
+      "empty": {
+        "title": "No alerts match your filters",
+        "body": "Try widening your search or resetting filters."
+      },
+      "col": {
+        "id": "ID",
+        "score": "Score",
+        "detected": "Detected",
+        "severity": "Severity",
+        "status": "Status",
+        "agent": "Host",
+        "module": "Module",
+        "actions": "Actions"
+      }
+    },
+    "ackModal": {
+      "title": "Acknowledge this alert?",
+      "description": "You will assign this alert to yourself.",
+      "noteLabel": "Note (optional, 0-500 characters)",
+      "notePlaceholder": "Investigation in progress..."
+    },
+    "closeModal": {
+      "title": "Close incident",
+      "categoryLabel": "Resolution category",
+      "categoryPlaceholder": "Select...",
+      "category": {
+        "fp": "False positive",
+        "tpContained": "True positive — Contained",
+        "tpEscalated": "True positive — Escalated",
+        "inconclusive": "Inconclusive"
+      },
+      "notesLabel": "Resolution notes",
+      "notesHint": "20-2000 characters",
+      "notesPlaceholder": "Detail of the investigation and actions taken...",
+      "minChars": "{count} characters minimum",
+      "submit": "Close incident"
+    }
+  },
+  "users": {
+    "createUser": "Create user",
+    "email": "Email",
+    "fullName": "Full name",
+    "status": "Status",
+    "lastLogin": "Last login",
+    "editRoles": "Roles",
+    "never": "Never",
+    "active": "Active",
+    "disabled": "Disabled",
+    "enable": "Enable",
+    "disable": "Disable",
+    "list": {
+      "totalUsers": "registered users",
+      "empty": "No users found",
+      "you": "you"
+    },
+    "createModal": {
+      "title": "Create user",
+      "password": "Temporary password",
+      "passwordHint": "Minimum 8 characters",
+      "roles": "Initial roles (optional)",
+      "submit": "Create"
+    },
+    "disableModal": {
+      "title": "Disable this user?",
+      "body": "will be immediately disabled.",
+      "warning": "The user will no longer be able to log in.",
+      "submit": "Disable",
+      "selfErrorTitle": "Action not allowed",
+      "selfErrorBody": "You cannot disable your own account. This action is blocked to prevent accidental lockout."
+    },
+    "enableModal": {
+      "title": "Enable this user?",
+      "body": "will be able to log in again.",
+      "submit": "Enable"
+    },
+    "roles": {
+      "title": "Assign roles",
+      "chooseRoles": "Select roles:",
+      "gapWarning": "Current roles are not shown (known backend limitation). Check the roles this user should have — the list below will replace all existing roles.",
+      "submit": "Save roles",
+      "tenantAdmin": "Administrator (tenant_admin)",
+      "securityAnalyst": "Security analyst (security_analyst)",
+      "readOnlyAuditor": "Read-only auditor (read_only_auditor)",
+      "selfDemotionError": "You cannot remove the tenant_admin role from your own account."
+    }
+  },
+  "agents": {
+    "hostname": "Host",
+    "os": "OS",
+    "heartbeat": "Heartbeat",
+    "status": "Status",
+    "list": {
+      "totalEndpoints": "registered endpoints",
+      "active": "Active",
+      "disconnected": "Disconnected",
+      "provisioned": "Provisioned",
+      "decommissioned": "Decommissioned",
+      "version": "Version",
+      "empty": "No agents registered",
+      "autoRefresh": "Auto-refresh every 30 s",
+      "addAgent": "Add Agent"
+    },
+    "provision": {
+      "title": "Add new agent",
+      "subtitle": "An enrollment code is generated, valid for 30 minutes. Download the installer: it embeds this code, the GRID address and the agent package. On the endpoint, a double-click is all it takes.",
+      "otpLabel": "Enrollment code",
+      "expires": "— expires in {n} min",
+      "copyOtp": "Copy the enrollment code",
+      "downloadButton": "Download the installer",
+      "downloading": "Preparing the installer…",
+      "step1": "Copy the installer to the endpoint (USB key, network share).",
+      "step2": "Double-click. Windows shows \"Unknown publisher\": \"More info\", then \"Run anyway\", then \"Yes\" to the administrator prompt.",
+      "step3": "The endpoint shows up here in green within two minutes. Nothing to type.",
+      "scriptedNote": "Scripted deployment (GPO, SCCM): agent/install.ps1, agent documentation.",
+      "noInstaller": "No installer is published on this GRID (stub, agent package or authority certificate missing). Publish the package (continuous deployment), then try again.",
+      "codeInvalid": "This code can no longer be used (expired or unknown): generate a new one.",
+      "downloadFailed": "The installer could not be prepared. Try again; if it persists, see the GRID log.",
+      "hint": "After the agent enrolls, it will appear here within 60 seconds (next auto-refresh).",
+      "regenerate": "Generate a new code"
+    },
+    "suspended": {
+      "title": "Suspended processes",
+      "subtitle": "What this endpoint reports as frozen right now. A process the agent has resumed, or that has exited, leaves this list because the agent said so.",
+      "unnamedProcess": "process with no known name",
+      "since": "Suspended",
+      "file": "Decoy file written",
+      "escalations": "Reminders sent with no decision",
+      "resume": "Resume",
+      "confirmBody": "This will let the process run again. If it was encrypting files, it will carry on. Nothing resumes by itself: this is your decision.",
+      "confirmResume": "Resume the process",
+      "asked": "Resume asked; the agent answers on the alert.",
+      "sendFailed": "The request could not be sent.",
+      "resumeFailed": "A resume was asked and failed: the process is still frozen, and nothing can unfreeze it before this machine restarts."
+    },
+    "detail": {
+      "notFound": "Agent not found",
+      "backToList": "Back to agents",
+      "fqdn": "FQDN",
+      "neverReported": "Never",
+      "recentAlerts": "Recent alerts",
+      "noAlerts": "No alerts for this agent",
+      "allAlerts": "All alerts",
+      "tabOverview": "Overview",
+      "tabAlerts": "Alerts"
+    },
+    "command": {
+      "isolate": "Isolate endpoint",
+      "title": "Isolate endpoint",
+      "warningTitle": "Destructive action",
+      "warningBody": "Once command execution is available on the endpoint, isolating \"{hostname}\" will cut its network access. Today the command is only recorded: the endpoint is not isolated.",
+      "reasonLabel": "Reason (required)",
+      "reasonPlaceholder": "E.g.: Suspected compromise — ransomware detected running...",
+      "minChars": "{count} characters minimum",
+      "ackLabel": "I understand this command is recorded, and that the endpoint will only be isolated once its execution is available.",
+      "submit": "Isolate endpoint",
+      "notYetExecuted": "The command is recorded; its execution on the endpoint is not available yet. The endpoint is not isolated."
+    }
+  },
+  "common": {
+    "loading": "Loading...",
+    "error": "An error occurred",
+    "retry": "Retry",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "save": "Save",
+    "close": "Close",
+    "search": "Search",
+    "filters": "Filters",
+    "resetFilters": "Reset filters",
+    "noResults": "No results",
+    "results": "results",
+    "previous": "Previous",
+    "next": "Next",
+    "page": "Page {page} / {totalPages}",
+    "all": "All",
+    "viewAll": "View all →",
+    "view": "View →",
+    "access": "Access →",
+    "copied": "Copied!"
+  },
+  "audit": {
+    "title": "Audit log",
+    "subtitle": "Agent audit chain integrity — Ed25519 signed batches",
+    "totalEntries": "entries",
+    "empty": "No entries found",
+    "exportCsv": "Export CSV",
+    "exportCsvTitle": "Export current page as CSV (frontend-only, no backend endpoint)",
+    "filterAgentId": "Agent ID",
+    "filterAgentIdPlaceholder": "Agent UUID...",
+    "filterAfter": "Received after",
+    "filterBefore": "Received before",
+    "gapWarning": "Sequence gap detected — entries are missing or out of order.",
+    "col": {
+      "agentId": "Agent",
+      "sequenceNumber": "Sequence",
+      "signingKeyId": "Signing key",
+      "receivedAt": "Received"
+    }
+  },
+  "a11y": {
+    "scrollableTable": "Horizontally scrollable table"
+  },
+  "settings": {
+    "title": "Settings",
+    "subtitle": "Your account, your language, your notifications, your password.",
+    "tabs": { "profile": "Profile", "language": "Language", "notifications": "Notifications", "security": "Security" },
+    "profile": {
+      "name": "Display name",
+      "email": "E-mail",
+      "roles": "Role",
+      "tenant": "Organisation",
+      "edit": "Edit",
+      "saved": "Name saved.",
+      "saveFailed": "Name not saved."
+    },
+    "language": {
+      "title": "Language",
+      "description": "The language of this console. English is the default; French is available. Your choice is stored on the GRID and applied at every sign-in, on any machine.",
+      "saved": "Language saved.",
+      "saveFailed": "Language not saved.",
+      "storedOnGrid": "Choice stored on the GRID.",
+      "notChosenYet": "No stored choice: the console follows the browser's language, English otherwise."
+    },
+    "notifications": {
+      "title": "E-mail notifications",
+      "description": "An e-mail is sent to you for every new alert of the checked severities. The preferences are stored on the GRID.",
+      "deliveryNotConfigured": "E-mail delivery is not configured on this GRID (no SMTP account): your preferences are stored, but no e-mail leaves until it is.",
+      "severity": "Severity",
+      "email": "E-mail",
+      "saved": "Preference saved.",
+      "saveFailed": "Preference not saved.",
+      "loadFailed": "The preferences could not be read."
+    },
+    "security": {
+      "description": "Change your password: the current one proves it is you.",
+      "current": "Current password",
+      "new": "New password (at least 8 characters)",
+      "confirm": "Confirm the new password",
+      "tooShort": "At least 8 characters.",
+      "mismatch": "The two entries differ.",
+      "submit": "Change the password",
+      "changed": "Password changed.",
+      "wrongCurrent": "Current password incorrect.",
+      "rejected": "New password refused: at least 8 characters, different from the current one.",
+      "failed": "The password could not be changed."
+    }
+  },
+  "userActions": {
+    "title": "User actions log",
+    "subtitle": "Who did what on the dashboard",
+    "filterByAction": "Filter by action",
+    "empty": "No actions recorded",
+    "actionType": {
+      "login": "Login",
+      "logout": "Logout",
+      "alert_status_change": "Alert status change",
+      "command_issued": "Command issued",
+      "user_create": "User created",
+      "user_disable": "User disabled",
+      "user_enable": "User enabled",
+      "agent_decommission": "Agent decommissioned",
+      "agent_provision": "Agent provisioned"
+    },
+    "col": {
+      "date": "Date",
+      "action": "Action",
+      "user": "User",
+      "target": "Target",
+      "details": "Details",
+      "ip": "IP"
+    }
+  },
+  "errors": {
+    "notFound": {
+      "title": "Page not found",
+      "description": "The page you are looking for does not exist.",
+      "backToDashboard": "Back to dashboard"
+    },
+    "forbidden": {
+      "title": "Access denied",
+      "description": "You do not have the necessary permissions to access this page."
+    },
+    "generic": {
+      "title": "Error",
+      "description": "An unexpected error occurred. Please try again."
+    }
+  },
+  "modules": {
+    "SENTINEL": "SENTINEL — decoy files",
+    "ENTROPY": "ENTROPY — encryption",
+    "GENEALOGY": "GENEALOGY — process origin",
+    "USB_GUARD": "USB GUARD — removable media",
+    "EXFIL_WATCH": "EXFIL WATCH — data exfiltration",
+    "UNKNOWN": "Unknown module"
+  },
+  "posture": {
+    "verdict": {
+      "protected": "Protected",
+      "partial": "Partial protection",
+      "unprotected": "Not protected",
+      "unknown": "Unknown status"
+    },
+    "verdictShort": {
+      "protected": "Protected",
+      "partial": "Partial",
+      "unprotected": "Not protected",
+      "unknown": "Unknown"
+    },
+    "stateLabel": {
+      "active": "Active",
+      "inactive": "Inactive",
+      "disabled_by_config": "Disabled (configuration)",
+      "degraded": "Degraded"
+    },
+    "stateInSentence": {
+      "active": "active",
+      "inactive": "inactive",
+      "disabled_by_config": "disabled by configuration",
+      "degraded": "degraded",
+      "starting": "starting"
+    },
+    "reason": {
+      "admin_rights_missing": "administrator rights missing",
+      "disabled_by_config": "disabled by configuration",
+      "init_failed": "failed to start",
+      "stopped_unexpectedly": "stopped unexpectedly",
+      "not_implemented": "not implemented",
+      "attribution_unreliable": "attribution unreliable",
+      "actions_not_implemented": "blocking not implemented",
+      "starting": "starting",
+      "no_watch_directory": "no folder being watched",
+      "integrity_check_failing": "integrity check failing",
+      "learning_phase": "learning phase",
+      "etw_session_stopped_externally": "kernel monitoring session stopped from outside",
+      "not_reported": "not reported by the agent"
+    },
+    "verdictReason": {
+      "never_connected": "Never connected",
+      "agent_update_required": "Agent update required — no posture reported",
+      "starting": "Starting",
+      "no_detector_active": "no detector active",
+      "transmission_blocked": "alert transmission blocked",
+      "transmission_unknown": "Transmission status unknown",
+      "restart_loop": "Agent restarting repeatedly",
+      "audit_write_failed": "audit log incomplete: entries not recorded"
+    },
+    "sentence": {
+      "verdictWithReason": "{verdict} — {reason}",
+      "module": "{module} {state}",
+      "moduleWithReason": "{module} {state}: {reason}",
+      "signalLost": "Signal lost {minutes} min ago",
+      "noSignalFor": "no signal for {duration}",
+      "alertsRejected": "alerts rejected by the server",
+      "alertsRejectedCount": "{count, plural, one {# alert} other {# alerts}} rejected by the server"
+    },
+    "uploadError": {
+      "NETWORK_UNREACHABLE": "Server unreachable",
+      "TIMEOUT": "Timed out",
+      "auth": "Authentication refused",
+      "http4xx": "Rejected by the server",
+      "http5xx": "Server error",
+      "UNKNOWN": "Unknown error"
+    },
+    "duration": {
+      "minutes": "{minutes} min",
+      "hours": "{hours} h {minutes}",
+      "days": "{days} d {hours} h"
+    },
+    "bytes": {
+      "gib": "{value} GB",
+      "mib": "{value} MB"
+    },
+    "unavailable": "unavailable",
+    "none": "none",
+    "noneSinceStart": "none since the agent started",
+    "section": {
+      "verdict": "Protection",
+      "otherFindings": "Other findings",
+      "modules": "Modules",
+      "transmission": "Alert transmission",
+      "endpoint": "Endpoint",
+      "noPosture": "This endpoint has not reported any posture.",
+      "lastPosture": "Last posture received {when}",
+      "lastValueAt": "last value received at {time}"
+    },
+    "field": {
+      "module": "Module",
+      "state": "State",
+      "reason": "Reason",
+      "since": "Since",
+      "pendingAlerts": "Alerts not transmitted",
+      "lastUpload": "Last successful transmission",
+      "lastUploadError": "Last error",
+      "rejectedAlerts": "Alerts rejected by the server (24 h)",
+      "auditWriteFailures": "Audit entries not recorded (since start)",
+      "agentVersion": "Agent version",
+      "osVersion": "Windows version",
+      "systemFree": "Free space — system volume",
+      "dbFree": "Free space — database volume",
+      "lastDetection": "Last detection",
+      "threatIntel": "Threat intelligence",
+      "ago": "{duration} ago",
+      "rawCode": "Code: {code}"
+    },
+    "list": {
+      "protection": "Protection",
+      "signalLostCount": "{count, plural, one {# endpoint without a signal for over 1 hour} other {# endpoints without a signal for over 1 hour}}"
+    },
+    "locale": "en-GB"
+  }
+}

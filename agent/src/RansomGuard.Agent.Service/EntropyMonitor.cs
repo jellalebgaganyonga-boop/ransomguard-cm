@@ -2,12 +2,14 @@ using System.Threading.Channels;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using RansomGuard.Agent.Core.Configuration;
+using RansomGuard.Agent.Core.Diagnostics;
 using RansomGuard.Agent.Core.Detection;
 using RansomGuard.Agent.Core.Detection.Entropy;
 using RansomGuard.Agent.Core.Persistence;
 using RansomGuard.Agent.Core.Persistence.Entities;
 using RansomGuard.Agent.Core.Persistence.Repositories;
 using Microsoft.EntityFrameworkCore;
+using RansomGuard.Agent.Core.Communication;
 using RansomGuard.Agent.Core.Detection.CrossModule;
 using RansomGuard.Agent.Core.Detection.Genealogy;
 using RansomGuard.Agent.Core.Security.RateLimiting;
@@ -32,26 +34,60 @@ public sealed class EntropyMonitor : BackgroundService
     private readonly List<FileSystemWatcher> _watchers = [];
     private readonly IOperationRateLimiter? _rateLimiter;
     private readonly IDetectionEventBus? _eventBus;
+    private readonly IAlertForwardingQueue? _alertQueue;
+    private readonly UserProfileEnumerator _profiles;
+    private readonly IModuleStateRegistry _moduleState;
+    private readonly IModuleFailureReporter _failureReporter;
+    private readonly IModuleFaultInjector _faultInjector;
+    private readonly TimeSpan _startupDelay;
+    private readonly TaskCompletionSource _watcherFault = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     /// <summary>
     /// Initializes the entropy monitor.
     /// </summary>
+    /// <param name="logger">Logger.</param>
+    /// <param name="config">Agent configuration.</param>
+    /// <param name="scopeFactory">Scope factory for per-event services.</param>
+    /// <param name="deduplicator">File event deduplicator.</param>
+    /// <param name="calculator">Shannon entropy calculator.</param>
+    /// <param name="moduleState">Runtime module-state registry.</param>
+    /// <param name="failureReporter">Reports the module going down.</param>
+    /// <param name="rateLimiterFactory">Rate limiter for entropy computations.</param>
+    /// <param name="eventBus">Cross-module detection bus.</param>
+    /// <param name="alertQueue">Queue forwarding alerts to the GRID.</param>
+    /// <param name="startupDelay">
+    /// Test seam: wait before starting, for SENTINEL's deployment; null (the DI default) is 5 s.
+    /// </param>
+    /// <param name="faultInjector">Development fault injection; null or the production one never stops anything.</param>
+    /// <param name="profiles">The real user profiles that %EACHUSERPROFILE% expands to (AGT-PATH-001); null: the Windows registry.</param>
     public EntropyMonitor(
         ILogger<EntropyMonitor> logger,
         IOptionsMonitor<AgentConfiguration> config,
         IServiceScopeFactory scopeFactory,
         IFileEventDeduplicator deduplicator,
         IEntropyCalculator calculator,
+        IModuleStateRegistry moduleState,
+        IModuleFailureReporter failureReporter,
         RateLimiterFactory? rateLimiterFactory = null,
-        IDetectionEventBus? eventBus = null)
+        IDetectionEventBus? eventBus = null,
+        IAlertForwardingQueue? alertQueue = null,
+        TimeSpan? startupDelay = null,
+        IModuleFaultInjector? faultInjector = null,
+        UserProfileEnumerator? profiles = null)
     {
         _logger = logger;
         _config = config.CurrentValue;
         _scopeFactory = scopeFactory;
         _deduplicator = deduplicator;
         _calculator = calculator;
+        _moduleState = moduleState;
+        _failureReporter = failureReporter;
+        _faultInjector = faultInjector ?? new NoModuleFaultInjector();
+        _startupDelay = startupDelay ?? TimeSpan.FromSeconds(5);
         _rateLimiter = rateLimiterFactory?.GetLimiter(RateLimiterFactory.EntropyComputation);
         _eventBus = eventBus;
+        _alertQueue = alertQueue;
+        _profiles = profiles ?? UserProfileEnumerator.Windows;
         _fileChannel = Channel.CreateBounded<string>(
             new BoundedChannelOptions(EventChannelCapacity)
             {
@@ -63,61 +99,175 @@ public sealed class EntropyMonitor : BackgroundService
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        EntropyOptions? entropy = _config.Entropy;
-        if (entropy is null || !entropy.Enabled)
+        bool reachedRunningState = false;
+        Task? consumerTask = null;
+
+        // Every task of the module runs on this token, so that after a failure
+        // nothing keeps running unseen.
+        using var moduleCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+        CancellationToken moduleToken = moduleCts.Token;
+
+        try
         {
-            _logger.LogInformation("ENTROPY module is disabled");
+            EntropyOptions? entropy = _config.Entropy;
+            if (entropy is null || !entropy.Enabled)
+            {
+                _logger.LogInformation("ENTROPY module is disabled");
+                _moduleState.Publish(ModuleCode.Entropy, ModuleState.DisabledByConfig, ModuleReasonCode.DisabledByConfig);
+                return;
+            }
+
+            // Wait for SENTINEL deployment and baseline scan
+            await Task.Delay(_startupDelay, stoppingToken);
+
+            // Build initial baselines
+            await BuildBaselinesAsync(stoppingToken);
+
+            consumerTask = ConsumeEventsAsync(entropy, moduleToken);
+
+            // Set up FSW on watch directories
+            string[] resolvedPaths = EnvironmentVariableResolver.ResolvePaths(_config.Detection.WatchPaths, _profiles, _logger);
+            foreach (string dir in resolvedPaths)
+            {
+                // AGT-PATH-001: a system or service profile is never watched -- it counts as missing.
+                if (WatchedPathPolicy.IsRefused(dir))
+                {
+                    _logger.LogError("ENTROPY: folder {Directory} is in a system or service profile and is not watched (AGT-PATH-001)", dir);
+                    continue;
+                }
+
+                if (!Directory.Exists(dir))
+                {
+                    _logger.LogWarning("ENTROPY: folder {Directory} does not exist and is not watched", dir);
+                    continue;
+                }
+
+                var watcher = new FileSystemWatcher(dir)
+                {
+                    NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size,
+                    IncludeSubdirectories = true,
+                    EnableRaisingEvents = true
+                };
+
+                watcher.Changed += (_, e) =>
+                {
+                    if (_deduplicator.ShouldProcess(e.FullPath, e.ChangeType))
+                    {
+                        _fileChannel.Writer.TryWrite(e.FullPath);
+                    }
+                };
+                watcher.Error += OnWatcherError;
+
+                _watchers.Add(watcher);
+            }
+
+            // Zero watcher is not "active": the module would see no modification at all.
+            if (_watchers.Count == 0)
+            {
+                _logger.LogError("ENTROPY watches nothing: none of the {Count} configured folders is watchable (missing, or refused as a system profile)",
+                    resolvedPaths.Length);
+                _moduleState.Publish(ModuleCode.Entropy, ModuleState.Inactive, ModuleReasonCode.NoWatchDirectory);
+                return;
+            }
+
+            _logger.LogInformation("ENTROPY monitor watching {DirCount} directories", _watchers.Count);
+
+            // What ENTROPY may claim about itself (B4, 2026-10-22). The detection is real: every
+            // write on a watched folder is read, its Shannon entropy computed, and rules 1 and 2
+            // (absolute threshold, delta against the file's baseline) decide. Two gaps are open,
+            // and a module that reads "active" would hide both from whoever looks at the console:
+            //
+            //   AGT-ATTR-001 -- an ENTROPY signal names no process: it carries PID 0. The console
+            //                   shows "a file was encrypted" and cannot say by whom.
+            //   AGT-EN-002   -- rule 3, the directory-wide entropy shift, has no caller. It is the
+            //                   mass-encryption signal, and DirectoryShiftThreshold,
+            //                   DirectoryShiftWindowSeconds and DirectoryShiftMinFiles are read
+            //                   from the configuration and change nothing.
+            //
+            // So: degraded, with the reason the operator can act on. It becomes active when a
+            // signal names its writer and rule 3 is evaluated.
+            _logger.LogWarning(
+                "ENTROPY degraded: its signals carry PID 0, no process is named (AGT-ATTR-001). "
+                + "An encrypted write is reported without its author.");
+            _logger.LogWarning(
+                "ENTROPY degraded: rule 3 (directory-wide entropy shift, the mass-encryption signal) is not "
+                + "evaluated (AGT-EN-002). DirectoryShiftThreshold {Shift}, DirectoryShiftWindowSeconds {Window} "
+                + "and DirectoryShiftMinFiles {MinFiles} are read and change nothing.",
+                entropy.DirectoryShiftThreshold, entropy.DirectoryShiftWindowSeconds, entropy.DirectoryShiftMinFiles);
+            _moduleState.Publish(ModuleCode.Entropy, ModuleState.Degraded, ModuleReasonCode.AttributionUnreliable);
+            reachedRunningState = true;
+
+            await ModuleTaskObserver.ObserveUntilStoppedAsync(
+                stoppingToken,
+                ("consumer", consumerTask),
+                ("watchers", _watcherFault.Task),
+                ("fault-injection", _faultInjector.WhenStopRequestedAsync(ModuleCode.Entropy, moduleToken)));
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Normal shutdown.
+        }
+        catch (Exception ex)
+        {
+            // Swallowed on purpose: one module going down must not take the host —
+            // and every other module — with it. The reporter leaves the three
+            // traces: registry state, Critical log, audit entry.
+            await _failureReporter.ReportStoppedAsync(ModuleCode.Entropy, reachedRunningState, ex);
+        }
+        finally
+        {
+            await StopModuleAsync(moduleCts, consumerTask);
+        }
+    }
+
+    /// <summary>
+    /// A watcher reports an error. A buffer overflow loses events but the watcher
+    /// keeps running; any other error means it has stopped and ENTROPY is blind.
+    /// </summary>
+    private void OnWatcherError(object sender, ErrorEventArgs e)
+    {
+        Exception error = e.GetException();
+        if (error is InternalBufferOverflowException)
+        {
+            // ReportEventsLostAsync never throws, and writes at most once a minute.
+            // A burst of overflows here is itself a hint of mass modification (AGT-FSW-001).
+            _ = _failureReporter.ReportEventsLostAsync(ModuleCode.Entropy, error);
             return;
         }
 
-        // Wait for SENTINEL deployment and baseline scan
-        await Task.Delay(5000, stoppingToken);
+        _watcherFault.TrySetException(error);
+    }
 
-        // Build initial baselines
-        await BuildBaselinesAsync(stoppingToken);
-
-        // Start consumer
-        Task consumerTask = ConsumeEventsAsync(entropy, stoppingToken);
-
-        // Set up FSW on watch directories
-        string[] resolvedPaths = EnvironmentVariableResolver.ResolvePaths(_config.Detection.WatchPaths);
-        foreach (string dir in resolvedPaths)
+    /// <summary>Stops every source and task of the module; best effort, never throws.</summary>
+    private async Task StopModuleAsync(CancellationTokenSource moduleCts, Task? consumerTask)
+    {
+        foreach (FileSystemWatcher watcher in _watchers)
         {
-            if (!Directory.Exists(dir)) continue;
-
-            var watcher = new FileSystemWatcher(dir)
-            {
-                NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size,
-                IncludeSubdirectories = true,
-                EnableRaisingEvents = true
-            };
-
-            watcher.Changed += (_, e) =>
-            {
-                if (_deduplicator.ShouldProcess(e.FullPath, e.ChangeType))
-                {
-                    _fileChannel.Writer.TryWrite(e.FullPath);
-                }
-            };
-
-            _watchers.Add(watcher);
+            watcher.EnableRaisingEvents = false;
+            watcher.Dispose();
         }
 
-        _logger.LogInformation("ENTROPY monitor active on {DirCount} directories", _watchers.Count);
-
-        // Keep alive
-        try { await Task.Delay(Timeout.Infinite, stoppingToken); }
-        catch (OperationCanceledException) { }
-
+        _watchers.Clear();
         _fileChannel.Writer.TryComplete();
-        await consumerTask;
+        await moduleCts.CancelAsync();
 
-        foreach (var w in _watchers) { w.EnableRaisingEvents = false; w.Dispose(); }
+        if (consumerTask is not null)
+        {
+            try
+            {
+                await consumerTask;
+            }
+            catch (Exception ex)
+            {
+                // Cancelled by the stop above, or already reported as the failure.
+                _logger.LogDebug(ex, "ENTROPY consumer ended during stop");
+            }
+        }
     }
 
     private async Task BuildBaselinesAsync(CancellationToken ct)
     {
-        string[] resolvedPaths = EnvironmentVariableResolver.ResolvePaths(_config.Detection.WatchPaths);
+        string[] resolvedPaths = EnvironmentVariableResolver.ResolvePaths(_config.Detection.WatchPaths, _profiles, _logger);
         int total = 0;
 
         foreach (string dir in resolvedPaths)
@@ -201,17 +351,34 @@ public sealed class EntropyMonitor : BackgroundService
 
                 if (alert is not null)
                 {
-                    context.EntropyAlerts.Add(alert);
-                    await context.SaveChangesAsync(ct);
-
-                    await auditRepo.AppendAsync("EntropyAlert",
-                        $"Rule {alert.RuleId} ({alert.RuleName}): {filePath} entropy {alert.BaselineEntropy:F2} -> {alert.CurrentEntropy:F2}",
-                        "EntropyAlert", alert.Id, ct);
+                    // The GRID first (AGT-AUD-002), skipping Suppressed alerts: nothing local —
+                    // database, audit — may delay or cancel the alert.
+                    var mapped = AlertMapper.FromEntropyAlert(alert);
+                    if (mapped is not null) _alertQueue?.TryEnqueue(mapped);
 
                     _logger.LogCritical(
                         "ENTROPY ALERT: Rule {RuleId} ({RuleName}) on {FilePath} | Baseline: {Baseline:F2} Current: {Current:F2} Delta: {Delta:F2} | Severity: {Severity}",
                         alert.RuleId, alert.RuleName, filePath,
                         alert.BaselineEntropy, alert.CurrentEntropy, alert.Delta, alert.Severity);
+
+                    // From here the alert has left: its local record and its audit entry are
+                    // completed even during a shutdown, so a sent detection never lacks its trace.
+                    try
+                    {
+                        context.EntropyAlerts.Add(alert);
+                        await context.SaveChangesAsync(CancellationToken.None);
+                    }
+                    catch (Exception ex)
+                    {
+                        // The alert is already on its way to the GRID; the local copy is what failed.
+                        _logger.LogError(ex, "ENTROPY alert {AlertId} sent, but its local record failed", alert.Id);
+                        context.Entry(alert).State = EntityState.Detached;
+                    }
+
+                    // One INSERT, never a wait on the chain; never throws when it cannot record.
+                    await auditRepo.AppendAsync("EntropyAlert",
+                        $"Rule {alert.RuleId} ({alert.RuleName}): {filePath} entropy {alert.BaselineEntropy:F2} -> {alert.CurrentEntropy:F2}",
+                        "EntropyAlert", alert.Id, CancellationToken.None);
 
                     // Fire-and-forget genealogy enrichment for process attribution
                     _ = Task.Run(async () =>

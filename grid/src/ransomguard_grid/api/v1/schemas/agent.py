@@ -1,8 +1,13 @@
 """Pydantic schemas for agent enrollment and heartbeat."""
 
+import base64
+import binascii
 from datetime import datetime
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
+
+from ransomguard_grid.services.agent_posture import MAX_UPLOAD_AGE_SECONDS
 
 
 class EnrollmentRequest(BaseModel):
@@ -14,24 +19,148 @@ class EnrollmentRequest(BaseModel):
     os_version: str = Field(max_length=100)
     agent_version: str = Field(max_length=50)
     hardware_fingerprint: str = Field(min_length=32, max_length=64, description="SHA-256 hardware ID")
+    # The agent's OWN audit-signing public key (raw 32-byte Ed25519, base64). Its private key never
+    # leaves the endpoint: the GRID verifies the agent's audit chain with this key, and holds no
+    # key able to sign in the agent's name (GRID-SEC-003).
+    ed25519_public_key_b64: str = Field(min_length=44, max_length=44)
+
+    @field_validator("ed25519_public_key_b64")
+    @classmethod
+    def _raw_ed25519_public_key(cls, value: str) -> str:
+        try:
+            raw = base64.b64decode(value, validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise ValueError("not base64") from exc
+        if len(raw) != 32:
+            raise ValueError("an Ed25519 public key is 32 bytes")
+        return value
 
 
 class EnrollmentResponse(BaseModel):
+    """No key material: the GRID never generates nor sends a signing key (GRID-SEC-003)."""
+
+    model_config = ConfigDict(extra="forbid")
+
     agent_id: str
     tenant_id: str
     message: str
-    ed25519_private_key_pem: str | None = None
+
+
+_ShortKey = Annotated[str, StringConstraints(max_length=64)]
+
+
+class HeartbeatDisk(BaseModel):
+    """Free bytes; null = the agent could not measure it, never 0."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    system_free_bytes: int | None = Field(default=None, ge=0)
+    db_volume_free_bytes: int | None = Field(default=None, ge=0)
+
+
+class HeartbeatTransmission(BaseModel):
+    """Alert transmission health. Null = not reported / unavailable, never 0."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    pending_alerts: int | None = Field(default=None, ge=0)
+    last_upload_ok_at: datetime | None = None
+    # Age of the last successful upload on the agent's own clock, at send time. When present the
+    # GRID uses it and ignores last_upload_ok_at, which is only as good as the clock skew.
+    last_upload_ok_age_seconds: int | None = Field(default=None, ge=0, le=MAX_UPLOAD_AGE_SECONDS)
+    # A stable code (NETWORK_UNREACHABLE, HTTP_422...), never an exception text.
+    last_upload_error_code: str | None = Field(default=None, max_length=50, pattern=r"^[A-Za-z0-9_]+$")
+    # Alerts the GRID refused (400/422), over the agent's last 24 h.
+    rejected_alerts: int | None = Field(default=None, ge=0)
+    # Audit entries the agent could not record since it started (AGT-AUD-002): the detection
+    # went on, the trace did not. Null = not reported, never 0.
+    audit_write_failures: int | None = Field(default=None, ge=0)
+
+
+class HeartbeatModule(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # Checked against the closed list by the server: an unknown code is logged, never stored.
+    code: str = Field(min_length=1, max_length=64)
+    state: Literal["active", "inactive", "disabled_by_config", "degraded"]
+    reason_code: str | None = Field(default=None, max_length=50, pattern=r"^[a-z0-9_]+$")
+    changed_at: datetime
 
 
 class HeartbeatRequest(BaseModel):
+    """Agent heartbeat. schema_version absent = v1, the legacy 3-field heartbeat, still accepted:
+    the agents of a hospital are not all updated the same day.
+    """
+
     model_config = ConfigDict(extra="forbid")
 
+    schema_version: Literal[1, 2] = 1
     agent_uptime_seconds: int = Field(ge=0)
     threat_intel_version: str | None = Field(max_length=50, default=None)
-    modules_status: dict[str, str] = Field(default_factory=dict)
+
+    # v1 only: free-form, bounded, ignored (no posture, no log).
+    modules_status: dict[_ShortKey, _ShortKey] | None = Field(default=None, max_length=32)
+
+    # v2
+    agent_version: str | None = Field(default=None, max_length=50)
+    os_version: str | None = Field(default=None, max_length=100)
+    last_detection_at: datetime | None = None
+    disk: HeartbeatDisk | None = None
+    transmission: HeartbeatTransmission | None = None
+    modules: list[HeartbeatModule] = Field(default_factory=list, max_length=16)
+
+    @model_validator(mode="after")
+    def _one_entry_per_module(self) -> "HeartbeatRequest":
+        codes = [m.code for m in self.modules]
+        if len(codes) != len(set(codes)):
+            raise ValueError("modules: each code may appear only once")
+        return self
 
 
 class HeartbeatResponse(BaseModel):
     next_heartbeat_in_seconds: int
     pending_commands: list[str] = Field(default_factory=list)
     server_time: datetime
+
+
+# ── Commands (plan de finition, J1 § 1.3) ──────────────────────────────────────
+
+
+class AgentCommandItem(BaseModel):
+    """A command the console queued for this agent, as the agent fetches it."""
+
+    id: str
+    command_type: str
+    parameters: dict[str, Any] = Field(default_factory=dict)
+    issued_at: datetime
+
+
+class AgentCommandsResponse(BaseModel):
+    commands: list[AgentCommandItem] = Field(default_factory=list)
+
+
+class CommandResultRequest(BaseModel):
+    """What the agent did with a command. Bounded: 20 scalar entries, short strings."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    success: bool
+    payload: dict[str, Any] = Field(default_factory=dict, max_length=20)
+
+    @field_validator("payload")
+    @classmethod
+    def _bounded(cls, payload: dict[str, Any]) -> dict[str, Any]:
+        for key, value in payload.items():
+            if len(key) > 50:
+                raise ValueError("payload: key too long")
+            if isinstance(value, str) and len(value) > 2000:
+                raise ValueError(f"payload: value of {key} too long")
+            if isinstance(value, (dict, list)):
+                raise ValueError(f"payload: {key} must be a scalar")
+        return payload
+
+
+class CommandResultResponse(BaseModel):
+    command_id: str
+    status: str
+    result: Literal["applied", "unchanged"]

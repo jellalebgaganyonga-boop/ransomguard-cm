@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ransomguard_grid.db.base import Base
@@ -31,6 +31,8 @@ class User(Base):
     """Dashboard user within a tenant."""
 
     __tablename__ = "users"
+    # One account per email in a tenant; emails are stored lower-case (GRID-USR-001).
+    __table_args__ = (UniqueConstraint("tenant_id", "email", name="uq_users_tenant_email"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id", ondelete="RESTRICT"), index=True, nullable=False)
@@ -39,6 +41,9 @@ class User(Base):
     full_name: Mapped[str] = mapped_column(String(200), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Settings (Fix C): null = never chosen; the console then follows its default and the browser.
+    preferred_language: Mapped[str | None] = mapped_column(String(5), nullable=True)
+    preferred_timezone: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False)
 
     tenant: Mapped["Tenant"] = relationship(back_populates="users")

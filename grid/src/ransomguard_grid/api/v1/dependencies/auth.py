@@ -1,11 +1,13 @@
-"""mTLS authentication dependency for agent endpoints."""
+"""Agent authentication dependency — mTLS (production) or agent_id path (dev)."""
 
 from datetime import UTC, datetime
 from urllib.parse import unquote
 
 from fastapi import Depends, HTTPException, Request, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ransomguard_grid.core.config import get_settings
 from ransomguard_grid.core.logging import get_logger
 from ransomguard_grid.db.models.agent import Agent
 from ransomguard_grid.db.models.enums import AgentStatus
@@ -19,19 +21,41 @@ async def get_authenticated_agent(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> Agent:
-    """Extract agent identity from mTLS client certificate via nginx X-Client-Cert header.
+    """Authenticate an agent, by client certificate or by agent id.
 
-    Production: nginx terminates TLS, verifies client cert, passes PEM in header.
-    Testing: inject X-Client-Cert header directly.
+    A presented certificate is always verified, whatever the configured mode:
+    an agent that has one is authenticated by it.
+
+    Without one, the outcome depends on `agent_auth_mode`:
+      * "mtls"     -- rejected with the Mutual-TLS challenge;
+      * "agent_id" -- identified by the id in the URL, which is what every
+                      deployment does until the mTLS chain is delivered.
+
+    The mode is an explicit setting on purpose. It used to be derived from the
+    environment name, so labelling a deployment "production" turned on an mTLS
+    requirement that nginx does not yet enforce -- and silently answered 401 to
+    every heartbeat of a perfectly healthy agent.
     """
     client_cert_pem = request.headers.get("X-Client-Cert")
-    if not client_cert_pem:
+
+    if client_cert_pem:
+        return await _authenticate_via_mtls(request, db, client_cert_pem)
+
+    settings = get_settings()
+    if settings.agent_auth_mode != "agent_id":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Client certificate required",
             headers={"WWW-Authenticate": "Mutual-TLS"},
         )
 
+    return await _authenticate_via_agent_id(request, db)
+
+
+async def _authenticate_via_mtls(
+    request: Request, db: AsyncSession, client_cert_pem: str
+) -> Agent:
+    """Production path: verify X-Client-Cert against stored agent certificates."""
     try:
         from cryptography import x509
         from cryptography.hazmat.backends import default_backend
@@ -51,7 +75,6 @@ async def get_authenticated_agent(
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Certificate revoked")
 
     now = datetime.now(UTC)
-    # SQLite returns naive datetimes — normalize for comparison
     not_after = agent_cert.not_after.replace(tzinfo=UTC) if agent_cert.not_after.tzinfo is None else agent_cert.not_after
     not_before = agent_cert.not_before.replace(tzinfo=UTC) if agent_cert.not_before.tzinfo is None else agent_cert.not_before
     if not_after < now:
@@ -60,9 +83,28 @@ async def get_authenticated_agent(
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Certificate not yet valid")
 
     agent = agent_cert.agent
-    if not agent or agent.status != AgentStatus.active:
+    if not agent or agent.status in (AgentStatus.decommissioned,):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Agent inactive")
 
+    request.state.tenant_id = agent.tenant_id
+    request.state.agent_id = agent.id
+    return agent
+
+
+async def _authenticate_via_agent_id(request: Request, db: AsyncSession) -> Agent:
+    """Dev fallback: look up agent by the agent_id path parameter."""
+    agent_id = request.path_params.get("agent_id")
+    if not agent_id:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Missing agent_id in path")
+
+    result = await db.execute(select(Agent).where(Agent.id == agent_id))
+    agent = result.scalar_one_or_none()
+    if not agent:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Unknown agent_id")
+    if agent.status in (AgentStatus.decommissioned,):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Agent inactive")
+
+    logger.warning("Dev mode: agent authenticated by ID without mTLS", agent_id=agent_id)
     request.state.tenant_id = agent.tenant_id
     request.state.agent_id = agent.id
     return agent

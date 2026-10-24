@@ -76,6 +76,60 @@ public sealed class DetectionEventBusTests
     }
 
     [Fact]
+    public async Task Ten_Thousand_Subscribe_Unsubscribe_Cycles_Leave_No_Handler_And_No_Residue()
+    {
+        int received = 0;
+        Func<EntropySignal, CancellationToken, Task> handler = (_, _) =>
+        {
+            Interlocked.Increment(ref received);
+            return Task.CompletedTask;
+        };
+
+        for (int i = 0; i < 10_000; i++)
+        {
+            _bus.Subscribe(handler).Dispose();
+        }
+
+        _bus.StoredHandlerCount.ShouldBe(0);
+
+        await _bus.PublishAsync(CreateSignal());
+        received.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task Concurrent_Subscribe_Unsubscribe_Cycles_Leave_No_Residue()
+    {
+        await Parallel.ForAsync(0, 10_000, (_, _) =>
+        {
+            _bus.Subscribe<EntropySignal>((_, _) => Task.CompletedTask).Dispose();
+            return ValueTask.CompletedTask;
+        });
+
+        _bus.StoredHandlerCount.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task Same_Handler_Subscribed_Twice_Disposing_One_Keeps_The_Other()
+    {
+        int count = 0;
+        Func<EntropySignal, CancellationToken, Task> handler = (_, _) =>
+        {
+            Interlocked.Increment(ref count);
+            return Task.CompletedTask;
+        };
+
+        var first = _bus.Subscribe(handler);
+        _bus.Subscribe(handler);
+        first.Dispose();
+        first.Dispose(); // idempotent
+
+        await _bus.PublishAsync(CreateSignal());
+
+        count.ShouldBe(1);
+        _bus.StoredHandlerCount.ShouldBe(1);
+    }
+
+    [Fact]
     public async Task Subscriber_Exception_Does_Not_Block_Other_Subscribers()
     {
         int successCount = 0;
@@ -96,7 +150,7 @@ public sealed class DetectionEventBusTests
     }
 
     [Fact]
-    public async Task Channel_Saturation_Does_Not_Crash()
+    public async Task Many_Concurrent_Publishes_Are_All_Delivered()
     {
         int received = 0;
         _bus.Subscribe<EntropySignal>(async (_, _) =>
@@ -105,7 +159,7 @@ public sealed class DetectionEventBusTests
             await Task.CompletedTask;
         });
 
-        // Publish 6000 signals (exceeding 5000 channel capacity)
+        // No queue, no capacity: each publish runs the subscribers inline
         var tasks = new List<Task>();
         for (int i = 0; i < 6000; i++)
         {
@@ -114,7 +168,7 @@ public sealed class DetectionEventBusTests
 
         await Task.WhenAll(tasks);
 
-        // All 6000 should be delivered since InMemoryDetectionEventBus delivers inline
+        // Nothing is buffered, so nothing can be dropped
         received.ShouldBe(6000);
     }
 

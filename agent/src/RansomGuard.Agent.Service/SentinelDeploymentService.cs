@@ -16,18 +16,22 @@ public sealed class SentinelDeploymentService : BackgroundService
     private readonly ILogger<SentinelDeploymentService> _logger;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly AgentConfiguration _config;
+    private readonly UserProfileEnumerator _profiles;
 
     /// <summary>
     /// Initializes the SENTINEL deployment service.
     /// </summary>
+    /// <param name="profiles">The real user profiles that %EACHUSERPROFILE% expands to (AGT-PATH-001); null: the Windows registry.</param>
     public SentinelDeploymentService(
         ILogger<SentinelDeploymentService> logger,
         IOptionsMonitor<AgentConfiguration> config,
-        IServiceScopeFactory scopeFactory)
+        IServiceScopeFactory scopeFactory,
+        UserProfileEnumerator? profiles = null)
     {
         _logger = logger;
         _config = config.CurrentValue;
         _scopeFactory = scopeFactory;
+        _profiles = profiles ?? UserProfileEnumerator.Windows;
     }
 
     /// <inheritdoc />
@@ -44,7 +48,7 @@ public sealed class SentinelDeploymentService : BackgroundService
         _logger.LogInformation("SENTINEL deployment starting — {DirectoryCount} directories, {CanariesPerDir} canaries each",
             sentinel.WatchDirectories.Length, sentinel.CanariesPerDirectory);
 
-        string[] resolvedDirs = EnvironmentVariableResolver.ResolvePaths(sentinel.WatchDirectories);
+        string[] resolvedDirs = EnvironmentVariableResolver.ResolvePaths(sentinel.WatchDirectories, _profiles, _logger);
         int totalDeployed = 0;
         int totalExisting = 0;
 
@@ -76,6 +80,13 @@ public sealed class SentinelDeploymentService : BackgroundService
 
     private async Task<int> DeployCanariesForDirectoryAsync(string directory, SentinelOptions sentinel, CancellationToken cancellationToken)
     {
+        // AGT-PATH-001: no canary, and no folder, in a system or service profile.
+        if (WatchedPathPolicy.IsRefused(directory))
+        {
+            _logger.LogError("SENTINEL: {Directory} is in a system or service profile, no canary deployed (AGT-PATH-001)", directory);
+            return 0;
+        }
+
         if (!Directory.Exists(directory))
         {
             Directory.CreateDirectory(directory);

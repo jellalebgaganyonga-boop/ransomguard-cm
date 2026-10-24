@@ -1,0 +1,235 @@
+#Requires -RunAsAdministrator
+<#
+.SYNOPSIS
+    RansomGuard-CM Agent installer — downloads, installs, and enrolls automatically.
+
+.DESCRIPTION
+    Run this script on any Windows machine in the Tailscale network to install
+    the RansomGuard agent. It downloads the agent package from the GRID server,
+    extracts it, configures appsettings.json with the provided OTP, and installs
+    the agent as a Windows service.
+
+.PARAMETER GridServer
+    The GRID server address (hostname or Tailscale IP). The dashboard one-liner
+    fills this in automatically from the host you opened the console on; set
+    RG_GRID_SERVER to override when running the script by hand.
+
+.PARAMETER OTP
+    The enrollment OTP from the dashboard (required). Generate one via
+    Dashboard > Agents > Add Agent.
+
+.PARAMETER InstallPath
+    Installation directory (default: C:\Program Files\RansomGuard-CM).
+
+.EXAMPLE
+    .\install.ps1 -OTP "abc123def456" -GridServer "grid.example.ts.net"
+#>
+param(
+    [string]$OTP,
+    [string]$GridServer = $(if ($env:RG_GRID_SERVER) { $env:RG_GRID_SERVER } else { "" }),
+    [string]$InstallPath = "C:\Program Files\RansomGuard-CM"
+)
+
+# Allow OTP from environment variable (for one-liner download+run)
+if (-not $OTP) { $OTP = $env:RG_OTP }
+if (-not $GridServer) {
+    Write-Host "ERROR: -GridServer is required (hostname or Tailscale IP of the GRID server)." -ForegroundColor Red
+    Write-Host "  Use the one-liner shown in: Dashboard > Agents > Add Agent" -ForegroundColor Yellow
+    exit 1
+}
+if (-not $OTP) {
+    Write-Host "ERROR: OTP is required. Use -OTP parameter or set RG_OTP env var." -ForegroundColor Red
+    Write-Host "  Generate an OTP from: Dashboard > Agents > Add Agent" -ForegroundColor Yellow
+    exit 1
+}
+
+# The service runs these executables as LocalSystem: their folder must not be writable by users.
+# Under %ProgramFiles% it inherits an ACL where BUILTIN\Users can only read and execute; elsewhere
+# (C:\RGAgent, say) it would inherit C:\, where authenticated users can create and modify files --
+# anyone could replace the agent's binaries and run code as LocalSystem (AGT-INST-001).
+# A strict subfolder only: this script deletes $InstallPath before extracting into it.
+$programFiles = [IO.Path]::GetFullPath([Environment]::GetFolderPath('ProgramFiles')).TrimEnd('\')
+$installFull = [IO.Path]::GetFullPath($InstallPath).TrimEnd('\')
+$driveRoot = [IO.Path]::GetPathRoot($installFull).TrimEnd('\')
+$underProgramFiles = $installFull.StartsWith("$programFiles\", [StringComparison]::OrdinalIgnoreCase)
+if ($installFull -ieq $driveRoot -or $installFull -ieq $programFiles) {
+    Write-Host "ERROR: -InstallPath '$InstallPath' is a drive root or %ProgramFiles% itself; this script deletes the" -ForegroundColor Red
+    Write-Host "  installation folder before extracting. Use a folder of its own, e.g. '$programFiles\RansomGuard-CM'." -ForegroundColor Red
+    exit 1
+}
+if (-not $underProgramFiles) {
+    if ($env:DOTNET_ENVIRONMENT -eq 'Development') {
+        Write-Host "WARNING: -InstallPath '$InstallPath' is outside $programFiles -- allowed in Development only." -ForegroundColor Yellow
+    } else {
+        Write-Host "ERROR: -InstallPath '$InstallPath' is outside $programFiles." -ForegroundColor Red
+        Write-Host "  The agent runs as LocalSystem; its folder must inherit the Program Files ACL, where users" -ForegroundColor Red
+        Write-Host "  cannot modify files. Install under '$programFiles\RansomGuard-CM' (the default)." -ForegroundColor Red
+        exit 1
+    }
+}
+
+$ErrorActionPreference = "Stop"
+$ServiceName = "RansomGuardAgent"
+# No version in this script: the package has a stable name, and the version shown is read from
+# the agent assembly once extracted (step 3). A constant here said 0.3.0 long after it was false.
+$PackageUrl = "https://${GridServer}:8443/agent/RansomGuard-Agent-win-x64.zip"
+$DataDir = "C:\ProgramData\RansomGuard-CM"
+
+Write-Host ""
+Write-Host "=====================================================" -ForegroundColor Cyan
+Write-Host "  RansomGuard-CM Agent Installer" -ForegroundColor Cyan
+Write-Host "=====================================================" -ForegroundColor Cyan
+Write-Host ""
+
+# ── Step 1: Pre-flight checks ──────────────────────────────
+Write-Host "[1/6] Pre-flight checks..." -ForegroundColor Yellow
+
+if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    Write-Host "ERROR: This script must be run as Administrator." -ForegroundColor Red
+    exit 1
+}
+
+if (Get-Service -Name $ServiceName -ErrorAction SilentlyContinue) {
+    Write-Host "WARNING: Service '$ServiceName' already exists. Stopping it..." -ForegroundColor Yellow
+    Stop-Service -Name $ServiceName -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 2
+    sc.exe delete $ServiceName | Out-Null
+    Start-Sleep -Seconds 1
+}
+
+# ── Step 2: Download agent package ──────────────────────────
+Write-Host "[2/6] Downloading agent package from $PackageUrl ..." -ForegroundColor Yellow
+
+$tempZip = Join-Path $env:TEMP "RansomGuard-Agent.zip"
+
+# The package holds the executables that will run as LocalSystem: it is downloaded with
+# full TLS validation. Validation is bypassed only for a GRID on this machine (development),
+# never across the network -- same rule as the agent's Agent:Server:TrustAnyCertificate.
+$gridHost = $null
+try { $gridHost = ([Uri]"https://$GridServer").Host.Trim('[', ']').ToLowerInvariant() } catch { }
+if (@('localhost', '127.0.0.1', '::1') -contains $gridHost) {
+    Write-Host "  WARNING: certificate validation disabled for a LOCAL GRID ($GridServer) -- development only" -ForegroundColor Yellow
+    [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
+}
+try {
+    # Use .NET WebClient for better progress and TLS control
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    $wc = New-Object System.Net.WebClient
+    $wc.DownloadFile($PackageUrl, $tempZip)
+    Write-Host "  Downloaded $('{0:N1}' -f ((Get-Item $tempZip).Length / 1MB)) MB" -ForegroundColor Green
+}
+catch {
+    Write-Host "ERROR: Failed to download agent package." -ForegroundColor Red
+    Write-Host "  $_" -ForegroundColor Red
+    Write-Host "  Make sure the GRID server is reachable at $GridServer" -ForegroundColor Red
+    Write-Host "  and that its TLS certificate is trusted by this machine: certificate validation" -ForegroundColor Red
+    Write-Host "  is never disabled for a remote GRID." -ForegroundColor Red
+    exit 1
+}
+finally {
+    [System.Net.ServicePointManager]::ServerCertificateValidationCallback = $null
+}
+
+# ── Step 3: Extract ─────────────────────────────────────────
+Write-Host "[3/6] Extracting to $InstallPath ..." -ForegroundColor Yellow
+
+if (Test-Path $InstallPath) {
+    Remove-Item -Path $InstallPath -Recurse -Force
+}
+New-Item -ItemType Directory -Path $InstallPath -Force | Out-Null
+Expand-Archive -Path $tempZip -DestinationPath $InstallPath -Force
+Remove-Item $tempZip -Force
+
+Write-Host "  Extracted $(Get-ChildItem $InstallPath -Recurse -File | Measure-Object | Select-Object -ExpandProperty Count) files" -ForegroundColor Green
+
+# The version installed: the agent assembly's informational version, the one the agent reports
+# to the GRID at enrollment and in every heartbeat (AgentVersion.Current).
+$agentAssembly = Join-Path $InstallPath "RansomGuard.Agent.Service.dll"
+if (-not (Test-Path $agentAssembly)) {
+    Write-Host "ERROR: the package has no agent assembly (RansomGuard.Agent.Service.dll)." -ForegroundColor Red
+    exit 1
+}
+$AgentVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($agentAssembly).ProductVersion
+Write-Host "  Agent version: $AgentVersion" -ForegroundColor Green
+
+# ── Step 4: Configure appsettings.json ──────────────────────
+Write-Host "[4/6] Configuring agent with OTP..." -ForegroundColor Yellow
+
+$settingsPath = Join-Path $InstallPath "appsettings.json"
+if (-not (Test-Path $settingsPath)) {
+    Write-Host "ERROR: appsettings.json not found in package." -ForegroundColor Red
+    exit 1
+}
+
+$settings = Get-Content $settingsPath -Raw | ConvertFrom-Json
+
+# Set OTP for enrollment
+$settings.Agent.Server.EnrollmentOtp = $OTP
+# The shipped appsettings.json carries no server address (an agent without one refuses to
+# start): the property is added here, not merely overwritten.
+$settings.Agent.Server | Add-Member -NotePropertyName BaseUrl -NotePropertyValue "https://${GridServer}" -Force
+
+# Set hostname automatically
+$settings.Agent.Identity.Hostname = $env:COMPUTERNAME
+
+# Ensure data/log directories
+$settings.Agent.Database.ConnectionString = "Data Source=$DataDir\data\agent.db"
+$settings.Agent.Logging.LogFilePath = "$DataDir\logs\agent-.log"
+
+# Write updated settings
+$settings | ConvertTo-Json -Depth 10 | Set-Content $settingsPath -Encoding UTF8
+
+# Create data directories
+New-Item -ItemType Directory -Path "$DataDir\data" -Force | Out-Null
+New-Item -ItemType Directory -Path "$DataDir\logs" -Force | Out-Null
+New-Item -ItemType Directory -Path "$DataDir\keys" -Force | Out-Null
+
+Write-Host "  OTP configured, hostname set to $env:COMPUTERNAME" -ForegroundColor Green
+
+# ── Step 5: Install as Windows service ──────────────────────
+Write-Host "[5/6] Installing Windows service '$ServiceName'..." -ForegroundColor Yellow
+
+$exePath = Join-Path $InstallPath "RansomGuard.Agent.Service.exe"
+if (-not (Test-Path $exePath)) {
+    Write-Host "ERROR: Agent executable not found at $exePath" -ForegroundColor Red
+    exit 1
+}
+
+sc.exe create $ServiceName `
+    binPath= "`"$exePath`"" `
+    start= auto `
+    DisplayName= "RansomGuard-CM Agent" `
+    obj= "LocalSystem" | Out-Null
+
+sc.exe description $ServiceName "RansomGuard-CM endpoint detection and response agent" | Out-Null
+sc.exe failure $ServiceName reset= 86400 actions= restart/60000/restart/120000/restart/300000 | Out-Null
+
+Write-Host "  Service installed with auto-start and failure recovery" -ForegroundColor Green
+
+# ── Step 6: Start service ───────────────────────────────────
+Write-Host "[6/6] Starting agent service..." -ForegroundColor Yellow
+
+Start-Service -Name $ServiceName
+Start-Sleep -Seconds 3
+
+$svc = Get-Service -Name $ServiceName
+if ($svc.Status -eq "Running") {
+    Write-Host ""
+    Write-Host "=====================================================" -ForegroundColor Green
+    Write-Host "  RansomGuard-CM Agent installed successfully!" -ForegroundColor Green
+    Write-Host "=====================================================" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "  Service:    $ServiceName (Running)" -ForegroundColor White
+    Write-Host "  Version:    $AgentVersion" -ForegroundColor White
+    Write-Host "  Install:    $InstallPath" -ForegroundColor White
+    Write-Host "  Data:       $DataDir" -ForegroundColor White
+    Write-Host "  Logs:       $DataDir\logs\" -ForegroundColor White
+    Write-Host ""
+    Write-Host "  The agent will enroll with the GRID server using the" -ForegroundColor White
+    Write-Host "  provided OTP. Check the dashboard in ~60 seconds." -ForegroundColor White
+    Write-Host ""
+}
+else {
+    Write-Host "WARNING: Service installed but not running (status: $($svc.Status))." -ForegroundColor Yellow
+    Write-Host "Check logs at: $DataDir\logs\" -ForegroundColor Yellow
+}

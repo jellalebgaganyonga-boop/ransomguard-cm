@@ -14,8 +14,8 @@ The RansomGuard-CM platform exposes **4 distinct API surfaces**, each with its o
 |---|---|---|---|
 | **Authentication** | None / Bearer | Dashboard frontend | `/api/v1/auth/*` |
 | **Agent API** | mTLS | Windows agents | `/api/v1/agents/*`, `/api/v1/alerts` |
-| **Dashboard API** | Bearer JWT + MFA | Web dashboard users | `/api/v1/incidents`, `/api/v1/endpoints`, etc. |
-| **Admin API** | Bearer JWT + MFA + Role | Admin/Director only | `/api/v1/license/*`, `/api/v1/restore/*/approve` |
+| **Dashboard API** | Bearer JWT + MFA — **Not implemented** (MFA, see `docs/console/INVENTAIRE_CONSOLE.md`) | Web dashboard users | `/api/v1/incidents`, `/api/v1/endpoints`, etc. |
+| **Admin API** | Bearer JWT + MFA + Role — **Not implemented** (MFA, see `docs/console/INVENTAIRE_CONSOLE.md`) | Admin/Director only | `/api/v1/license/*`, `/api/v1/restore/*/approve` |
 | **Cloud API** | Ed25519 signatures | Hospital server pulling updates | `/cloud/updates/*` |
 
 ---
@@ -23,6 +23,8 @@ The RansomGuard-CM platform exposes **4 distinct API surfaces**, each with its o
 ## 2. AUTHENTICATION FLOW
 
 ### 2.1 Dashboard Login (2-Step MFA)
+
+> **Not implemented** — no MFA in the GRID, the console or the database; see `docs/console/INVENTAIRE_CONSOLE.md` (MFA); decided: mandatory TOTP for tenant_admin, after Sprint 8. Today `POST /api/v1/auth/login` returns the tokens in one step.
 
 The login process is **always 2-step** — username/password alone never grants access.
 
@@ -425,9 +427,9 @@ All errors follow this format:
 | 400 | `BAD_REQUEST` | Malformed request |
 | 401 | `UNAUTHENTICATED` | No valid token/cert |
 | 401 | `TOKEN_EXPIRED` | JWT expired — use refresh |
-| 401 | `INVALID_MFA` | TOTP code incorrect |
+| 401 | `INVALID_MFA` | TOTP code incorrect — **Not implemented** (MFA, see `docs/console/INVENTAIRE_CONSOLE.md`) |
 | 403 | `INSUFFICIENT_ROLE` | Role doesn't allow this action |
-| 403 | `MFA_REQUIRED` | Operation requires MFA re-auth |
+| 403 | `MFA_REQUIRED` | Operation requires MFA re-auth — **Not implemented** (MFA, see `docs/console/INVENTAIRE_CONSOLE.md`) |
 | 403 | `DUAL_AUTH_REQUIRED` | Director approval needed |
 | 404 | `RESOURCE_NOT_FOUND` | ID doesn't exist |
 | 409 | `CONFLICT` | Resource already exists |
@@ -446,7 +448,7 @@ All endpoints enforce rate limits to prevent abuse.
 | Endpoint Pattern | Limit |
 |---|---|
 | `POST /api/v1/auth/login` | 5 requests / 15 min / IP |
-| `POST /api/v1/auth/mfa/verify` | 5 requests / 15 min / user |
+| `POST /api/v1/auth/mfa/verify` | 5 requests / 15 min / user — **Not implemented** (MFA, see `docs/console/INVENTAIRE_CONSOLE.md`) |
 | `POST /api/v1/agents/heartbeat` | 120 requests / min / agent |
 | `POST /api/v1/alerts` | 60 requests / min / agent |
 | `GET /api/v1/incidents` | 60 requests / min / user |
@@ -471,7 +473,7 @@ Retry-After: 60
 | Layer | Protection |
 |---|---|
 | Transport | TLS 1.3 minimum, certificate pinning |
-| Authentication | OAuth2 + JWT + MFA TOTP for users, mTLS for agents |
+| Authentication | OAuth2 + JWT + MFA TOTP for users, mTLS for agents — **Not implemented** (MFA, see `docs/console/INVENTAIRE_CONSOLE.md`) |
 | Authorization | RBAC with 5 roles (admin, technician, director, auditor, support) |
 | Critical operations | Dual authorization (technician + director) |
 | Cryptography | AES-256-GCM, Ed25519, Argon2id, SHA-256 |

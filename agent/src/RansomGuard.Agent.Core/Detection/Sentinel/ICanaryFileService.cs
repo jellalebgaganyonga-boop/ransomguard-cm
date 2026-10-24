@@ -31,6 +31,14 @@ public interface ICanaryFileService
     Task DeleteCanaryAsync(SentinelCanary canary, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Puts a modified or renamed canary back at its own path (V4): fresh content from its
+    /// template, hash taken again, status Active -- so the next write on it is detected too.
+    /// </summary>
+    /// <param name="canary">The canary, updated in place and persisted.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task RestoreCanaryAsync(SentinelCanary canary, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Retrieves all active canaries from the database.
     /// </summary>
     Task<IReadOnlyList<SentinelCanary>> GetAllCanariesAsync(CancellationToken cancellationToken = default);

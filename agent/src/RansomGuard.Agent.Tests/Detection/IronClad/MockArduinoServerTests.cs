@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Sockets;
 using RansomGuard.Agent.Core.Detection.IronClad.Communication;
 using RansomGuard.Agent.Core.Detection.IronClad.Models;
@@ -24,7 +25,7 @@ public sealed class MockArduinoServerTests : IAsyncLifetime
     private async Task<(StreamReader reader, StreamWriter writer, TcpClient client)> ConnectAsync()
     {
         var client = new TcpClient();
-        await client.ConnectAsync("localhost", _server.ListeningPort);
+        await client.ConnectAsync(IPAddress.Loopback, _server.ListeningPort);
         var stream = client.GetStream();
         var reader = new StreamReader(stream);
         var writer = new StreamWriter(stream) { AutoFlush = true };

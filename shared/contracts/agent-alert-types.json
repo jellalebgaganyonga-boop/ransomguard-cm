@@ -1,0 +1,25 @@
+{
+  "description": "Every alert_type the agent can send to the GRID (AlertMapper). Checked from both sides: the agent test (AlertTypeContractTests) recomputes this list from the code and requires equality; the GRID test (test_alert_modules.py) requires each entry to map to a module, never UNKNOWN.",
+  "notes": [
+    "SentinelCanary* come from CanaryAlertType; Entropy* from the entropy rules (EntropyExtensionWhitelist alerts are Suppressed and never forwarded, listed because the rule exists); ExfilWatch* from the IExfilDetectionRule implementations; UsbGuard is fixed.",
+    "IndicatorRemoval* is not listed: AlertMapper.FromIndicatorRemovalEvent has no caller, the agent cannot send it. If it ever does, the GRID maps it to UNKNOWN explicitly."
+  ],
+  "alert_types": [
+    "SentinelCanaryModified",
+    "SentinelCanaryDeleted",
+    "SentinelCanaryRenamed",
+    "EntropyAbsoluteHighEntropy",
+    "EntropySuddenEntropyDelta",
+    "EntropyDirectoryWideEntropyShift",
+    "EntropyExtensionWhitelist",
+    "UsbGuard",
+    "ExfilWatchAfterHoursExfil",
+    "ExfilWatchDnsTunneling",
+    "ExfilWatchEncryptedExfilCorrelation",
+    "ExfilWatchLolbasExfil",
+    "ExfilWatchSuspiciousDestination",
+    "ExfilWatchTorTraffic",
+    "ExfilWatchUnknownProcessExfil",
+    "ExfilWatchVolumeAnomaly"
+  ]
+}

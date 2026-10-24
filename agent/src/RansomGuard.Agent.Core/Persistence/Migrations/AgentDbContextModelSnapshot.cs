@@ -15,7 +15,7 @@ namespace RansomGuard.Agent.Core.Persistence.Migrations
         protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
-            modelBuilder.HasAnnotation("ProductVersion", "8.0.27");
+            modelBuilder.HasAnnotation("ProductVersion", "8.0.32");
 
             modelBuilder.Entity("RansomGuard.Agent.Core.Persistence.Entities.AgentState", b =>
                 {
@@ -130,6 +130,9 @@ namespace RansomGuard.Agent.Core.Persistence.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("TEXT");
 
+                    b.Property<long>("Sequence")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("Signature")
                         .HasMaxLength(128)
                         .HasColumnType("TEXT");
@@ -140,6 +143,9 @@ namespace RansomGuard.Agent.Core.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("CreatedAt");
+
+                    b.HasIndex("Sequence")
+                        .IsUnique();
 
                     b.ToTable("AuditLogs");
                 });
@@ -388,6 +394,26 @@ namespace RansomGuard.Agent.Core.Persistence.Migrations
                     b.HasIndex("RuleName");
 
                     b.ToTable("ExfilAlerts");
+                });
+
+            modelBuilder.Entity("RansomGuard.Agent.Core.Persistence.Entities.ExfilLearningPhase", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("LearningPhaseDays")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("StartedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("ExfilLearningPhases");
                 });
 
             modelBuilder.Entity("RansomGuard.Agent.Core.Persistence.Entities.GenealogyRecord", b =>
@@ -698,6 +724,88 @@ namespace RansomGuard.Agent.Core.Persistence.Migrations
                     b.ToTable("NetworkBaselineMetrics");
                 });
 
+            modelBuilder.Entity("RansomGuard.Agent.Core.Persistence.Entities.PendingAlertUpload", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ClientMessageId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("FirstAttemptAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("Alert");
+
+                    b.Property<string>("LastErrorMessage")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("NextRetryAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SerializedPayload")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NextRetryAt");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("ClientMessageId", "Kind")
+                        .IsUnique();
+
+                    b.ToTable("PendingAlertUploads");
+                });
+
+            modelBuilder.Entity("RansomGuard.Agent.Core.Persistence.Entities.PendingAuditEntry", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Details")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("EntityId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("EntityType")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("PendingAuditEntries");
+                });
+
             modelBuilder.Entity("RansomGuard.Agent.Core.Persistence.Entities.QuarantinedFile", b =>
                 {
                     b.Property<Guid>("Id")
@@ -830,6 +938,73 @@ namespace RansomGuard.Agent.Core.Persistence.Migrations
                     b.HasIndex("Status");
 
                     b.ToTable("SentinelCanaries");
+                });
+
+            modelBuilder.Entity("RansomGuard.Agent.Core.Persistence.Entities.SuspendedProcess", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("AlertId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CanaryPath")
+                        .IsRequired()
+                        .HasMaxLength(1024)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ClientMessageId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("EscalationCount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ImagePath")
+                        .HasMaxLength(1024)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("LastEscalationAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("ProcessCreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ProcessId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ProcessName")
+                        .HasMaxLength(260)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ResumedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ResumedBy")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("SuspendedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClientMessageId");
+
+                    b.HasIndex("State");
+
+                    b.ToTable("SuspendedProcesses");
                 });
 
             modelBuilder.Entity("RansomGuard.Agent.Core.Persistence.Entities.UsbAlert", b =>

@@ -1,0 +1,326 @@
+# RansomGuard-CM — Continuous Integration
+#
+# Every component is gated independently so a failure points straight at the
+# owner: GRID (FastAPI), dashboard (React) and agent (.NET 8). The `ci` job at
+# the end is the single required status check to protect `main` with.
+name: CI
+
+on:
+  # Every commit is pushed, so every push is tested, whatever the branch name.
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Every commit pushed to a branch runs its CI to the end: one group per
+# commit, nothing cancelled. A concurrency group keeps a single pending run and
+# cancels the older pending ones even without cancel-in-progress, so a group
+# per branch would still drop commits pushed in quick succession. Only a pull
+# request shares one group, where a new push supersedes the previous run.
+concurrency:
+  group: ci-${{ github.ref }}-${{ github.event_name == 'pull_request' && 'pr' || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: '3.12'
+  NODE_VERSION: '20'
+  DOTNET_VERSION: '8.0.x'
+
+jobs:
+  # ── GRID backend ────────────────────────────────────────────────
+  grid:
+    name: GRID (FastAPI)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: grid
+    # A real Redis: the multi-worker session tests run two uvicorn processes on it
+    # (tests/integration/test_sessions_multiworker.py). They fail, not skip, without it in CI.
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: grid/requirements*.txt
+
+      - name: Install dependencies
+        # -e . matters: the package lives under grid/src, so without an install
+        # `import ransomguard_grid` fails and conftest.py cannot even load.
+        run: |
+          pip install -r requirements-dev.txt
+          pip install -e .
+
+      - name: Lint (ruff)
+        run: ruff check src tests
+
+      - name: Type check (mypy)
+        # Advisory: the codebase predates mypy enforcement. Promote to a hard
+        # gate once the existing findings are cleared.
+        continue-on-error: true
+        run: mypy src
+
+      - name: Tests (pytest)
+        env:
+          GRID_TEST_REDIS_URL: redis://localhost:6379/15
+        run: pytest -q --cov=ransomguard_grid --cov-report=term-missing --cov-report=xml
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: grid-coverage
+          path: grid/coverage.xml
+          retention-days: 7
+
+  # ── Dashboard ───────────────────────────────────────────────────
+  dashboard:
+    name: Dashboard (React)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dashboard
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+
+      - run: npm ci
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Lint (0 warnings allowed)
+        run: npm run lint
+
+      - name: Unit tests (vitest)
+        run: npm run test
+
+      - name: Production build
+        run: npm run build
+
+      # Consumed by the CD workflow so the deployed bundle is byte-identical to
+      # the one that passed the gate -- never rebuilt on the server.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dashboard-dist
+          path: dashboard/dist
+          retention-days: 14
+
+  # ── Dashboard end-to-end ────────────────────────────────────────
+  e2e:
+    name: Dashboard E2E (Playwright)
+    runs-on: ubuntu-latest
+    needs: dashboard
+    # Runs on every push of every branch, like the other jobs. It used to be
+    # limited to main, pull requests and manual runs to save ~6 min, which
+    # meant the review branches -- the ones fast-forwarded into the release
+    # branch -- showed a green CI without their E2E (98701bf was green on push
+    # and red once the E2E ran). Every commit goes to the end of its CI.
+    defaults:
+      run:
+        working-directory: dashboard
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+
+      - run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: E2E + accessibility (WCAG 2.2 AA)
+        env:
+          # The GRID server lives inside the Tailscale network and is not
+          # reachable from a runner. Point the dev proxy at a closed port so a
+          # request that escapes the mocks fails at once instead of hanging.
+          VITE_PROXY_TARGET: http://127.0.0.1:9
+        # Desktop only (tech lead, 2026-10-21): the console is for desktop computers; the phone
+        # projects stay in playwright.config.ts for a local look, never in CI.
+        run: npm run test:e2e -- --project=chromium
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: dashboard/playwright-report
+          retention-days: 7
+
+  # ── Agent ───────────────────────────────────────────────────────
+  agent:
+    name: Agent (.NET 8)
+    # net8.0-windows targets in Service/Tests -- a Linux runner cannot build them.
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: agent/src
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore
+        run: dotnet restore RansomGuard.Agent.sln
+
+      - name: Build
+        run: dotnet build RansomGuard.Agent.sln -c Release --no-restore
+
+      # The EF model must match the migrations: a model change without its migration would
+      # ship a schema the code does not expect (the AGT-AUD-002 migration was written by hand).
+      # EF Core 8 offers this as a CLI command; the HasPendingModelChanges() API is EF Core 9.
+      - name: EF model matches the migrations
+        run: |
+          dotnet tool install --global dotnet-ef --version 8.0.31
+          dotnet ef migrations has-pending-model-changes --project RansomGuard.Agent.Core --startup-project RansomGuard.Agent.Core --configuration Release --no-build
+
+      - name: Tests
+        # Stress tests are wall-clock sensitive and flake on shared runners;
+        # they run in the nightly workflow instead.
+        run: dotnet test RansomGuard.Agent.sln -c Release --no-build --filter "Category!=Stress" --logger "trx;LogFileName=agent-tests.trx"
+
+      # ADR-027, step 1: the published single-file stub still starts with a payload appended to
+      # it, and reads that payload. The bare stub says it has none (exit 2).
+      - name: Double-click installer stub reads its appended payload (ADR-027)
+        shell: pwsh
+        run: |
+          dotnet publish RansomGuard.Agent.Installer/RansomGuard.Agent.Installer.csproj -c Release -r win-x64 --self-contained true `
+            -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -o publish/installer
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          $stub = Resolve-Path publish/installer/RansomGuard-Installer.exe
+          Write-Host "stub: $((Get-Item $stub).Length) bytes"
+
+          & $stub --verify-payload; $bare = $LASTEXITCODE
+          if ($bare -ne 2) { Write-Host "::error::the bare stub must exit 2 (no payload), got $bare"; exit 1 }
+
+          New-Item -ItemType Directory -Force publish/pl | Out-Null
+          Set-Content publish/pl/a.txt ('agent package stand-in ' + ('x' * 100000))
+          Compress-Archive -Path publish/pl/a.txt -DestinationPath publish/pl/agent.zip -Force
+          $expires = (Get-Date).ToUniversalTime().AddMinutes(30).ToString('o')
+          @{ grid_base_url = 'https://grid.ci.invalid:8443'; otp = 'CIOTP12345678'; otp_expires_at = $expires; tenant_code = 'ci' } |
+            ConvertTo-Json -Compress | Set-Content publish/pl/config.json -Encoding utf8
+          & $stub --append $stub publish/pl/agent.zip publish/pl/config.json publish/pl/installer.exe
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+          $out = & publish/pl/installer.exe --verify-payload 2>&1 | Out-String
+          $code = $LASTEXITCODE
+          Write-Host $out
+          if ($code -ne 0 -or $out -notmatch 'grid\.ci\.invalid' -or $out -notmatch 'CI\*+78' -or $out -match 'CIOTP12345678') {
+            Write-Host "::error::the installer with a payload must start, print its payload with the code masked, and exit 0 (got $code)"; exit 1
+          }
+          Write-Host "::notice title=ADR-027 step 1::the published stub starts with $((Get-Item publish/pl/installer.exe).Length) bytes and reads its payload"
+
+      # install.ps1 needs an elevated session: the runner has one, a developer machine may not.
+      - name: Installer guard (Pester)
+        shell: pwsh
+        working-directory: agent
+        run: |
+          if (-not (Get-Module -ListAvailable Pester | Where-Object Version -ge '5.0.0')) {
+            Install-Module Pester -MinimumVersion 5.5.0 -Force -Scope CurrentUser -SkipPublisherCheck
+          }
+          Import-Module Pester -MinimumVersion 5.0.0
+          Invoke-Pester -Path tests -CI -Output Detailed
+
+      # `dotnet test` writes failures only to the job log, which needs admin
+      # rights to read. Surfacing them as annotations makes a red run
+      # diagnosable from the run page (and from the API) by anyone.
+      - name: Report failing tests
+        if: failure()
+        shell: pwsh
+        run: |
+          $trx = Get-ChildItem -Recurse -Filter '*.trx' -Path . -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $trx) { Write-Host 'no trx file'; exit 0 }
+          [xml]$doc = Get-Content $trx.FullName
+          $ns = @{t='http://microsoft.com/schemas/VisualStudio/TeamTest/2010'}
+          $failed = Select-Xml -Xml $doc -Namespace $ns -XPath "//t:UnitTestResult[@outcome='Failed']"
+          foreach ($f in $failed) {
+            $name = $f.Node.testName
+            $msg  = ($f.Node.Output.ErrorInfo.Message -replace "`r?`n", ' ')
+            Write-Host "::error title=$name::$msg"
+          }
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agent-test-results
+          path: agent/src/**/TestResults/*.trx
+          retention-days: 7
+
+  # ── Dependency audit ────────────────────────────────────────────
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+
+      - name: npm audit (production dependencies)
+        working-directory: dashboard
+        run: |
+          npm ci --ignore-scripts
+          # The gate stays strict: --audit-level=high keeps the suppression ban. The specific
+          # GHSAs we accept with documented risk are in scripts/npm-audit-check.mjs and in the
+          # dependency risk register. New advisories still fail the build.
+          npm audit --omit=dev --json | node scripts/npm-audit-check.mjs
+
+      - name: npm audit (dev dependencies, advisory)
+        working-directory: dashboard
+        continue-on-error: true
+        run: npm audit --audit-level=high
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: pip-audit (GRID)
+        # No ignored advisory. Before adding an --ignore-vuln, record the
+        # advisory and why it is unreachable in
+        # docs/security/dependency-risk-register.md.
+        run: |
+          pip install pip-audit
+          pip-audit -r grid/requirements.txt --strict
+
+  # ── Required status check ───────────────────────────────────────
+  ci:
+    name: CI gate
+    runs-on: ubuntu-latest
+    needs: [grid, dashboard, e2e, agent, audit]
+    if: always()
+    steps:
+      - name: Verify every job succeeded
+        run: |
+          echo "grid=${{ needs.grid.result }}"
+          echo "dashboard=${{ needs.dashboard.result }}"
+          echo "e2e=${{ needs.e2e.result }}"
+          echo "agent=${{ needs.agent.result }}"
+          echo "audit=${{ needs.audit.result }}"
+          [ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" = "false" ]

@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using Microsoft.Extensions.Logging;
+using RansomGuard.Agent.Core.Configuration;
 using RansomGuard.Agent.Core.Detection.Sentinel.Generators;
 using RansomGuard.Agent.Core.Persistence.Entities;
 using RansomGuard.Agent.Core.Persistence.Repositories;
@@ -42,6 +43,13 @@ public sealed class CanaryFileService : ICanaryFileService
     /// <returns>The persisted canary entity.</returns>
     public async Task<SentinelCanary> CreateCanaryAsync(string directory, string template, string prefix, string extension, CancellationToken cancellationToken = default)
     {
+        // AGT-PATH-001: the last gate, for every caller (deployment, regeneration).
+        if (WatchedPathPolicy.IsRefused(directory))
+        {
+            throw new InvalidOperationException(
+                $"No canary in a system or service profile (AGT-PATH-001): {directory}");
+        }
+
         if (!Directory.Exists(directory))
         {
             Directory.CreateDirectory(directory);
@@ -93,6 +101,32 @@ public sealed class CanaryFileService : ICanaryFileService
         string currentHash = Convert.ToHexString(SHA256.HashData(currentContent)).ToLowerInvariant();
 
         return currentHash == canary.OriginalContentHash;
+    }
+
+    /// <inheritdoc />
+    public async Task RestoreCanaryAsync(SentinelCanary canary, CancellationToken cancellationToken = default)
+    {
+        ICanaryFileGenerator generator = CanaryFileGeneratorFactory.GetGenerator(Path.GetExtension(canary.FilePath));
+        byte[] content = generator.Generate(canary.TemplateUsed);
+
+        if (File.Exists(canary.FilePath))
+        {
+            // Hidden | System (and read-only, if the attacker set it) would refuse the rewrite.
+            File.SetAttributes(canary.FilePath, FileAttributes.Normal);
+        }
+
+        await File.WriteAllBytesAsync(canary.FilePath, content, cancellationToken);
+        File.SetAttributes(canary.FilePath, FileAttributes.Hidden | FileAttributes.System);
+
+        canary.OriginalContentHash = CanaryContentGenerator.ComputeHash(content);
+        canary.FileSize = content.Length;
+        canary.Status = CanaryStatus.Active;
+        canary.LastCheckedAt = DateTime.UtcNow;
+        canary.UpdatedAt = DateTime.UtcNow;
+        await _repository.UpdateAsync(canary, cancellationToken);
+
+        _logger.LogInformation("SENTINEL canary restored: {FilePath} (template: {Template}, {Size} bytes), still watched",
+            canary.FilePath, canary.TemplateUsed, content.Length);
     }
 
     /// <inheritdoc />

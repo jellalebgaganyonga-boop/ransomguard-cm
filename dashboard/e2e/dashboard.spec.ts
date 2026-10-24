@@ -1,0 +1,69 @@
+/**
+ * e2e/dashboard.spec.ts — EPIC-DASHBOARD role-based routing
+ * AC2.x: Each role sees the correct dashboard variant.
+ */
+
+import { test, expect, AxeBuilder, setupMocks, loginAs } from './fixtures/index';
+
+test.describe('Dashboard routing by role', () => {
+  test('tenant_admin → Executive dashboard (Quick actions visible)', async ({ page }) => {
+    await setupMocks(page, 'tenant_admin');
+    await loginAs(page, 'tenant_admin');
+
+    // Executive dashboard quick actions (en.json: dashboard.exec.quickActions). The compliance
+    // card is gone: no regulatory verdict is shown without a real computation behind it.
+    await expect(page.getByText(/quick actions/i)).toBeVisible();
+    await expect(page.getByText(/compliant/i)).toHaveCount(0);
+  });
+
+  test('security_analyst → Operational dashboard (LIVE ALERT FEED visible)', async ({ page }) => {
+    await setupMocks(page, 'security_analyst');
+    await loginAs(page, 'security_analyst');
+
+    // Operational dashboard has live alert feed (en.json: dashboard.ops.feed.title)
+    await expect(page.getByText(/live alert feed/i)).toBeVisible();
+  });
+
+  test('read_only_auditor → Read-only dashboard (auditor mode notice visible)', async ({ page }) => {
+    await setupMocks(page, 'read_only_auditor');
+    await loginAs(page, 'read_only_auditor');
+
+    // Read-only dashboard has auditor notice (en.json: dashboard.readonly.notice)
+    await expect(page.getByText(/auditor mode/i)).toBeVisible();
+    // No compliance percentage made up by the console.
+    await expect(page.getByText(/\d+\s?%/)).toHaveCount(0);
+  });
+
+  test('@a11y accessibility: executive dashboard', async ({ page }) => {
+    await setupMocks(page, 'tenant_admin');
+    await loginAs(page, 'tenant_admin');
+
+    const results = await new AxeBuilder({ page }).analyze();
+    const critical = results.violations.filter(
+      (v) => v.impact === 'critical' || v.impact === 'serious',
+    );
+    expect(critical, `Critical/serious a11y violations: ${JSON.stringify(critical, null, 2)}`).toEqual([]);
+  });
+
+  test('@a11y accessibility: operational dashboard', async ({ page }) => {
+    await setupMocks(page, 'security_analyst');
+    await loginAs(page, 'security_analyst');
+
+    const results = await new AxeBuilder({ page }).analyze();
+    const critical = results.violations.filter(
+      (v) => v.impact === 'critical' || v.impact === 'serious',
+    );
+    expect(critical, `Critical/serious a11y violations: ${JSON.stringify(critical, null, 2)}`).toEqual([]);
+  });
+
+  test('@a11y accessibility: read-only dashboard', async ({ page }) => {
+    await setupMocks(page, 'read_only_auditor');
+    await loginAs(page, 'read_only_auditor');
+
+    const results = await new AxeBuilder({ page }).analyze();
+    const critical = results.violations.filter(
+      (v) => v.impact === 'critical' || v.impact === 'serious',
+    );
+    expect(critical, `Critical/serious a11y violations: ${JSON.stringify(critical, null, 2)}`).toEqual([]);
+  });
+});

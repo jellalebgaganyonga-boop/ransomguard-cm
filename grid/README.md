@@ -25,6 +25,13 @@ docker exec grid-nginx wget -qO- http://grid-api:8000/api/v1/health
 # Expected: {"status":"ok","version":"0.8.0"}
 ```
 
+**Docker Desktop on Windows: port 443 may already be taken.** Docker Desktop's
+`wslrelay` process can hold `localhost:443`, and nginx then fails to publish it.
+Development workaround, no product code involved: set `NGINX_HTTPS_PORT=9443` in
+`deployment/grid/.env`, and point a local agent at it with
+`Agent:Server:BaseUrl = https://localhost:9443` (still a local server, so the
+development-only `TrustAnyCertificate` remains allowed).
+
 For local Python development without Docker:
 
 ```powershell
@@ -33,6 +40,8 @@ python -m venv .venv
 .venv\Scripts\activate
 pip install -e ".[dev]"
 cp .env.example .env  # Edit with local MySQL credentials
+# GRID_JWT_SECRET_KEY has no default: without it the GRID refuses to start (GRID-SEC-007).
+python -c "import secrets; print('GRID_JWT_SECRET_KEY=' + secrets.token_urlsafe(48))"  # paste into .env
 alembic upgrade head
 uvicorn ransomguard_grid.main:app --reload
 ```
@@ -57,7 +66,7 @@ uvicorn ransomguard_grid.main:app --reload
 - **nginx**: TLS 1.3 termination, mTLS verification for agents, rate limiting
 - **grid-api**: FastAPI application with async SQLAlchemy, Ed25519 verification
 - **MySQL 8.4**: 21 application tables + 1 alembic_version, InnoDB with utf8mb4
-- **Redis 7**: Rate limiting counters and JWT blacklist (in-memory fallback available)
+- **Redis 7**: session state shared by every worker -- access-token revocation, refresh-token families (each used once, a replay revokes the family), per-user session version (log out every session), enrollment OTPs (consumed with GETDEL). **Required, no in-memory fallback**: if Redis is unreachable, authentication answers 503. Policy `noeviction` (an evicted revocation would fail open). Also the notification queue.
 
 ## Tech Stack
 
@@ -67,10 +76,10 @@ uvicorn ransomguard_grid.main:app --reload
 | ORM | SQLAlchemy (async) | 2.0+ |
 | Migrations | Alembic | 1.14+ |
 | Database | MySQL | 8.4 |
-| MySQL Driver | aiomysql / asyncmy | dual compat |
+| MySQL Driver | aiomysql | 0.2+ |
 | Cache/Rate Limit | Redis | 7 |
 | Logging | structlog | 24+ |
-| JWT | python-jose | 3.3+ |
+| JWT | PyJWT (HS256 only) | 2.15+ |
 | Ed25519 Signing | PyNaCl + cryptography | 1.5+ / 44+ |
 | Reverse Proxy | nginx | 1.27 |
 | Runtime | Python | 3.12 (Docker) |
@@ -126,9 +135,16 @@ pytest --cov=src --cov-report=term -v
 
 ## Known Issues / Sprint 6.5 Debt
 
-- **asyncmy/aiomysql dual install**: Python 3.14 dev machine needs aiomysql (pure Python); Docker 3.12 can use either
 - **Azure IP ranges source**: Not implemented (URL changes weekly, requires manual download)
 - **docker-compose version key**: `version: "3.9"` triggers deprecation warning (cosmetic)
 - **Worker lifespan tests**: Not added as separate test file (worker tested via service tests)
 - **Docker E2E tests**: Manual validation only (docker not available in pytest CI)
-- **Redis integration**: Rate limiting uses in-memory fallback; Redis wiring deferred to Sprint 8
+- **Redis integration**: sessions and enrollment OTPs are in Redis (GRID-SEC-004, GRID-SEC-005, GRID-ENR-001); the in-process rate limiter is still per worker.
+- **GRID-PST-001 — a deliberate restart counts as a restart loop** (seen in the LOT 2 demo,
+  2026-10-15). The posture rule counts every restart: 3 within 60 min remove the start-up grace
+  and give `partial` / `restart_loop` (`services/agent_posture.py`, `is_restart`). An
+  administrator who restarts the service three times in a few minutes gets the same verdict as an
+  agent that crashes in a loop — the demo showed it after three scenario switches, until the
+  window expired. Lead, not implemented: on a clean stop the agent sends a last heartbeat
+  announcing it (`stopping`), and the GRID counts only the restarts with no announced clean stop.
+  A crash, a kill or a power cut sends nothing, so they still count.
