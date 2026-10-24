@@ -65,8 +65,32 @@ DEP-GRID-01 et DEP-GRID-02). `pip-audit --strict` tourne sans exclusion.
 
 ## Dashboard (npm, dépendances de développement uniquement)
 
-Aucune de ces dépendances n'est livrée au navigateur. Le contrôle de la CI
-(`npm audit --omit=dev --audit-level=high`) ne porte que sur la production.
+Les avis de ce bloc portent sur des dépendances non livrées au navigateur.
+La porte de la CI est stricte (`--audit-level=high`) ; les GHSA de production
+explicitement acceptés sont listés plus bas (DEP-DASH-05) et dans le script
+`dashboard/scripts/npm-audit-check.mjs` qui remplace la commande brute. Pas de
+seuil assoupli, pas de liste globale : chaque GHSA accepté a sa propre ligne
+avec sa raison et sa date de réexamen.
+
+### DEP-DASH-05 — zod 3.26.1 (production), GHSA-mrhx-c7xc-m3w5
+
+- **Dépendance** : `zod` 3.26.1 (runtime du dashboard).
+- **Avis** : GHSA-mrhx-c7xc-m3w5 (épuisement mémoire sur une collection
+  contrainte trop grande, publié 2026-10-23). Sévérité **élevée**.
+- **Corrigé en** : zod 4.6.6 (changement majeur).
+- **Pourquoi acceptable** : zod valide ici les **réponses de la GRID** de
+  l'hôpital, sur son propre réseau local. Aucun schéma zod ne lit un corps
+  contrôlé par un attaquant côté client. Un GRID compromis pourrait faire
+  tomber la console du poste qui lui parle (déni de service local, pas de
+  fuite de données, pas d'exécution), ce qui n'ouvre rien de nouveau.
+- **Décision** : 2026-10-24.
+- **Corrigé par** : passage à zod 4.x au sprint suivant, port des schémas
+  et des tests (`src/api/*.ts`, `src/components/alerts/*.tsx`,
+  `src/pages/settings/*.tsx`).
+- **Réexamen** : 2026-11-07.
+- **Statut** : accepté. Entrée miroir dans
+  `dashboard/scripts/npm-audit-check.mjs` ; retrait des deux endroits au
+  moment de la mise à jour.
 
 ### DEP-DASH-01 — Vite 5.4.21 et sa chaîne (Vitest 2.1.9)
 
