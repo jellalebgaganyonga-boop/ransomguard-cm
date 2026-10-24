@@ -356,7 +356,10 @@ class InstallerDownloadRequest(BaseModel):
     # The GRID address the agent will call: the host the console was opened on, as for the
     # scripted command, never a value the server guesses.
     host: str = Field(min_length=1, max_length=253, pattern=r"^[A-Za-z0-9.-]+$")
-    port: int = Field(default=8443, ge=1, le=65535)
+    # The AGENT channel's port (nginx agent.conf, :443, which routes /api/v1/agents/*), not the
+    # console's 8443: nginx answers an enrollment sent to 8443 with 405, so an installer built
+    # with it could never enroll. install.ps1 gives agents https://<host> too, i.e. 443.
+    port: int = Field(default=443, ge=1, le=65535)
 
 
 class ProvisionAgentResponse(BaseModel):

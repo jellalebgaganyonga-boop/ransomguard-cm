@@ -163,7 +163,7 @@ public static class InstallerPayload
 /// <summary>The installer's configuration, written by the GRID for one download (ADR-027, 2b).</summary>
 public sealed record InstallerConfig
 {
-    /// <summary>The GRID the agent enrolls with, e.g. https://grid.hopital.local:8443.</summary>
+    /// <summary>The GRID's agent channel the agent enrolls with, e.g. https://grid.hopital.local:443.</summary>
     [JsonPropertyName("grid_base_url")]
     public required string GridBaseUrl { get; init; }
 

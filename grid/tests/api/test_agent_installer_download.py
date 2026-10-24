@@ -81,7 +81,8 @@ async def test_the_installer_is_the_stub_plus_the_package_the_configuration_and_
     stub, package, config = _parse(response.content)
     assert stub == STUB
     assert package == PACKAGE
-    assert config["grid_base_url"] == f"https://{HOST}:8443"
+    # The agent channel (nginx agent.conf, :443), not the console's 8443, which answers 405.
+    assert config["grid_base_url"] == f"https://{HOST}:443"
     assert config["otp"] == otp
     assert config["tenant_code"] == tenant_code
     assert config["agent_package_sha256"] == PACKAGE_SHA
@@ -93,7 +94,7 @@ async def test_the_installer_is_the_stub_plus_the_package_the_configuration_and_
     db_session.expire_all()
     log = (await db_session.execute(select(UserActionLog).where(UserActionLog.action_type == "installer_downloaded"))).scalars().one()
     assert log.tenant_id == tenant_id
-    assert log.details_json == {"otp_prefix": otp[:14], "host": HOST, "port": 8443, "package_sha256": PACKAGE_SHA}
+    assert log.details_json == {"otp_prefix": otp[:14], "host": HOST, "port": 443, "package_sha256": PACKAGE_SHA}
     assert otp not in json.dumps(log.details_json)
 
 

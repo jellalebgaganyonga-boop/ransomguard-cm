@@ -196,7 +196,8 @@ test.describe('Add agent — the double-click installer (ADR-027)', () => {
     const download = await downloadPromise;
 
     expect(download.suggestedFilename()).toBe('RansomGuard-CM-Installeur-localhost.exe');
-    expect(sent).toEqual({ otp: 'RG-CAM-2026-X7K9P3', host: 'localhost', port: 8443 });
+    // The agent channel's port, not the console's: see AGENT_CHANNEL_PORT.
+    expect(sent).toEqual({ otp: 'RG-CAM-2026-X7K9P3', host: 'localhost', port: 443 });
     await expect(page.getByText(/Unknown publisher/)).toBeVisible(); // SmartScreen, said as such
 
     const results = await new AxeBuilder({ page }).analyze();
