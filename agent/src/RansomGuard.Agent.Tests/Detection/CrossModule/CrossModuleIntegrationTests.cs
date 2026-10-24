@@ -216,6 +216,10 @@ public sealed class CrossModuleIntegrationTests
                 ["Agent:Logging:LogFilePath"] = @"C:\Temp\test.log",
                 ["Agent:Server:BaseUrl"] = "https://localhost",
                 ["Agent:Database:ConnectionString"] = $"Data Source={Path.GetTempFileName()}",
+                // Never the machine-wide default (%ProgramData%\RansomGuard-CM\keys): ServiceRegistration
+                // writes the audit key there, and tests running in parallel on the same file failed with
+                // "being used by another process" (CI run 40123109921).
+                ["Agent:Database:KeyDirectory"] = Path.Combine(Path.GetTempPath(), $"rg_crossmodule_keys_{Guid.NewGuid():N}"),
                 ["Agent:Sentinel:Enabled"] = "false",
                 ["Agent:Entropy:Enabled"] = "false",
                 ["Agent:ExfilWatch:Enabled"] = "true"

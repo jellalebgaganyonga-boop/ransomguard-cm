@@ -31,6 +31,8 @@ public sealed class HostConstructionTests
             {
                 ["Agent:Server:BaseUrl"] = "https://localhost",
                 ["Agent:Database:ConnectionString"] = $"Data Source={Path.GetTempFileName()}",
+                // This test's own keys, not the machine-wide default shared with parallel tests.
+                ["Agent:Database:KeyDirectory"] = Path.Combine(Path.GetTempPath(), $"rg_host_keys_{Guid.NewGuid():N}"),
                 ["Agent:Logging:LogFilePath"] = Path.Combine(Path.GetTempPath(), "rg-host-test.log"),
             })
             .Build();

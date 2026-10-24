@@ -45,6 +45,8 @@ public sealed class AgentDatabaseDurabilityTests(ITestOutputHelper output) : IDi
             {
                 ["Agent:Server:BaseUrl"] = "https://localhost",
                 ["Agent:Database:ConnectionString"] = connectionString,
+                // This test's own keys, not the machine-wide default shared with parallel tests.
+                ["Agent:Database:KeyDirectory"] = Path.Combine(_dir, "keys"),
                 ["Agent:Logging:LogFilePath"] = Path.Combine(_dir, "agent.log"),
             })
             .Build();
