@@ -120,7 +120,8 @@ async def get_me(
         tenant=TenantContext(
             id=user.tenant.id,
             name=user.tenant.name,
-            status=user.tenant.status,
+            # TenantStatus is str-backed but mypy sees the enum; the schema expects the literal.
+            status=user.tenant.status.value,
         ),
         roles=role_names,
         last_login_at=user.last_login_at,
@@ -431,7 +432,7 @@ async def update_alert_status(
             f"Transition {old_status.value} -> {body.new_status.value} is not allowed"
             + (f" (allowed: {', '.join(allowed)})" if allowed else f" ({old_status.value} is final)"),
         )
-    alert.status = body.new_status  # type: ignore[assignment]
+    alert.status = body.new_status
 
     db.add(AlertStatusChange(
         id=str(uuid4()), tenant_id=user.tenant_id, alert_id=alert_id,
@@ -901,7 +902,7 @@ async def _log_user_action(
     action_type: str,
     target_type: str | None = None,
     target_id: str | None = None,
-    details: dict | None = None,
+    details: dict[str, Any] | None = None,
     ip_address: str | None = None,
 ) -> None:
     """Record a user action in the audit trail."""
@@ -987,7 +988,7 @@ async def decommission_agent(
     if agent.status == AgentStatus.decommissioned:
         raise HTTPException(400, "Agent already decommissioned")
 
-    agent.status = AgentStatus.decommissioned  # type: ignore[assignment]
+    agent.status = AgentStatus.decommissioned
     await db.flush()
 
     await _log_user_action(
