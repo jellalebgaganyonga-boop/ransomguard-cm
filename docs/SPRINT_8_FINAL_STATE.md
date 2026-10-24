@@ -1,7 +1,7 @@
 # Sprint 8 — Final State
 
 **Branch:** `sprint8/recovery`
-**HEAD:** `041f805`
+**HEAD:** `8ddccde` (this file; CI **40105961682** and agent-full **40105961942** both green on it)
 **Date:** 2026-10-24
 
 ## 1. Test counts (from the last green CI run)
@@ -79,7 +79,46 @@ Up to date on this HEAD:
 - `docs/security/dependency-risk-register.md` — DEP-DASH-05 (zod) added.
 - `agent/README.md` — AGT-EXF-001 updated to reflect the persisted phase start and the still-in-memory baselines.
 
-## 6. Confirmation
+## 6. Running it locally
+
+Dev-only, on this machine, nothing deployed anywhere. Two processes:
+
+| Process | Address | Backing store |
+|---|---|---|
+| GRID (uvicorn, `ransomguard_grid.main:app`) | `http://127.0.0.1:8443` | SQLite at `%LOCALAPPDATA%\rg-demo-dev.db`, migrated with Alembic and seeded with `grid/scripts/seed_initial_data.py` |
+| Console (Vite dev server) | `http://localhost:5174`, proxying `/api` to `127.0.0.1:8443` | — |
+
+Every setting is explicit in a local env file, no silent defaults:
+`GRID_JWT_SECRET_KEY`, `GRID_DATABASE_URL`, `GRID_ENVIRONMENT=development`,
+`GRID_AGENT_AUTH_MODE=agent_id`, `GRID_THREAT_INTEL_SIGNING_KEY_PATH`,
+`GRID_THREAT_INTEL_PACKAGES_DIR`, `GRID_REDIS_URL=redis://127.0.0.1:6379/0`.
+
+**Redis is not optional.** Since GRID-SEC-004/005 moved sessions out of process
+memory, `POST /auth/login` answers `503 Session store unavailable` when it
+cannot reach Redis — the GRID refuses to issue a session it cannot revoke. A
+container with a published host port covers it locally
+(`docker run -d --name rg-redis-demo -p 127.0.0.1:6379:6379 redis:7-alpine`).
+The `docker-compose` stack's own `grid-redis` publishes no host port, so it
+serves the containerised GRID only, not a uvicorn on the host.
+
+Verified on this HEAD, through the Vite proxy:
+
+| Call | Result |
+|---|---|
+| `POST /api/v1/auth/login` | 200, `roles: ["tenant_admin"]` |
+| `GET /api/v1/dashboard/me` | 200 |
+| `GET /api/v1/dashboard/metrics/summary` | 200 — `total_agents: 0` |
+| `GET /api/v1/dashboard/agents` | 200 — `total: 0` |
+| `GET /api/v1/dashboard/alerts` | 200 — `total: 0` |
+
+**The console is live and empty, and that is the honest state.** No agent has
+enrolled against this database, so there are no agents, no alerts and no
+posture rows to show. The counts above are real zeros, not placeholders, and
+nothing was seeded to make the screens look populated. Filling them means
+enrolling a real agent through the ADR-027 installer flow and letting SENTINEL
+fire on the canary test zone; that run has not been done (see §7).
+
+## 7. Confirmation
 
 **All tests pass. All docs up to date. Branch ready for jury demonstration from a code-review standpoint.**
 
