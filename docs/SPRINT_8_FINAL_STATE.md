@@ -111,6 +111,23 @@ Verified on this HEAD, through the Vite proxy:
 | `GET /api/v1/dashboard/agents` | 200 — `total: 0` |
 | `GET /api/v1/dashboard/alerts` | 200 — `total: 0` |
 
+### The Agent, locally
+
+The three product projects build clean on this machine, `dotnet build` with
+0 warnings and 0 errors each: `RansomGuard.Agent.Core`,
+`RansomGuard.Agent.Service`, `RansomGuard.Agent.Installer`.
+
+`RansomGuard.Agent.Tests` does **not** build locally. It fails
+`MSB3021: Access to the path 'RansomGuard.Agent.Tests.dll' is denied` — the
+endpoint-protection file lock on the repo folder. The agent suite's evidence
+path is therefore CI, where it runs green (938 + 6, §1). Building the whole
+solution in one command fails for this one project; build the three product
+projects individually to get a clean local build.
+
+The agent was **not started** on this machine. The dormant `RansomGuardAgent`
+service here stays disabled (OPS-001), so a local service start is out of
+scope by standing instruction, not by failure.
+
 **The console is live and empty, and that is the honest state.** No agent has
 enrolled against this database, so there are no agents, no alerts and no
 posture rows to show. The counts above are real zeros, not placeholders, and
