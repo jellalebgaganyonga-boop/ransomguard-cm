@@ -29,7 +29,11 @@ export default defineConfig({
         // connect timeout instead of failing immediately.
         target: process.env.VITE_PROXY_TARGET ?? 'https://100.85.208.124:8443',
         changeOrigin: true,
-        secure: false, // self-signed cert in dev (mTLS PKI from grid/)
+        // Validate the GRID's certificate, always. A GRID on the internal PKI is trusted by
+        // giving this one Node process its CA -- NODE_EXTRA_CA_CERTS=deployment/grid/pki/ca.crt --
+        // never by turning the check off, and never by adding the CA to the machine store.
+        // Plain-http targets (the local uvicorn, CI's closed port) are unaffected.
+        secure: true,
       },
     },
   },
