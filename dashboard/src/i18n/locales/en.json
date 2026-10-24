@@ -323,7 +323,7 @@
       "downloading": "Preparing the installer…",
       "step1": "Copy the installer to the endpoint (USB key, network share).",
       "step2": "Double-click. Windows shows \"Unknown publisher\": \"More info\", then \"Run anyway\", then \"Yes\" to the administrator prompt.",
-      "step3": "The endpoint shows up here in green within two minutes. Nothing to type.",
+      "step3": "The endpoint shows up here within two minutes, with its protection state. Nothing to type.",
       "scriptedNote": "Scripted deployment (GPO, SCCM): agent/install.ps1, agent documentation.",
       "noInstaller": "No installer is published on this GRID (stub, agent package or authority certificate missing). Publish the package (continuous deployment), then try again.",
       "codeInvalid": "This code can no longer be used (expired or unknown): generate a new one.",

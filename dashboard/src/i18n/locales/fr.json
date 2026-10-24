@@ -323,7 +323,7 @@
       "downloading": "Préparation de l'installeur…",
       "step1": "Copiez l'installeur sur le poste (clé USB, partage réseau).",
       "step2": "Double-cliquez. Windows affiche « Éditeur inconnu » : « Informations complémentaires », puis « Exécuter quand même », puis « Oui » à la demande d'administrateur.",
-      "step3": "Le poste apparaît ici en vert sous deux minutes. Rien à taper.",
+      "step3": "Le poste apparaît ici sous deux minutes, avec son état de protection. Rien à taper.",
       "scriptedNote": "Déploiement scripté (GPO, SCCM) : agent/install.ps1, documentation de l'agent.",
       "noInstaller": "Aucun installeur n'est publié sur ce GRID (stub, paquet de l'agent ou certificat de l'autorité manquant). Publiez le paquet (déploiement continu), puis réessayez.",
       "codeInvalid": "Ce code n'est plus utilisable (expiré ou inconnu) : générez-en un nouveau.",
