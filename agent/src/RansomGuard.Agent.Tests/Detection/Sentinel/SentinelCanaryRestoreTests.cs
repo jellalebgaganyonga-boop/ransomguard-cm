@@ -132,7 +132,10 @@ public sealed class SentinelCanaryRestoreTests : IDisposable
         await File.AppendAllTextAsync(canary.FilePath, "\nENCRYPTED AGAIN");
         await Eventually.HoldsAsync(() => Alerts(canary) == 2, "the second alert");
         await Eventually.HoldsAsync(() => Reload(canary.Id).Status == CanaryStatus.Modified, "the canary leaves the surveillance past the limit");
-        _h.ChainedActions().Concat(PendingActions()).ShouldContain("SustainedAttack");
+        // Awaited like the checks above: TryRestoreCanaryAsync records the status, then appends
+        // SustainedAttack, two writes in sequence. Asserted at once, a slow runner could land between
+        // them (CI run 40122324735: ["CanaryAlert", "CanaryRestored", "CanaryAlert"]).
+        await Eventually.HoldsAsync(() => _h.ChainedActions().Concat(PendingActions()).Contains("SustainedAttack"), "SustainedAttack recorded");
 
         // Out of the surveillance, said as such: a third write raises nothing.
         await Task.Delay(3_500);
