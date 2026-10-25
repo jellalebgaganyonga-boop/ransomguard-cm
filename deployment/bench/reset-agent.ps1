@@ -53,6 +53,19 @@ if ($svc) {
     }
     & sc.exe delete $ServiceName | Out-Null
     Write-Host '      deleted'
+
+    # Deleting a service does not end the process running it. The agent went on running after
+    # this, holding its own files open and re-planting the canaries that had just been removed,
+    # so a reset followed by an install was not a fresh install at all. Wait for it, then end it.
+    $process = Get-Process -Name 'RansomGuard.Agent.Service' -ErrorAction SilentlyContinue
+    if ($process) {
+        Write-Host '      waiting for the agent process to end'
+        if (-not $process.WaitForExit(15000)) {
+            Write-Host '      still running after 15 s, ending it'
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 2
+        }
+    }
 } else {
     Write-Host '      not installed'
 }
