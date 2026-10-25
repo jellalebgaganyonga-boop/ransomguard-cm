@@ -1,5 +1,7 @@
 """Group 6: Notification and User Action Log models."""
 
+from typing import Any
+
 from datetime import UTC, datetime
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
@@ -55,7 +57,7 @@ class UserActionLog(Base):
     action_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     target_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     target_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
-    details_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # type: ignore[assignment]
+    details_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False)
 

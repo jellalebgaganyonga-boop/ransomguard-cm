@@ -25,7 +25,7 @@ from __future__ import annotations
 import json
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, TypeAlias, cast
 
 import redis.asyncio as redis
 
@@ -33,6 +33,9 @@ from ransomguard_grid.core.config import get_settings
 from ransomguard_grid.core.logging import get_logger
 
 logger = get_logger("notification_queue")
+
+# What redis accepts as a stream field key or value.
+FieldT: TypeAlias = bytes | bytearray | memoryview | str | int | float
 
 STREAM_KEY = "grid:notifications"
 CONSUMER_GROUP = "notifiers"
@@ -97,9 +100,14 @@ class NotificationQueue:
     # ── Producer ──────────────────────────────────────────────────
     async def publish(self, job: NotificationJob) -> str:
         """Append a job to the stream. Returns the stream entry id."""
+        # redis types the field map as dict[str | bytes | int | float, ...]. Every value here is
+        # a str, which is one of those, but dict is invariant in its parameters so dict[str, str]
+        # is not accepted as that type. The cast records a limitation of variance, not a doubt
+        # about the values: to_fields() stringifies all of them.
+        fields = cast("dict[FieldT, FieldT]", job.to_fields())
         entry_id = await self._client.xadd(
             STREAM_KEY,
-            job.to_fields(),
+            fields,
             maxlen=MAX_STREAM_LENGTH,
             approximate=True,
         )

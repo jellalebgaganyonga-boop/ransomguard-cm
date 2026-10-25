@@ -3,8 +3,9 @@ module transitions older than the retention window once a day."""
 
 import asyncio
 from datetime import UTC, datetime, timedelta
+from typing import Any, cast
 
-from sqlalchemy import delete, update
+from sqlalchemy import CursorResult, delete, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from ransomguard_grid.core.config import get_settings
@@ -25,7 +26,7 @@ class AgentDisconnectWorker:
     ) -> None:
         self._session_factory = session_factory
         self._check_interval = check_interval_seconds
-        self._task: asyncio.Task | None = None
+        self._task: asyncio.Task[None] | None = None
         self._settings = get_settings()
         # In memory: after a restart the purge runs again on the first pass. Harmless, the
         # DELETE is idempotent.
@@ -81,10 +82,12 @@ class AgentDisconnectWorker:
             result = await session.execute(stmt)
             await session.commit()
 
-            if result.rowcount > 0:  # type: ignore[union-attr]
+            # An UPDATE returns a CursorResult, which is where rowcount lives.
+            marked = cast(CursorResult[Any], result).rowcount
+            if marked > 0:
                 logger.warning(
                     "Agents marked disconnected",
-                    count=result.rowcount,
+                    count=marked,
                     timeout_minutes=self._settings.agent_disconnect_timeout_minutes,
                 )
 

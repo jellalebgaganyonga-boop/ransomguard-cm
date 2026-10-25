@@ -70,9 +70,11 @@ jobs:
         run: ruff check src tests
 
       - name: Type check (mypy)
-        # Advisory: the codebase predates mypy enforcement. Promote to a hard
-        # gate once the existing findings are cleared.
-        continue-on-error: true
+        # A hard gate since 2026-10-26: the 25 findings this tolerated are fixed, and the
+        # comment promising to promote it "once they are cleared" was the only thing left.
+        # They were not formalities -- a bare dict on a JSON column says nothing about what is
+        # in it, and a stale `type: ignore` is a sign saying "problem here" long after the
+        # problem went, which hides the next real one.
         run: mypy src
 
       - name: Tests (pytest)
