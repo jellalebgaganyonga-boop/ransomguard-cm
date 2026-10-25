@@ -78,7 +78,11 @@ $pattern = '^\d+_[a-z_]+_[0-9a-f]{8}\.'
 $removed = 0
 foreach ($root in ($WatchedRoots | Select-Object -Unique)) {
     if (-not (Test-Path $root)) { continue }
-    $candidates = Get-ChildItem -Force -File -Path $root -ErrorAction SilentlyContinue |
+    # Recursive: SENTINEL also watches subfolders such as Desktop\RansomGuard-TestZone, and a
+    # canary left behind there outlives the reset. The bench then triggers against a file that is
+    # no longer a registered canary, nothing is detected, and the run looks like a detection
+    # failure when it is a leftover.
+    $candidates = Get-ChildItem -Force -File -Recurse -Path $root -ErrorAction SilentlyContinue |
         Where-Object { $_.Name -match $pattern -and $_.Attributes -band [IO.FileAttributes]::Hidden }
     foreach ($f in $candidates) {
         Set-ItemProperty -Path $f.FullName -Name Attributes -Value ([IO.FileAttributes]::Normal) -ErrorAction SilentlyContinue

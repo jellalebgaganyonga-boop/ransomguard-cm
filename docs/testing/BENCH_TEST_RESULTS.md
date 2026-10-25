@@ -14,7 +14,7 @@ Every figure below comes from a real run against that stack. Nothing here is see
 | Workstation 1 | **PC-ACCUEIL** (VirtualBox VM `win`), 4 vCPU, 4 GB, NAT + host-only |
 | Workstation 2 | **PC-LABO** (VirtualBox VM `windows  10`), 4 vCPU, 4 GB, NAT + host-only |
 | Each workstation has | a non-administrator account `infirmier`, and 200 invented hospital documents in `C:\Users\Public\Documents\Hospital-FICTIONAL\` (50 each in Patients, Laboratory, Pharmacy, Imaging) |
-| Agent under test | `1.0.0+ba519c2` |
+| Agent under test | `1.0.0+69041da` (CI green: CI `40221112773`, Agent full `40221112766`) |
 | Console accounts | `admin@hopital-yde.cm` (tenant_admin), `analyste@hopital-yde.cm` (security_analyst), `auditeur@hopital-yde.cm` (read_only_auditor), `admin@clinique-test.cm` (tenant_admin of the other customer) |
 
 Passwords are in `deployment/bench/credentials.local.md`, which is gitignored and never committed.
@@ -35,10 +35,10 @@ Passwords are in `deployment/bench/credentials.local.md`, which is gitignored an
 
 | ID | Test | Expected | Observed | Verdict |
 |---|---|---|---|---|
-| 1 | Install + enrolment on a fresh workstation | agent in the console within 2 min, **zero alerts** | PC-LABO enrolled as `8d8fa08d`, `active`, **0 alerts**. The agent's own log for the install window holds 18 events: deployment starting, the ETW session opening, nine canaries deployed, ENTROPY attribution — and no alert, no restoration. Before the fixes below, the same window produced 105 events and 24 Critical alerts. | **PASS** |
+| 1 | Install + enrolment on a fresh workstation | agent in the console within 2 min, **zero alerts** | PC-LABO enrolled and `active`, **0 alerts**, `rejected_alerts = 0`, `pending_alerts = 0`. The agent's own log for an install window holds 18 events: deployment starting, the ETW session opening, nine canaries deployed, ENTROPY attribution — and no alert, no restoration. Before the fixes below, the same window produced 105 events and 24 Critical alerts. | **PASS** |
 | 2 | Posture and module table, honest per agent | each module's real state | `SENTINEL active`, `ENTROPY active`, `GENEALOGY active`, `USB_GUARD active`, `EXFIL_WATCH degraded/learning_phase`, `ANTI_TAMPERING inactive/not_implemented`. Verdict `partial`, and the only reason given is the one that is true: EXFIL WATCH is still learning. | **PASS** |
-| 3 | SENTINEL: run `trigger-sentinel.cmd` | Critical alert, "Who did it?" names the process, process suspended | `SentinelCanaryModified` (Critical) at 17:23:46, then at 17:23:50 `SentinelProcessSuspended` — *"Process suspended after writing a canary: powershell (PID 6860)"*. The writer was named and frozen. | **PASS** |
-| 4 | Resume from the console | the process continues on the VM **and** the console updates | Resume issued at 17:36:02. `SentinelProcessResumed` — *"Process resumed on request"* — reached the GRID, and the suspension left *Suspended processes*. The process really did resume: still inside its write loop, it wrote the canary again and was suspended a second time, which is correct. After resuming that one too, **0 suspensions listed**. | **PASS** |
+| 3 | SENTINEL: run `trigger-sentinel.cmd` | Critical alert, "Who did it?" names the process, process suspended | `SentinelCanaryModified` (Critical), then `SentinelProcessSuspended` — *"Process suspended after writing a canary: powershell (PID 2560)"*. "Who did it?" reads `state: resolved, process_id: 2560, process_name: powershell` — the writer is named, not guessed. | **PASS** |
+| 4 | Resume from the console | the process continues on the VM **and** the console updates | `SentinelProcessResumed` — *"Process resumed on request"* — reached the GRID and the suspension left *Suspended processes*. The process really did resume: still inside its five-write loop, it wrote the canary again and was suspended again, each time. Resuming until the script finished left **0 suspensions listed** and the trigger reporting *"finished. A pause above was the suspension; the resume let the script continue."* | **PASS** |
 | 6 | Tenant isolation | `admin@clinique-test.cm` sees nothing of `hopital-yde` | `clinique-test`: 0 agents, 0 alerts, 1 user (its own admin). `hopital-yde`, at the same moment: 1 agent, 10 alerts, 3 users. | **PASS** |
 | 5 | Roles: auditor cannot act, analyst can triage, admin can do all | — | **not yet run** | — |
 | 7 | Audit log and user-actions log record the actions above | — | partly observed: decommissioning an agent through the console wrote a `agent_decommission` user action. Not yet checked end to end. | **not yet run** |
@@ -87,9 +87,24 @@ number of canaries. This took three attempts to fix properly, and the first two 
   attack. SENTINEL ended up reporting **SUSTAINED ATTACK: 10 restorations in 1 hour ... Manual
   intervention required** over a file only it had ever touched.
 
-Fixed in `ba519c2`: the ETW path consults the own-write set, and the grace is 60 seconds, past
-the delay the bench measured. The cost is written down rather than hidden — for a minute after the
-agent repairs a decoy, a write to that one path is taken for the agent's own.
+Fixing it took two more goes, and CI refused both of the wrong ones:
+
+- `ba519c2` made the ETW path consult the own-write set and stretched the restoration grace to 60
+  seconds. CI failed three `SentinelCanaryRestoreTests`: a canary the agent had just repaired was
+  unwatched for a minute, so an attacker's write five seconds later went unreported. A detection
+  gap, not a fix.
+- `823c309` split the windows, since the two paths see the same write at different times: the
+  watcher stays prompt and keeps its short grace, and only the kernel path gets the 60-second
+  window. CI then failed the real-service job — *"the canary writer was not suspended within
+  15 s"* — because the guard was dropping **every** kernel record on a recently written path,
+  including a genuine attacker's, so nobody was attributed and nobody was suspended.
+- `69041da` narrows it to what was actually measured: only a write from PID 0 or 4, which is what
+  the agent's own writes come back as, on a path the agent wrote itself. A record naming a real
+  process is never dropped. That is the same test `CanaryAttributor` already uses to decide a
+  write names nobody.
+
+Both directions are now true on the bench at once: a fresh install raises nothing, and a real
+writer is still named and suspended.
 
 ### 3. A workstation could be enrolled exactly once in its life
 
