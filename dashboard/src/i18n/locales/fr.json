@@ -23,7 +23,13 @@
     "logoutAll": "Se déconnecter de tous les appareils",
     "logoutAllTitle": "Se déconnecter de tous les appareils ?",
     "logoutAllBody": "Toutes vos sessions ouvertes, sur ce poste et sur tous les autres, seront fermées immédiatement. Vous devrez vous reconnecter partout.",
-    "logoutAllConfirm": "Tout déconnecter"
+    "logoutAllConfirm": "Tout déconnecter",
+    "profileRole": "Rôle",
+    "profileTenant": "Hôpital",
+    "profileLanguage": "Langue",
+    "profileLastLogin": "Dernière connexion",
+    "profileNever": "première connexion",
+    "profileSystemDefault": "par défaut"
   },
   "auth": {
     "login": {
@@ -154,7 +160,11 @@
       "noneUnresolved": "Aucune réponse possible : le processus n'est pas identifié, l'agent ne frappe pas au hasard",
       "unnamedProcess": "processus sans nom connu",
       "commandLine": "Commande « {command} » : {status}",
-      "command": { "suspend": "Suspendre", "resume": "Reprendre", "isolate": "Isoler" },
+      "command": {
+        "suspend": "Suspendre",
+        "resume": "Reprendre",
+        "isolate": "Isoler"
+      },
       "status": {
         "sent": "envoyée, en attente de l'agent",
         "received": "reçue par l'agent, en cours",
@@ -416,7 +426,12 @@
   "settings": {
     "title": "Paramètres",
     "subtitle": "Votre compte, votre langue, vos notifications, votre mot de passe.",
-    "tabs": { "profile": "Profil", "language": "Langue", "notifications": "Notifications", "security": "Sécurité" },
+    "tabs": {
+      "profile": "Profil",
+      "language": "Langue",
+      "notifications": "Notifications",
+      "security": "Sécurité"
+    },
     "profile": {
       "name": "Nom affiché",
       "email": "E-mail",
@@ -620,5 +635,9 @@
       "signalLostCount": "{count, plural, one {# poste sans signal depuis plus d'1 heure} other {# postes sans signal depuis plus d'1 heure}}"
     },
     "locale": "fr-FR"
+  },
+  "theme": {
+    "toggleLight": "Passer au thème clair",
+    "toggleDark": "Passer au thème sombre"
   }
 }

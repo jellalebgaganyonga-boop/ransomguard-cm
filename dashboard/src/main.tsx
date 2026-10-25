@@ -5,6 +5,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import './i18n'; // side-effect: initializes i18next (ADR-FE-006)
 import './styles/globals.css';
 import { App } from './App';
+import { applyStoredThemeEagerly } from './hooks/use-theme';
+
+// Apply the stored light/dark choice BEFORE the first paint, so no flash of the wrong theme.
+applyStoredThemeEagerly();
 
 /**
  * QueryClient — ADR-FE-003 (TanStack Query for server state).

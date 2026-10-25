@@ -23,7 +23,13 @@
     "logoutAll": "Log out of every device",
     "logoutAllTitle": "Log out of every device?",
     "logoutAllBody": "Every open session, on this computer and on every other one, will be closed immediately. You will have to log in again everywhere.",
-    "logoutAllConfirm": "Log out everywhere"
+    "logoutAllConfirm": "Log out everywhere",
+    "profileRole": "Role",
+    "profileTenant": "Hospital",
+    "profileLanguage": "Language",
+    "profileLastLogin": "Last sign-in",
+    "profileNever": "first sign-in",
+    "profileSystemDefault": "system default"
   },
   "auth": {
     "login": {
@@ -154,7 +160,11 @@
       "noneUnresolved": "No response possible: the process is not identified, the agent never acts on a guess",
       "unnamedProcess": "process with no known name",
       "commandLine": "Command \"{command}\": {status}",
-      "command": { "suspend": "Suspend", "resume": "Resume", "isolate": "Isolate" },
+      "command": {
+        "suspend": "Suspend",
+        "resume": "Resume",
+        "isolate": "Isolate"
+      },
       "status": {
         "sent": "sent, waiting for the agent",
         "received": "received by the agent, in progress",
@@ -416,7 +426,12 @@
   "settings": {
     "title": "Settings",
     "subtitle": "Your account, your language, your notifications, your password.",
-    "tabs": { "profile": "Profile", "language": "Language", "notifications": "Notifications", "security": "Security" },
+    "tabs": {
+      "profile": "Profile",
+      "language": "Language",
+      "notifications": "Notifications",
+      "security": "Security"
+    },
     "profile": {
       "name": "Display name",
       "email": "E-mail",
@@ -620,5 +635,9 @@
       "signalLostCount": "{count, plural, one {# endpoint without a signal for over 1 hour} other {# endpoints without a signal for over 1 hour}}"
     },
     "locale": "en-GB"
+  },
+  "theme": {
+    "toggleLight": "Switch to light theme",
+    "toggleDark": "Switch to dark theme"
   }
 }
