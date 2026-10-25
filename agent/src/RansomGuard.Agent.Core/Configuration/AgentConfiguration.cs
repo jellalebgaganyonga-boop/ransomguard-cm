@@ -394,8 +394,14 @@ public sealed record ExfilWatchOptions
     public bool Enabled { get; init; } = true;
 
     /// <summary>Learning phase duration in days before active detection.</summary>
+    /// <remarks>
+    /// 3 days by default. Longer gives better baselines (business cycles with gaps are rarer) but
+    /// leaves VolumeAnomaly mute during the window: an admin wants real detection sooner. 3 days
+    /// covers one working week with a weekend, which has been sufficient on bench runs. Operators
+    /// who need the fuller cycle can raise it in appsettings.json; the range (1-30) is unchanged.
+    /// </remarks>
     [Range(1, 30)]
-    public int LearningPhaseDays { get; init; } = 7;
+    public int LearningPhaseDays { get; init; } = 3;
 
     /// <summary>Volume anomaly threshold multiplier over baseline average.</summary>
     [Range(2, 20)]

@@ -6,7 +6,7 @@ and a response (alert, throttle, firewall block by severity).
 
 ## The rules, exactly (2026-10-21, EXFIL-REG-001)
 
-| Rule | Registered | During the learning phase (7 days) | After |
+| Rule | Registered | During the learning phase (3 days) | After |
 |---|---|---|---|
 | `VolumeAnomaly` (bytes sent vs. the destination's baseline × multiplier) | yes (built in) | **mute**: it returns nothing while `IsLearningPhase`, and needs a baseline that the learning phase builds | fires |
 | `DnsTunneling` (queries per PID ≥ threshold, with high-entropy names) | yes (built in) | fires | fires |
