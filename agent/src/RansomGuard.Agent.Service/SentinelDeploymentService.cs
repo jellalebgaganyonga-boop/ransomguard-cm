@@ -17,28 +17,21 @@ public sealed class SentinelDeploymentService : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly AgentConfiguration _config;
     private readonly UserProfileEnumerator _profiles;
-    private readonly AgentOwnWrites? _ownWrites;
 
     /// <summary>
     /// Initializes the SENTINEL deployment service.
     /// </summary>
     /// <param name="profiles">The real user profiles that %EACHUSERPROFILE% expands to (AGT-PATH-001); null: the Windows registry.</param>
-    /// <param name="ownWrites">
-    /// The paths the agent writes itself. The canaries planted here are marked so the monitor's
-    /// watcher does not report their creation as an attack; null leaves that unmarked (tests).
-    /// </param>
     public SentinelDeploymentService(
         ILogger<SentinelDeploymentService> logger,
         IOptionsMonitor<AgentConfiguration> config,
         IServiceScopeFactory scopeFactory,
-        UserProfileEnumerator? profiles = null,
-        AgentOwnWrites? ownWrites = null)
+        UserProfileEnumerator? profiles = null)
     {
         _logger = logger;
         _config = config.CurrentValue;
         _scopeFactory = scopeFactory;
         _profiles = profiles ?? UserProfileEnumerator.Windows;
-        _ownWrites = ownWrites;
     }
 
     /// <inheritdoc />
@@ -121,13 +114,12 @@ public sealed class SentinelDeploymentService : BackgroundService
             string template = sentinel.CanaryTemplates[templateIndex % sentinel.CanaryTemplates.Length];
             templateIndex++;
 
-            SentinelCanary created = await canaryService.CreateCanaryAsync(
+            // The decoy is marked as the agent's own write by CanaryFileService, before the bytes
+            // reach the disk. Marking it here, after the call returned, was too late: the monitor
+            // is a hosted service like this one and is usually already watching, so the watcher
+            // had already turned the creation into a Critical "canary modified".
+            await canaryService.CreateCanaryAsync(
                 directory, template, sentinel.CanaryPrefix, cancellationToken);
-
-            // The decoy the agent just planted is the agent's own write. Marked before the monitor
-            // starts watching, so the creation event the watcher surfaces afterwards is dropped
-            // instead of being reported as "canary modified" -- a fresh install raises no alert.
-            _ownWrites?.Mark(created.FilePath, AgentOwnWrites.DeploymentGrace);
             deployed++;
         }
 
