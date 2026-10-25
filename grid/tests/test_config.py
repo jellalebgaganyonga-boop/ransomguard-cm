@@ -54,7 +54,7 @@ def test_default_values_applied(monkeypatch: pytest.MonkeyPatch) -> None:
     assert s.environment == "development"
     assert s.debug is False
     assert s.rate_limit_per_minute == 120
-    assert s.enrollment_otp_validity_minutes == 5
+    assert s.enrollment_otp_validity_minutes == 15
     assert s.default_tenant_id == "default"
 
 
