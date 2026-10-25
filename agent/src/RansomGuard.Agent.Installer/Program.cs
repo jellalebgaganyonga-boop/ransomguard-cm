@@ -4,7 +4,7 @@ using RansomGuard.Agent.Installer;
 // The double-click installer (ADR-027). Step 1 of 5: the stub reads the payload the console
 // appended to it. Exit codes are the contract of the acceptance test:
 //   0 payload read; with no argument: the agent installed and enrolled
-//   2 payload absent or corrupt: "retéléchargez l'installeur"
+//   2 payload absent or corrupt: "download the installer again"
 //   3 enrollment code expired
 //   4 the installation failed, or the agent did not enroll within 2 min
 //  64 bad usage
@@ -49,27 +49,27 @@ switch (args.Length > 0 ? args[0] : "")
 
 static int VerifyPayload(string self, string version, bool install)
 {
-    Console.WriteLine($"RansomGuard-CM — installeur {version}");
+    Console.WriteLine($"RansomGuard-CM — installer {version}");
     PayloadReadResult payload = InstallerPayload.Read(self);
     if (!payload.IsPresent)
     {
         Console.Error.WriteLine(payload.IsCorrupt
-            ? $"Installeur incomplet : {payload.Problem}. Retéléchargez-le depuis la console."
-            : $"Pas de charge utile : {payload.Problem}.");
+            ? $"Incomplete installer: {payload.Problem}. Download it again from the console."
+            : $"No payload: {payload.Problem}.");
         return 2;
     }
 
     InstallerConfig c = payload.Config!;
     Console.WriteLine($"GRID            : {c.GridBaseUrl}");
-    Console.WriteLine($"Établissement   : {c.TenantCode ?? "(non précisé)"}");
-    Console.WriteLine($"Code            : {Mask(c.Otp)}, expire le {c.OtpExpiresAt?.ToString("u") ?? "(non précisé)"}");
-    Console.WriteLine($"Paquet agent    : {payload.ZipLength:N0} octets, SHA-256 {c.AgentPackageSha256 ?? "(non précisé)"}");
-    Console.WriteLine($"Autorité GRID   : {(string.IsNullOrEmpty(c.GridCaPem) ? "absente" : "présente")}");
-    Console.WriteLine("Charge utile vérifiée (SHA-256).");
+    Console.WriteLine($"Organization    : {c.TenantCode ?? "(not given)"}");
+    Console.WriteLine($"Code            : {Mask(c.Otp)}, expires {c.OtpExpiresAt?.ToString("u") ?? "(not given)"}");
+    Console.WriteLine($"Agent package   : {payload.ZipLength:N0} bytes, SHA-256 {c.AgentPackageSha256 ?? "(not given)"}");
+    Console.WriteLine($"GRID authority  : {(string.IsNullOrEmpty(c.GridCaPem) ? "absent" : "present")}");
+    Console.WriteLine("Payload verified (SHA-256).");
 
     if (c.OtpExpiresAt is DateTimeOffset expires && expires < DateTimeOffset.UtcNow)
     {
-        Console.Error.WriteLine("Code expiré : générez-en un nouveau dans la console.");
+        Console.Error.WriteLine("Code expired: generate a new one in the console.");
         return 3;
     }
 
@@ -81,7 +81,7 @@ static int VerifyPayload(string self, string version, bool install)
     Console.WriteLine();
     int code = Installation.Run(self, payload);
     Console.WriteLine();
-    Console.WriteLine("Appuyez sur une touche pour fermer.");
+    Console.WriteLine("Press any key to close.");
     if (!Console.IsInputRedirected)
     {
         Console.ReadKey(intercept: true);

@@ -52,8 +52,8 @@ public sealed class Installation
         }
         catch (Exception ex)
         {
-            installation.Say($"ÉCHEC : {ex.Message}");
-            installation.Say("Rien d'autre n'a été modifié après cette étape. Détail dans " + Path.Combine(DataDir, "logs", "install.log"));
+            installation.Say($"FAILED: {ex.Message}");
+            installation.Say("Nothing else was changed after this step. Details in " + Path.Combine(DataDir, "logs", "install.log"));
             log.WriteLine(ex.ToString());
             return 4;
         }
@@ -61,7 +61,7 @@ public sealed class Installation
 
     private int Execute()
     {
-        Say($"[1/6] Vérification du paquet ({_payload.ZipLength:N0} octets)");
+        Say($"[1/6] Checking the package ({_payload.ZipLength:N0} bytes)");
         string tempZip = Path.Combine(Path.GetTempPath(), $"RansomGuard-Agent-{Guid.NewGuid():N}.zip");
         try
         {
@@ -72,16 +72,16 @@ public sealed class Installation
                 string actual = Convert.ToHexString(SHA256.HashData(zip)).ToLowerInvariant();
                 if (!actual.Equals(_config.AgentPackageSha256, StringComparison.OrdinalIgnoreCase))
                 {
-                    throw new InvalidDataException($"le paquet ne correspond pas à son SHA-256 ({actual} ≠ {_config.AgentPackageSha256})");
+                    throw new InvalidDataException($"the package does not match its SHA-256 ({actual} != {_config.AgentPackageSha256})");
                 }
 
-                Say($"      SHA-256 du paquet vérifié : {actual}");
+                Say($"      package SHA-256 verified: {actual}");
             }
 
-            Say($"[2/6] Service existant");
+            Say($"[2/6] Existing service");
             StopAndDeleteExistingService();
 
-            Say($"[3/6] Extraction dans {InstallDir}");
+            Say($"[3/6] Extracting into {InstallDir}");
             if (Directory.Exists(InstallDir))
             {
                 Directory.Delete(InstallDir, recursive: true);
@@ -93,7 +93,7 @@ public sealed class Installation
             string settingsPath = Path.Combine(InstallDir, "appsettings.json");
             if (!File.Exists(exe) || !File.Exists(settingsPath))
             {
-                throw new InvalidDataException("le paquet ne contient pas RansomGuard.Agent.Service.exe et appsettings.json");
+                throw new InvalidDataException("the package does not contain RansomGuard.Agent.Service.exe and appsettings.json");
             }
 
             string version = FileVersionInfo.GetVersionInfo(Path.Combine(InstallDir, "RansomGuard.Agent.Service.dll")).ProductVersion ?? "inconnue";
@@ -107,21 +107,21 @@ public sealed class Installation
                 Directory.CreateDirectory(Path.Combine(DataDir, sub));
             }
 
-            Say($"      GRID {_config.GridBaseUrl}, poste {Environment.MachineName}, données {DataDir}");
+            Say($"      GRID {_config.GridBaseUrl}, workstation {Environment.MachineName}, data {DataDir}");
 
-            Say("[5/6] Autorité de certification du GRID");
+            Say("[5/6] The GRID's certificate authority");
             if (string.IsNullOrWhiteSpace(_config.GridCaPem))
             {
-                throw new InvalidDataException("la charge utile ne contient pas le certificat de l'autorité du GRID : l'agent ne pourrait pas lui faire confiance");
+                throw new InvalidDataException("the payload does not contain the GRID certificate authority: the agent could not trust it");
             }
 
             using (X509Certificate2 ca = CaTrust.Parse(_config.GridCaPem))
             {
                 bool added = CaTrust.EnsureTrusted(ca, StoreLocation.LocalMachine);
-                Say($"      {ca.Subject}, empreinte {ca.Thumbprint} : {(added ? "ajoutée au magasin racine de la machine" : "déjà présente, rien ajouté")}");
+                Say($"      {ca.Subject}, thumbprint {ca.Thumbprint}: {(added ? "added to the machine root store" : "already present, nothing added")}");
             }
 
-            Say("[6/6] Service Windows");
+            Say("[6/6] Windows service");
             // sc.exe wants "key=" and its value as two tokens; ArgumentList quotes a value with
             // spaces (the path, the display name) by itself. A single "binPath= \"…\"" token gets
             // re-quoted and sc misreads every field ("Invalid start= field", CI run 39658445948).
@@ -130,7 +130,7 @@ public sealed class Installation
             Sc("failure", ServiceName, "reset=", "86400", "actions=", "restart/60000/restart/120000/restart/300000");
             Sc("start", ServiceName);
             WaitForService(ServiceControllerStatus.Running, TimeSpan.FromSeconds(60));
-            Say("      Service démarré");
+            Say("      Service started");
 
             return WaitForEnrollment();
         }
@@ -152,11 +152,11 @@ public sealed class Installation
         using var existing = ServiceController.GetServices().FirstOrDefault(s => s.ServiceName.Equals(ServiceName, StringComparison.OrdinalIgnoreCase));
         if (existing is null)
         {
-            Say("      Aucun service existant");
+            Say("      No existing service");
             return;
         }
 
-        Say($"      Service {ServiceName} présent ({existing.Status}) : arrêt et suppression");
+        Say($"      Service {ServiceName} present ({existing.Status}): stopping and removing");
         if (existing.Status != ServiceControllerStatus.Stopped)
         {
             try
@@ -166,7 +166,7 @@ public sealed class Installation
             }
             catch (Exception ex) when (ex is InvalidOperationException or System.ServiceProcess.TimeoutException)
             {
-                Say($"      Arrêt non confirmé ({ex.Message}) ; suppression demandée quand même");
+                Say($"      Stop not confirmed ({ex.Message}); removal requested anyway");
             }
         }
 
@@ -185,7 +185,7 @@ public sealed class Installation
     {
         string stateFile = Path.Combine(DataDir, "data", "enrollment.json");
         DateTime deadline = DateTime.UtcNow + EnrollmentWait;
-        Say($"      Enrôlement auprès de {_config.GridBaseUrl} ({(int)EnrollmentWait.TotalSeconds} s au plus)…");
+        Say($"      Enrolling with {_config.GridBaseUrl} ({(int)EnrollmentWait.TotalSeconds} s at most)...");
         while (DateTime.UtcNow < deadline)
         {
             if (File.Exists(stateFile))
@@ -195,7 +195,7 @@ public sealed class Installation
                     using JsonDocument state = JsonDocument.Parse(File.ReadAllText(stateFile));
                     if (state.RootElement.TryGetProperty("AgentId", out JsonElement id) && !string.IsNullOrEmpty(id.GetString()))
                     {
-                        Say($"Poste enrôlé (agent {id.GetString()}). Il apparaît dans la console sous une minute.");
+                        Say($"Workstation enrolled (agent {id.GetString()}). It appears in the console within a minute.");
                         return 0;
                     }
                 }
@@ -209,7 +209,7 @@ public sealed class Installation
             {
                 if (service.Status != ServiceControllerStatus.Running)
                 {
-                    Say($"Le service s'est arrêté ({service.Status}). Voir {Path.Combine(DataDir, "logs")}.");
+                    Say($"The service stopped ({service.Status}). See {Path.Combine(DataDir, "logs")}.");
                     return 4;
                 }
             }
@@ -217,8 +217,8 @@ public sealed class Installation
             Thread.Sleep(2000);
         }
 
-        Say($"Le poste n'est pas enrôlé après {(int)EnrollmentWait.TotalSeconds} s : le GRID {_config.GridBaseUrl} est-il joignable depuis ce poste, le code est-il encore valide ?");
-        Say($"Le service tourne et réessaiera. Journal de l'agent : {Path.Combine(DataDir, "logs")}.");
+        Say($"The workstation is not enrolled after {(int)EnrollmentWait.TotalSeconds} s: can this workstation reach the GRID {_config.GridBaseUrl}, and is the code still valid?");
+        Say($"The service is running and will retry. Agent log: {Path.Combine(DataDir, "logs")}.");
         return 4;
     }
 
@@ -236,7 +236,7 @@ public sealed class Installation
         _log.WriteLine($"sc.exe {string.Join(' ', arguments)} -> {process.ExitCode}: {output.Trim()}");
         if (process.ExitCode != 0)
         {
-            throw new InvalidOperationException($"sc.exe {arguments[0]} {arguments.ElementAtOrDefault(1)} a échoué ({process.ExitCode}) : {output.Trim()}");
+            throw new InvalidOperationException($"sc.exe {arguments[0]} {arguments.ElementAtOrDefault(1)} failed ({process.ExitCode}): {output.Trim()}");
         }
     }
 

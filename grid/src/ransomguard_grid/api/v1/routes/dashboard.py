@@ -105,7 +105,7 @@ async def get_me(
         )
 
     if not user.is_active:
-        raise HTTPException(status_code=403, detail="Compte utilisateur désactivé")
+        raise HTTPException(status_code=403, detail="User account disabled")
 
     if user.tenant is None:
         raise HTTPException(status_code=500, detail="Configuration tenant invalide")
@@ -150,7 +150,7 @@ async def _fresh_user(current_user: User, db: AsyncSession) -> User:
     if user is None:
         raise HTTPException(status_code=401, detail="Utilisateur introuvable", headers={"WWW-Authenticate": "Bearer"})
     if not user.is_active:
-        raise HTTPException(status_code=403, detail="Compte utilisateur désactivé")
+        raise HTTPException(status_code=403, detail="User account disabled")
     if user.tenant is None or user.tenant.status != "active":
         raise HTTPException(status_code=403, detail="Tenant inactif ou suspendu")
     return user
@@ -203,7 +203,7 @@ async def change_my_password(
         await db.commit()  # the 403 that follows must not roll the evidence back
         raise HTTPException(status_code=403, detail="Mot de passe actuel incorrect")
     if body.new_password == body.current_password:
-        raise HTTPException(status_code=422, detail="Le nouveau mot de passe doit être différent de l'actuel")
+        raise HTTPException(status_code=422, detail="The new password must be different from the current one")
     user.hashed_password = hash_password(body.new_password)
     await _log_user_action(db, user=user, action_type="password_changed", target_type="user", target_id=user.id)
     await db.flush()
@@ -1219,7 +1219,7 @@ async def download_installer(
     )
     await db.flush()
 
-    filename = f"RansomGuard-CM-Installeur-{body.host}.exe"
+    filename = f"RansomGuard-CM-Installer-{body.host}.exe"
     return StreamingResponse(
         stream_installer(parts, config),
         media_type="application/vnd.microsoft.portable-executable",

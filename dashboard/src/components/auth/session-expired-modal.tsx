@@ -87,7 +87,7 @@ export function SessionExpiredModal({ onDismiss }: SessionExpiredModalProps) {
             margin: '0 0 8px',
           }}
         >
-          {t('auth.sessionExpired.title', 'Votre session a expiré')}
+          {t('auth.sessionExpired.title', 'Your session has expired')}
         </h2>
 
         <p
@@ -100,12 +100,12 @@ export function SessionExpiredModal({ onDismiss }: SessionExpiredModalProps) {
         >
           {t(
             'auth.sessionExpired.body',
-            "Vous avez été déconnecté après 30 minutes d'inactivité."
+            "You were logged out after 30 minutes of inactivity."
           )}
         </p>
 
         <Button variant="primary" onClick={onDismiss} className="w-full">
-          {t('auth.sessionExpired.cta', 'Se reconnecter')} ({countdown}s)
+          {t('auth.sessionExpired.cta', 'Sign in again')} ({countdown}s)
         </Button>
       </div>
     </div>

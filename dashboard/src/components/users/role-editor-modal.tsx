@@ -72,12 +72,12 @@ export function RoleEditorModal({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label={t('users.roles.title', 'Attribuer des rôles')}
+      aria-label={t('users.roles.title', 'Assign roles')}
       className="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-4"
     >
       <div className="w-full max-w-sm rounded-lg border border-border-default bg-elevated p-6 shadow-lg">
         <h2 className="mb-1 text-sm font-semibold text-text-primary">
-          {t('users.roles.title', 'Attribuer des rôles')}
+          {t('users.roles.title', 'Assign roles')}
         </h2>
         <p className="mb-4 font-mono text-xs text-text-tertiary">{userEmail}</p>
 
@@ -87,7 +87,7 @@ export function RoleEditorModal({
           <p className="text-xs text-text-secondary">
             {t(
               'users.roles.gapWarning',
-              "Les rôles actuels ne sont pas affichés (limitation backend connue). Cochez les rôles que cet utilisateur doit avoir — la liste ci-dessous remplacera l'intégralité des rôles existants.",
+              "Current roles are not shown (known backend limitation). Check the roles this user should have — the list below will replace all existing roles.",
             )}
           </p>
         </div>
@@ -95,7 +95,7 @@ export function RoleEditorModal({
         {/* Role checkboxes */}
         <fieldset className="mb-6 space-y-3">
           <legend className="mb-2 text-xs font-medium text-text-secondary">
-            {t('users.roles.chooseRoles', 'Sélectionnez les rôles :')}
+            {t('users.roles.chooseRoles', 'Select roles:')}
           </legend>
           {KNOWN_ROLE_NAMES.map((role) => (
             <label key={role} className="flex cursor-pointer items-center gap-3">
@@ -116,25 +116,25 @@ export function RoleEditorModal({
           <p className="mb-4 rounded-md bg-severity-critical-subtle px-3 py-2 text-xs text-severity-critical-on-subtle">
             {t(
               'users.roles.selfDemotionError',
-              'Vous ne pouvez pas retirer le rôle tenant_admin de votre propre compte.',
+              'You cannot remove the tenant_admin role from your own account.',
             )}
           </p>
         )}
 
         {mutation.error && (
           <p className="mb-4 rounded-md bg-severity-critical-subtle px-3 py-2 text-xs text-severity-critical-on-subtle">
-            {t('common.error', 'Une erreur est survenue')}
+            {t('common.error', 'An error occurred')}
           </p>
         )}
 
         <div className="flex justify-end gap-3">
           <Button variant="ghost" onClick={onClose} disabled={mutation.isPending}>
-            {t('common.cancel', 'Annuler')}
+            {t('common.cancel', 'Cancel')}
           </Button>
           <Button onClick={handleSubmit} disabled={mutation.isPending}>
             {mutation.isPending
-              ? t('common.loading', 'Chargement...')
-              : t('users.roles.submit', 'Enregistrer les rôles')}
+              ? t('common.loading', 'Loading...')
+              : t('users.roles.submit', 'Save roles')}
           </Button>
         </div>
       </div>

@@ -38,10 +38,10 @@ function AlertNotFound() {
     <div className="flex flex-col items-center justify-center gap-3 py-20 text-center">
       <FileQuestion className="size-10 text-text-secondary" aria-hidden="true" />
       <p className="font-semibold text-text-primary">
-        {t('alerts.notFound', 'Alerte non trouvée')}
+        {t('alerts.notFound', 'Alert not found')}
       </p>
       <Button variant="secondary" onClick={() => navigate('/alerts')}>
-        {t('alerts.backToList', 'Retour aux alertes')}
+        {t('alerts.backToList', 'Back to alerts')}
       </Button>
     </div>
   );
@@ -91,7 +91,7 @@ export function AlertDetailPage() {
         className="mb-4 flex items-center gap-1.5 text-sm text-primary hover:underline"
         onClick={() => navigate('/alerts')}
       >
-        <ChevronLeft className="size-3.5" /> {t('alerts.backToList', 'Retour aux alertes')}
+        <ChevronLeft className="size-3.5" /> {t('alerts.backToList', 'Back to alerts')}
       </button>
 
       {/* AC3.2.1: Header */}
@@ -100,7 +100,7 @@ export function AlertDetailPage() {
         <button onClick={handleCopyId} aria-label={t('alerts.copyId', "Copier l'ID")}>
           <Copy className="size-3" />
         </button>
-        {copied && <span className="text-success">{t('common.copied', 'Copié !')}</span>}
+        {copied && <span className="text-success">{t('common.copied', 'Copied!')}</span>}
       </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -109,7 +109,7 @@ export function AlertDetailPage() {
           {t(`status.${alert.status.toLowerCase()}`, alert.status)}
         </span>
         <span className="ml-auto text-xs text-text-secondary">
-          {t('alerts.detectedAt', 'Détecté')} {formatDistanceToNow(alert.detected_at)}
+          {t('alerts.detectedAt', 'Detected')} {formatDistanceToNow(alert.detected_at)}
         </span>
       </div>
 
@@ -165,7 +165,7 @@ export function AlertDetailPage() {
                     setCloseModalOpen(true);
                   }}
                 >
-                  {t('alerts.close', "Fermer l'incident")}
+                  {t('alerts.close', "Close incident")}
                 </Button>
                 <Button
                   variant="secondary"
@@ -185,14 +185,14 @@ export function AlertDetailPage() {
       {/* AC3.3.3 / role read_only_auditor — explicit notice */}
       {!perms.canAcknowledge && !perms.canClose && alert.status !== 'Resolved' && alert.status !== 'FalsePositive' && alert.status !== 'Suppressed' && (
         <div className="mb-6 flex items-center gap-2 rounded-lg bg-primary-subtle p-3 text-sm text-text-secondary">
-          {t('alerts.readOnlyNotice', 'Mode lecture seule — aucune action disponible')}
+          {t('alerts.readOnlyNotice', 'Read-only mode — no action available')}
         </div>
       )}
 
       {/* AC3.2.2: Inverted-pyramid narrative */}
       <div className="rounded-lg border border-border-subtle bg-elevated p-6 shadow-sm">
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-primary">
-          {t('alerts.whatHappened', "QUE S'EST-IL PASSÉ ?")}
+          {t('alerts.whatHappened', "WHAT HAPPENED?")}
         </h2>
         <p className="mb-4 max-w-2xl leading-relaxed text-text-primary">{alert.summary}</p>
 
@@ -203,7 +203,7 @@ export function AlertDetailPage() {
         {alert.confidence_score != null && (
           <div className="mb-6 flex items-center gap-3">
             <span className="text-xs text-text-secondary">
-              {t('alerts.confidence', 'Confiance de détection')}: {alert.confidence_score}%
+              {t('alerts.confidence', 'Detection confidence')}: {alert.confidence_score}%
             </span>
             <div className="h-1.5 w-40 overflow-hidden rounded-full bg-surface-muted">
               <div
@@ -218,7 +218,7 @@ export function AlertDetailPage() {
         {(alert.artifacts?.length ?? 0) > 0 && (
           <div className="mb-6 border-t border-border-subtle pt-5">
             <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-secondary">
-              {t('alerts.artifacts', 'Artefacts associés')}
+              {t('alerts.artifacts', 'Associated artifacts')}
             </h3>
             <ul className="space-y-1">
               {(alert.artifacts ?? []).map((a, i) => (
@@ -238,7 +238,7 @@ export function AlertDetailPage() {
               onClick={() => setShowRaw((v) => !v)}
             >
               {showRaw ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
-              {t('alerts.technicalDetails', 'Détails techniques')}
+              {t('alerts.technicalDetails', 'Technical details')}
             </button>
             {showRaw && (
               <pre className="mt-2 overflow-x-auto rounded bg-surface-inverse p-3 text-xs text-text-inverse">
@@ -267,7 +267,7 @@ export function AlertDetailPage() {
                         to: t(`status.${change.to_status.toLowerCase()}`, change.to_status),
                         defaultValue: `${change.from_status} → ${change.to_status}`,
                       })
-                    : t('alerts.created', 'Alerte créée')}
+                    : t('alerts.created', 'Alert created')}
                   {change.actor_name && (
                     <span className="text-text-secondary"> — {change.actor_name}</span>
                   )}

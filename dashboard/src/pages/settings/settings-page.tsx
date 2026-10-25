@@ -15,6 +15,7 @@ import { Label } from '@/components/ui/label';
 import { NotificationPreferencesPanel } from '@/components/settings/notification-preferences-panel';
 import { useMe, useUpdateMe, useChangePassword } from '@/hooks/use-me';
 import { useLanguage } from '@/hooks/use-language';
+import { FRENCH_ENABLED } from '@/i18n';
 import { useToast } from '@/lib/toast-context';
 import type { MeResponse } from '@/api/me';
 import { isLegacyNotificationsPath, tabFrom, type SettingsTab } from '@/lib/settings-tab';
@@ -119,9 +120,9 @@ function ProfileTab({ me }: { me: MeResponse }) {
           <form onSubmit={(e) => void save(e)} className="flex flex-wrap items-center gap-2">
             <Label htmlFor="full-name" className="sr-only">{t('settings.profile.name')}</Label>
             <Input id="full-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={200} className="max-w-xs" />
-            <Button type="submit" size="sm" disabled={mutation.isPending || !name.trim()}>{t('common.save', 'Enregistrer')}</Button>
+            <Button type="submit" size="sm" disabled={mutation.isPending || !name.trim()}>{t('common.save', 'Save')}</Button>
             <Button type="button" size="sm" variant="secondary" onClick={() => { setEditing(false); setName(me.full_name); }}>
-              {t('common.cancel', 'Annuler')}
+              {t('common.cancel', 'Cancel')}
             </Button>
           </form>
         ) : (
@@ -158,7 +159,8 @@ function LanguageTab({ me }: { me: MeResponse }) {
           className="min-h-[44px] rounded-md border border-border-default bg-canvas px-3 text-sm text-text-primary"
         >
           <option value="en">English</option>
-          <option value="fr">Français</option>
+          {/* Only offered when the build enables French; the console is English. */}
+          {FRENCH_ENABLED && <option value="fr">Français</option>}
         </select>
       </div>
       <p className="text-xs text-text-muted">

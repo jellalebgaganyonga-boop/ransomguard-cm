@@ -34,7 +34,7 @@ export function installerRequestBody({ host, otp, port = AGENT_CHANNEL_PORT }: I
 /** The file name the GRID chose (Content-Disposition), or the one it would have chosen. */
 export function installerFilename(contentDisposition: string | null | undefined, host: string): string {
   const match = /filename="?([^";]+)"?/i.exec(contentDisposition ?? '');
-  return match?.[1] ?? `RansomGuard-CM-Installeur-${host}.exe`;
+  return match?.[1] ?? `RansomGuard-CM-Installer-${host}.exe`;
 }
 
 /** Hands a blob to the browser as a file download. */

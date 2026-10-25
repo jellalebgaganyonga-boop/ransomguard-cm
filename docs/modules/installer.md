@@ -6,7 +6,7 @@
 ## What the installer does
 
 An administrator opens the console, clicks **Add agent**, downloads one file
-(`RansomGuard-CM-Installeur-<grid-host>.exe`, about 85 MB), carries it to the
+(`RansomGuard-CM-Installer-<grid-host>.exe`, about 85 MB), carries it to the
 hospital workstation, double-clicks. Windows prompts the SmartScreen "unknown
 publisher" warning and the UAC consent; after both, the installer unpacks the
 agent, writes `appsettings.json` with the enrollment code and GRID address
@@ -100,7 +100,7 @@ proves this on the published artefact before anything else: a bare stub exits
 `POST /api/v1/dashboard/agents/installer`, body `{otp, host, port}`.
 `tenant_admin` only, the code must belong to the caller's tenant and still be
 valid, else 404. Streams `Content-Disposition: attachment;
-filename="RansomGuard-CM-Installeur-<host>.exe"`. No cache. Logs
+filename="RansomGuard-CM-Installer-<host>.exe"`. No cache. Logs
 `installer_downloaded` to `UserActionLog` without the code. The code remains
 single-use: the downloaded file is one 5-minute, one-workstation ticket.
 

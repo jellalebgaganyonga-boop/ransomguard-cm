@@ -1,5 +1,6 @@
 import { Outlet } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { FRENCH_ENABLED, setLanguage } from '@/i18n';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -43,14 +44,17 @@ export function AuthLayout() {
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="sm" aria-label={t('header.language')}>
                 <Globe className="size-4" aria-hidden="true" />
-                {i18n.language?.toUpperCase().slice(0, 2) ?? 'FR'}
+                {i18n.language?.toUpperCase().slice(0, 2) ?? 'EN'}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={() => void i18n.changeLanguage('fr')}>
-                Français
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => void i18n.changeLanguage('en')}>
+              {/* French is only offered when the build enables it; the console is English. */}
+              {FRENCH_ENABLED && (
+                <DropdownMenuItem onSelect={() => void setLanguage('fr')}>
+                  Français
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem onSelect={() => void setLanguage('en')}>
                 English
               </DropdownMenuItem>
             </DropdownMenuContent>

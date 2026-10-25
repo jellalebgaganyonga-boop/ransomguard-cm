@@ -154,7 +154,7 @@ pwsh deployment/bench/prepare-vm-media.ps1 -VmName win
 
 ```
 [1/3] installer from the GRID
-installer     : ...\agent\packages\bench\media\RansomGuard-CM-Installeur-192.168.56.1.exe
+installer     : ...\agent\packages\bench\media\RansomGuard-CM-Installer-192.168.56.1.exe
 size          : 93,958,317 bytes
 sha256        : 24c8a2b86c046b57dfa388bea6ad8db95397421a59025c9c3062dc855b4a2ce9
 grid_base_url : https://192.168.56.1:443
@@ -172,7 +172,7 @@ The SHA-256 changes with every download: each file embeds its own code.
 
 1. Sign in to the VM.
 2. Open the DVD drive (usually `D:`). Read `LISEZ-MOI.txt`.
-3. Double-click `RansomGuard-CM-Installeur-192.168.56.1.exe`.
+3. Double-click `RansomGuard-CM-Installer-192.168.56.1.exe`.
 4. UAC: *Publisher: Unknown* → **Yes**. From a disc there is no SmartScreen step (no
    Mark-of-the-Web); from a browser download there is: *More info → Run anyway*.
 

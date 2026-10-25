@@ -69,17 +69,17 @@ export function UsersListPage() {
       <div className="mb-6 flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-text-primary">
-            {t('nav.users', 'Utilisateurs')}
+            {t('nav.users', 'Users')}
           </h1>
           <p className="mt-1 text-sm text-text-secondary">
             {total > 0
-              ? `${total} ${t('users.list.totalUsers', 'utilisateurs enregistrés')}`
+              ? `${total} ${t('users.list.totalUsers', 'registered users')}`
               : ''}
           </p>
         </div>
         <Button onClick={() => setModal({ kind: 'create' })}>
           <UserPlus className="size-4" aria-hidden="true" />
-          {t('users.createUser', 'Créer un utilisateur')}
+          {t('users.createUser', 'Create user')}
         </Button>
       </div>
 
@@ -87,7 +87,7 @@ export function UsersListPage() {
       <div className="rounded-lg border border-border-subtle bg-elevated shadow-sm">
         {isLoading && (
           <p className="py-10 text-center text-sm text-text-secondary">
-            {t('common.loading', 'Chargement...')}
+            {t('common.loading', 'Loading...')}
           </p>
         )}
 
@@ -95,14 +95,14 @@ export function UsersListPage() {
           <div className="py-10 text-center">
             <p className="mb-3 text-sm text-severity-critical">{t('common.error')}</p>
             <Button variant="ghost" size="sm" onClick={() => void refetch()}>
-              {t('common.retry', 'Réessayer')}
+              {t('common.retry', 'Retry')}
             </Button>
           </div>
         )}
 
         {!isLoading && !isError && users.length === 0 && (
           <p className="py-10 text-center text-sm text-text-secondary">
-            {t('users.list.empty', 'Aucun utilisateur trouvé')}
+            {t('users.list.empty', 'No users found')}
           </p>
         )}
 
@@ -116,7 +116,7 @@ export function UsersListPage() {
                     t('users.fullName', 'Nom complet'),
                     t('users.email', 'Email'),
                     t('users.status', 'Statut'),
-                    t('users.lastLogin', 'Dernière connexion'),
+                    t('users.lastLogin', 'Last login'),
                     t('alerts.list.col.actions', 'Actions'),
                   ].map((h) => (
                     <th
@@ -138,7 +138,7 @@ export function UsersListPage() {
                       {user.full_name}
                       {user.id === currentUserId && (
                         <span className="ml-2 rounded-full bg-primary-subtle px-2 py-0.5 text-xs text-primary">
-                          {t('users.list.you', 'vous')}
+                          {t('users.list.you', 'you')}
                         </span>
                       )}
                     </td>
@@ -155,7 +155,7 @@ export function UsersListPage() {
                       >
                         {user.is_active
                           ? t('users.active', 'Actif')
-                          : t('users.disabled', 'Désactivé')}
+                          : t('users.disabled', 'Disabled')}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-text-secondary">
@@ -170,10 +170,10 @@ export function UsersListPage() {
                           variant="ghost"
                           size="sm"
                           onClick={() => setModal({ kind: 'roles', user })}
-                          title={t('users.editRoles', 'Modifier les rôles')}
+                          title={t('users.editRoles', 'Roles')}
                         >
                           <Shield className="size-3.5" aria-hidden="true" />
-                          {t('users.editRoles', 'Rôles')}
+                          {t('users.editRoles', 'Roles')}
                         </Button>
 
                         {user.is_active && canDisable(user.id, currentUserId) && (
@@ -182,7 +182,7 @@ export function UsersListPage() {
                             size="sm"
                             onClick={() => setModal({ kind: 'disable', user })}
                           >
-                            {t('users.disable', 'Désactiver')}
+                            {t('users.disable', 'Disable')}
                           </Button>
                         )}
 
@@ -192,7 +192,7 @@ export function UsersListPage() {
                             size="sm"
                             onClick={() => setModal({ kind: 'enable', user })}
                           >
-                            {t('users.enable', 'Réactiver')}
+                            {t('users.enable', 'Enable')}
                           </Button>
                         )}
                       </div>
@@ -214,7 +214,7 @@ export function UsersListPage() {
             disabled={offset === 0}
             onClick={() => setOffset((o) => Math.max(0, o - PAGE_SIZE))}
           >
-            {t('common.previous', 'Précédent')}
+            {t('common.previous', 'Previous')}
           </Button>
           <span className="text-xs text-text-secondary">
             {t('common.page', 'Page {page} / {totalPages}')
@@ -227,7 +227,7 @@ export function UsersListPage() {
             disabled={offset + PAGE_SIZE >= total}
             onClick={() => setOffset((o) => o + PAGE_SIZE)}
           >
-            {t('common.next', 'Suivant')}
+            {t('common.next', 'Next')}
           </Button>
         </div>
       )}

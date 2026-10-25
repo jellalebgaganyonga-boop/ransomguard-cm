@@ -6,6 +6,7 @@
  */
 
 import { useTranslation } from 'react-i18next';
+import { setLanguage as applyLanguage } from '@/i18n';
 import { useUpdatePreferences } from '@/hooks/use-me';
 import { useToast } from '@/lib/toast-context';
 import { useUIStore } from '@/stores/ui.store';
@@ -23,7 +24,7 @@ export function useLanguage() {
   const choose = async (language: Language): Promise<void> => {
     try {
       await mutation.mutateAsync({ language });
-      await i18n.changeLanguage(language);
+      await applyLanguage(language);
       setLanguage(language);
       toast.success(t('settings.language.saved'));
     } catch {

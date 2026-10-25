@@ -29,6 +29,7 @@ import {
 import { useUIStore } from '@/stores/ui.store';
 import { useLogout } from '@/hooks/use-auth';
 import { useLanguage } from '@/hooks/use-language';
+import { FRENCH_ENABLED } from '@/i18n';
 import { useTheme } from '@/hooks/use-theme';
 import { formatDistanceToNow } from '@/lib/format-date';
 import type { MeResponse } from '@/api/me';
@@ -167,10 +168,13 @@ export function Header({ me }: HeaderProps) {
               <Settings className="size-4" aria-hidden="true" />
               {t('header.mySettings')}
             </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => void language.choose(language.other)} disabled={language.isPending}>
-              <Globe className="size-4" aria-hidden="true" />
-              {t('header.switchLanguage', { language: LANGUAGE_NAMES[language.other] })}
-            </DropdownMenuItem>
+            {/* The other language is only offered when the build enables French. */}
+            {FRENCH_ENABLED && (
+              <DropdownMenuItem onSelect={() => void language.choose(language.other)} disabled={language.isPending}>
+                <Globe className="size-4" aria-hidden="true" />
+                {t('header.switchLanguage', { language: LANGUAGE_NAMES[language.other] })}
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
             {/* AC1.2.1: single session logout */}
             <DropdownMenuItem

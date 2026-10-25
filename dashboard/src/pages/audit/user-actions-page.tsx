@@ -170,7 +170,7 @@ export function UserActionsPage() {
               onClick={() => setOffset(Math.max(0, offset - limit))}
               className="rounded border border-border-subtle px-3 py-1 disabled:opacity-50"
             >
-              {t('common.previous', 'Précédent')}
+              {t('common.previous', 'Previous')}
             </button>
             <button
               type="button"
@@ -178,7 +178,7 @@ export function UserActionsPage() {
               onClick={() => setOffset(offset + limit)}
               className="rounded border border-border-subtle px-3 py-1 disabled:opacity-50"
             >
-              {t('common.next', 'Suivant')}
+              {t('common.next', 'Next')}
             </button>
           </div>
         </div>

@@ -75,7 +75,7 @@ async def test_the_installer_is_the_stub_plus_the_package_the_configuration_and_
 
     assert response.status_code == 200, response.text
     assert response.headers["content-type"].startswith("application/vnd.microsoft.portable-executable")
-    assert response.headers["content-disposition"] == f'attachment; filename="RansomGuard-CM-Installeur-{HOST}.exe"'
+    assert response.headers["content-disposition"] == f'attachment; filename="RansomGuard-CM-Installer-{HOST}.exe"'
     assert int(response.headers["content-length"]) == len(response.content)
     assert response.headers["cache-control"] == "no-store"
 

@@ -60,14 +60,14 @@ export function AcknowledgeModal({ alertId, open, onOpenChange }: AcknowledgeMod
           <DialogDescription>
             {t(
               'alerts.ackModal.description',
-              'Vous allez vous assigner cette alerte.'
+              'You will assign this alert to yourself.'
             )}
           </DialogDescription>
         </DialogHeader>
 
         <div className="p-5">
           <Label htmlFor="ack-note">
-            {t('alerts.ackModal.noteLabel', 'Note (facultative, 0-500 caractères)')}
+            {t('alerts.ackModal.noteLabel', 'Note (optional, 0-500 characters)')}
           </Label>
           <Textarea
             id="ack-note"
@@ -85,7 +85,7 @@ export function AcknowledgeModal({ alertId, open, onOpenChange }: AcknowledgeMod
 
         <DialogFooter>
           <Button variant="secondary" onClick={() => onOpenChange(false)}>
-            {t('common.cancel', 'Annuler')}
+            {t('common.cancel', 'Cancel')}
           </Button>
           <Button
             variant="primary"

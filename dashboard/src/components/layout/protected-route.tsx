@@ -9,7 +9,7 @@
 // ============================================================
 
 import { useState, useCallback, useEffect } from 'react';
-import i18n from '@/i18n';
+import i18n, { setLanguage as applyLanguage } from '@/i18n';
 import { useUIStore } from '@/stores/ui.store';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/stores/auth.store';
@@ -65,7 +65,7 @@ function AuthenticatedRoute() {
   const storedLanguage = me?.preferences.language ?? null;
   useEffect(() => {
     if (storedLanguage && i18n.resolvedLanguage !== storedLanguage) {
-      void i18n.changeLanguage(storedLanguage);
+      void applyLanguage(storedLanguage);
       setLanguage(storedLanguage);
     }
   }, [storedLanguage, setLanguage]);

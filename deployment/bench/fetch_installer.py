@@ -70,7 +70,7 @@ def main() -> int:
 
     disposition = headers.get("Content-Disposition") or ""
     name = disposition.split('filename="')[1].rstrip('"') if 'filename="' in disposition \
-        else f"RansomGuard-CM-Installeur-{args.agent_host}.exe"
+        else f"RansomGuard-CM-Installer-{args.agent_host}.exe"
 
     # The stub refuses a payload whose trailer or SHA-256 is wrong; check it here first.
     if blob[-56:-48] != b"RGINST01":

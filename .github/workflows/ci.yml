@@ -117,6 +117,14 @@ jobs:
       - name: Production build
         run: npm run build
 
+      # The console is English (owner's decision, 2026-10-25). This reads what actually ships --
+      # the built bundle, not the source it came from -- so a French string that slipped past
+      # i18n fails here rather than in front of a jury. The French translations are their own
+      # chunk and are skipped by name: they are kept, they are simply not served to everyone.
+      - name: No French reaches a user
+        run: python ../scripts/check-no-french.py
+        working-directory: dashboard
+
       # Consumed by the CD workflow so the deployed bundle is byte-identical to
       # the one that passed the gate -- never rebuilt on the server.
       - uses: actions/upload-artifact@v4

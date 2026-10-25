@@ -115,7 +115,7 @@ export function AgentsListPage() {
             {t('nav.agents', 'Agents')}
           </h1>
           <p className="text-sm text-text-secondary">
-            {total} {t('agents.list.totalEndpoints', 'endpoints enregistrés')}
+            {total} {t('agents.list.totalEndpoints', 'registered endpoints')}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -167,17 +167,17 @@ export function AgentsListPage() {
       <div className="rounded-lg border border-border-subtle bg-elevated shadow-sm">
         {isLoading ? (
           <div className="py-20 text-center text-sm text-text-secondary">
-            {t('common.loading', 'Chargement...')}
+            {t('common.loading', 'Loading...')}
           </div>
         ) : isError ? (
           <div className="py-20 text-center text-sm text-error">
-            {t('common.error', 'Une erreur est survenue')}
+            {t('common.error', 'An error occurred')}
           </div>
         ) : agents.length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-20">
             <Server className="size-10 text-text-tertiary" aria-hidden="true" />
             <p className="text-sm text-text-secondary">
-              {t('agents.list.empty', 'Aucun agent enregistré')}
+              {t('agents.list.empty', 'No agents registered')}
             </p>
           </div>
         ) : (
@@ -186,7 +186,7 @@ export function AgentsListPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border-subtle text-left text-xs font-semibold uppercase tracking-wide text-text-secondary">
-                  <th className="px-4 py-3">{t('agents.hostname', 'Hôte')}</th>
+                  <th className="px-4 py-3">{t('agents.hostname', 'Host')}</th>
                   <th className="px-4 py-3">{t('agents.os', 'OS')}</th>
                   <th className="px-4 py-3">{t('agents.list.version', 'Version')}</th>
                   <th className="px-4 py-3">{t('posture.list.protection')}</th>
@@ -258,7 +258,7 @@ export function AgentsListPage() {
             disabled={offset === 0}
             onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
           >
-            {t('common.previous', 'Précédent')}
+            {t('common.previous', 'Previous')}
           </Button>
           <span>
             {t('common.page', { page: currentPage, totalPages }).replace('{page}', String(currentPage)).replace('{totalPages}', String(totalPages))}
@@ -268,7 +268,7 @@ export function AgentsListPage() {
             disabled={offset + PAGE_SIZE >= total}
             onClick={() => setOffset(offset + PAGE_SIZE)}
           >
-            {t('common.next', 'Suivant')}
+            {t('common.next', 'Next')}
           </Button>
         </div>
       )}
@@ -276,7 +276,7 @@ export function AgentsListPage() {
       {/* Last refresh hint */}
       {dataUpdatedAt > 0 && (
         <p className="mt-2 text-right text-xs text-text-secondary">
-          {t('agents.list.autoRefresh', 'Actualisation auto toutes les 30 s')}
+          {t('agents.list.autoRefresh', 'Auto-refresh every 30 s')}
         </p>
       )}
 
@@ -290,7 +290,7 @@ export function AgentsListPage() {
         >
           <div className="relative w-full max-w-lg rounded-xl bg-elevated p-6 shadow-xl">
             <button
-              aria-label={t('common.close', 'Fermer')}
+              aria-label={t('common.close', 'Close')}
               onClick={() => setShowProvision(false)}
               className="absolute right-4 top-4 text-text-secondary hover:text-text-primary"
             >

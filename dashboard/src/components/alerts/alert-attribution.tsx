@@ -17,23 +17,23 @@ export function AlertAttribution({ attribution, detectedAt }: { attribution: Att
   let body: ReactNode;
   switch (view.kind) {
     case 'pending':
-      body = <p className="text-text-secondary">{t('alerts.attribution.pending', 'Attribution en cours…')}</p>;
+      body = <p className="text-text-secondary">{t('alerts.attribution.pending', 'Attribution in progress…')}</p>;
       break;
     case 'not_received':
-      body = <p className="text-text-secondary">{t('alerts.attribution.notReceived', 'Attribution non reçue')}</p>;
+      body = <p className="text-text-secondary">{t('alerts.attribution.notReceived', 'Attribution not received')}</p>;
       break;
     case 'resolved':
       body = (
         <div>
           <p className="font-semibold text-text-primary">
-            {view.processName ?? t('alerts.attribution.unnamed', 'processus sans nom connu')}
+            {view.processName ?? t('alerts.attribution.unnamed', 'process with no known name')}
             {view.processId != null && (
               <span className="font-normal text-text-secondary"> — PID {view.processId}</span>
             )}
           </p>
           {view.createdAt && (
             <p className="text-xs text-text-secondary">
-              {t('alerts.attribution.startedAt', 'démarré le {when}', { when: formatDateTime(view.createdAt) })}
+              {t('alerts.attribution.startedAt', 'started {when}', { when: formatDateTime(view.createdAt) })}
             </p>
           )}
           {view.imagePath && <p className="mt-1 break-all font-mono text-xs text-text-secondary">{view.imagePath}</p>}
@@ -43,14 +43,14 @@ export function AlertAttribution({ attribution, detectedAt }: { attribution: Att
     case 'ambiguous':
       body = (
         <p className="text-text-primary">
-          {t('alerts.attribution.ambiguous', "Plusieurs processus ont écrit ce fichier : aucun n'est désigné")}
+          {t('alerts.attribution.ambiguous', "Several processes wrote this file: none is named")}
         </p>
       );
       break;
     default:
       body = (
         <p className="text-text-primary">
-          {t('alerts.attribution.unavailable', 'Processus non identifié')}
+          {t('alerts.attribution.unavailable', 'Process not identified')}
           {view.reason && (
             <span className="text-text-secondary"> — {t(`alerts.attribution.reason.${view.reason}`, view.reason)}</span>
           )}

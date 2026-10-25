@@ -81,20 +81,20 @@ public static class ModuleReasonCode
     /// <summary>
     /// Detects but cannot carry out an action its mode promises (USB GUARD in Strict: the key is
     /// ejected, the block on re-insertion does not exist, AGT-USB-001). Console labels:
-    /// FR « Blocage non implémenté », EN « Blocking not implemented ».
+    /// Console label: "Blocking not implemented".
     /// </summary>
     public const string ActionsNotImplemented = "actions_not_implemented";
 
     /// <summary>
     /// None of the configured folders exists, so the module watches nothing (e.g. under
     /// LocalSystem, %USERPROFILE% resolves to the system profile). Console labels:
-    /// FR « Aucun dossier surveillé », EN « No folder being watched ».
+    /// Console label: "No folder being watched".
     /// </summary>
     public const string NoWatchDirectory = "no_watch_directory";
 
     /// <summary>
     /// SENTINEL's periodic integrity check keeps failing; its real-time watchers still run.
-    /// Console labels: FR « Vérification d'intégrité en échec », EN « Integrity check failing ».
+    /// Console label: "Integrity check failing".
     /// </summary>
     public const string IntegrityCheckFailing = "integrity_check_failing";
 

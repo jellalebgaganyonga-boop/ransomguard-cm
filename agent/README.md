@@ -43,7 +43,7 @@ failure (integrity check failed, update failed, crash), `2` refused — nothing 
 ### Installing an endpoint: the double-click installer (ADR-027)
 
 From the console, **Agents → Add new agent**: an enrollment code (30 min, one use) and the button
-**Download the installer**. The file `RansomGuard-CM-Installeur-<grid host>.exe` embeds the agent
+**Download the installer**. The file `RansomGuard-CM-Installer-<grid host>.exe` embeds the agent
 package, the code, the GRID address and the GRID certificate authority's public certificate. On the
 endpoint, double-click:
 

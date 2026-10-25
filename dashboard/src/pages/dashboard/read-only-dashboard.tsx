@@ -39,13 +39,13 @@ export function ReadOnlyDashboard() {
         {t('dashboard.readonly.title', 'Vue auditeur')}
       </h1>
       <p className="mb-6 mt-1 text-sm text-text-secondary">
-        {t('dashboard.readonly.subtitle', 'Accès en lecture seule')}
+        {t('dashboard.readonly.subtitle', 'Read-only access')}
       </p>
 
       {/* AC2.4.1: Two KPI cards */}
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
         <KPICard
-          label={t('dashboard.readonly.kpi.alerts24h', 'Alertes dernières 24h')}
+          label={t('dashboard.readonly.kpi.alerts24h', 'Alerts last 24h')}
           value={summary?.alerts_24h ?? '—'}
           {...(summary
             ? { description: `${t('dashboard.readonly.kpi.critical', 'dont')} ${summary.critical_alerts_24h} ${t('severity.critical', 'critiques')}` }
@@ -54,7 +54,7 @@ export function ReadOnlyDashboard() {
         <KPICard
           label={t('dashboard.readonly.kpi.auditEntries', 'Journal derniers 7 jours')}
           value={auditWeek.data?.total ?? '—'}
-          description={t('dashboard.readonly.kpi.auditSub', "entrées d'audit")}
+          description={t('dashboard.readonly.kpi.auditSub', "audit entries")}
         />
       </div>
 
@@ -71,12 +71,12 @@ export function ReadOnlyDashboard() {
                 &#x1F4DC; {t('dashboard.readonly.auditBtn', "Consulter les journaux d'audit")}
               </p>
               <p className="text-sm text-text-secondary">
-                {t('dashboard.readonly.auditSub', 'Recherche, filtres par date, exportation CSV')}
+                {t('dashboard.readonly.auditSub', 'Search, date filters, CSV export')}
               </p>
             </div>
           </div>
           <span className="text-sm text-primary">
-            {t('common.access', 'Accéder →')}
+            {t('common.access', 'Access →')}
           </span>
         </button>
 
@@ -91,7 +91,7 @@ export function ReadOnlyDashboard() {
                 &#x1F6A8; {t('dashboard.readonly.alertsBtn', 'Consulter les alertes')}
               </p>
               <p className="text-sm text-text-secondary">
-                {t('dashboard.readonly.alertsSub', 'Lecture seule des alertes de sécurité')}
+                {t('dashboard.readonly.alertsSub', 'Read-only security alerts')}
               </p>
             </div>
           </div>
@@ -108,7 +108,7 @@ export function ReadOnlyDashboard() {
         <p className="text-sm text-text-secondary">
           {t(
             'dashboard.readonly.notice',
-            "Vous êtes connectée en mode auditeur. Aucune modification n'est possible."
+            "You are connected in auditor mode. No modifications are possible."
           )}
         </p>
       </div>

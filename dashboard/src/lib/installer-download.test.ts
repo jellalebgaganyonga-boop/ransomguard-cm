@@ -19,12 +19,12 @@ describe('installerRequestBody (ADR-027)', () => {
 
 describe('installerFilename', () => {
   it('takes the name the GRID chose', () => {
-    expect(installerFilename('attachment; filename="RansomGuard-CM-Installeur-grid.hopital.local.exe"', 'x'))
-      .toBe('RansomGuard-CM-Installeur-grid.hopital.local.exe');
+    expect(installerFilename('attachment; filename="RansomGuard-CM-Installer-grid.hopital.local.exe"', 'x'))
+      .toBe('RansomGuard-CM-Installer-grid.hopital.local.exe');
     expect(installerFilename('attachment; filename=plain.exe', 'x')).toBe('plain.exe');
   });
 
   it('falls back to the name the GRID would have chosen', () => {
-    expect(installerFilename(undefined, 'grid.hopital.local')).toBe('RansomGuard-CM-Installeur-grid.hopital.local.exe');
+    expect(installerFilename(undefined, 'grid.hopital.local')).toBe('RansomGuard-CM-Installer-grid.hopital.local.exe');
   });
 });

@@ -60,11 +60,11 @@ export function DisableEnableModal({
           <p className="mb-6 text-sm text-text-secondary">
             {t(
               'users.disableModal.selfErrorBody',
-              'Vous ne pouvez pas désactiver votre propre compte. Cette action est bloquée pour éviter tout verrouillage accidentel.',
+              'You cannot disable your own account. This action is blocked to prevent accidental lockout.',
             )}
           </p>
           <Button variant="secondary" className="w-full" onClick={onClose}>
-            {t('common.close', 'Fermer')}
+            {t('common.close', 'Close')}
           </Button>
         </div>
       </div>
@@ -100,30 +100,30 @@ export function DisableEnableModal({
           <div className="mb-4 flex items-start gap-2 rounded-md border border-severity-high-border bg-severity-high-subtle px-3 py-2">
             <AlertTriangle className="mt-0.5 size-4 shrink-0 text-severity-high" aria-hidden="true" />
             <p className="text-xs text-text-primary">
-              {t('users.disableModal.warning', "L'utilisateur ne pourra plus se connecter immédiatement.")}
+              {t('users.disableModal.warning', "The user will no longer be able to log in.")}
             </p>
           </div>
         )}
 
         <h2 className="mb-2 text-sm font-semibold text-text-primary">
-          {isDisable ? t('users.disableModal.title', 'Désactiver cet utilisateur ?') : t('users.enableModal.title', 'Réactiver cet utilisateur ?')}
+          {isDisable ? t('users.disableModal.title', 'Disable this user?') : t('users.enableModal.title', 'Enable this user?')}
         </h2>
         <p className="mb-6 text-sm text-text-secondary">
           <span className="font-mono font-semibold">{userEmail}</span>
           {isDisable
-            ? ` ${t('users.disableModal.body', 'sera immédiatement désactivé.')}`
-            : ` ${t('users.enableModal.body', 'pourra de nouveau se connecter.')}`}
+            ? ` ${t('users.disableModal.body', 'will be immediately disabled.')}`
+            : ` ${t('users.enableModal.body', 'will be able to log in again.')}`}
         </p>
 
         {mutation.error && (
           <p className="mb-4 rounded-md bg-severity-critical-subtle px-3 py-2 text-xs text-severity-critical-on-subtle">
-            {t('common.error', 'Une erreur est survenue')}
+            {t('common.error', 'An error occurred')}
           </p>
         )}
 
         <div className="flex justify-end gap-3">
           <Button variant="ghost" onClick={onClose} disabled={mutation.isPending}>
-            {t('common.cancel', 'Annuler')}
+            {t('common.cancel', 'Cancel')}
           </Button>
           <Button
             variant={isDisable ? 'danger' : 'primary'}
@@ -131,10 +131,10 @@ export function DisableEnableModal({
             disabled={mutation.isPending}
           >
             {mutation.isPending
-              ? t('common.loading', 'Chargement...')
+              ? t('common.loading', 'Loading...')
               : isDisable
-                ? t('users.disableModal.submit', 'Désactiver')
-                : t('users.enableModal.submit', 'Réactiver')}
+                ? t('users.disableModal.submit', 'Disable')
+                : t('users.enableModal.submit', 'Enable')}
           </Button>
         </div>
       </div>

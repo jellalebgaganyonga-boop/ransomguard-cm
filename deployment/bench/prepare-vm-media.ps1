@@ -63,7 +63,7 @@ if ($LASTEXITCODE -ne 0) { throw "fetch_installer.py failed ($LASTEXITCODE)" }
 
 Copy-Item (Join-Path $PSScriptRoot 'trigger-sentinel.ps1') $Stage
 Copy-Item (Join-Path $PSScriptRoot 'trigger-sentinel.cmd') $Stage
-$installer = (Get-ChildItem $Stage -Filter 'RansomGuard-CM-Installeur-*.exe' | Select-Object -First 1).Name
+$installer = (Get-ChildItem $Stage -Filter 'RansomGuard-CM-Installer-*.exe' | Select-Object -First 1).Name
 @"
 RansomGuard-CM -- demonstration bench
 

@@ -24,7 +24,7 @@ export function NotificationPreferencesPanel() {
   if (isError || !prefs) {
     return (
       <p role="alert" className="text-sm text-error">
-        {t('settings.notifications.loadFailed', 'Les préférences n’ont pas pu être lues.')}
+        {t('settings.notifications.loadFailed', 'The preferences could not be read.')}
       </p>
     );
   }
@@ -40,7 +40,7 @@ export function NotificationPreferencesPanel() {
       });
       toast.success(t('settings.notifications.saved'));
     } catch {
-      toast.error(t('settings.notifications.saveFailed', 'Préférence non enregistrée.'));
+      toast.error(t('settings.notifications.saveFailed', 'Preference not saved.'));
     }
   };
 

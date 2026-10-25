@@ -48,17 +48,17 @@ const CATEGORIES: { value: ResolutionCategory; labelKey: string; fallback: strin
   {
     value: 'true_positive_contained',
     labelKey: 'alerts.closeModal.category.tpContained',
-    fallback: 'Vrai positif — Contenu',
+    fallback: 'True positive — contained',
   },
   {
     value: 'true_positive_escalated',
     labelKey: 'alerts.closeModal.category.tpEscalated',
-    fallback: 'Vrai positif — Escaladé',
+    fallback: 'True positive — escalated',
   },
   {
     value: 'inconclusive',
     labelKey: 'alerts.closeModal.category.inconclusive',
-    fallback: 'Non concluant',
+    fallback: 'Inconclusive',
   },
 ];
 
@@ -98,13 +98,13 @@ export function CloseModal({ alertId, open, onOpenChange, preselectCategory }: C
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{t('alerts.closeModal.title', "Fermer l'incident")}</DialogTitle>
+          <DialogTitle>{t('alerts.closeModal.title', "Close incident")}</DialogTitle>
         </DialogHeader>
 
         <div className="flex flex-col gap-4 p-5">
           <div>
             <Label htmlFor="close-category">
-              {t('alerts.closeModal.categoryLabel', 'Catégorie de résolution')}{' '}
+              {t('alerts.closeModal.categoryLabel', 'Resolution category')}{' '}
               <span className="text-error">*</span>
             </Label>
             <Select
@@ -113,7 +113,7 @@ export function CloseModal({ alertId, open, onOpenChange, preselectCategory }: C
             >
               <SelectTrigger id="close-category" hasError={!categoryValid && category !== ''} className="mt-1.5">
                 <SelectValue
-                  placeholder={t('alerts.closeModal.categoryPlaceholder', 'Sélectionner...')}
+                  placeholder={t('alerts.closeModal.categoryPlaceholder', 'Select...')}
                 />
               </SelectTrigger>
               <SelectContent>
@@ -128,10 +128,10 @@ export function CloseModal({ alertId, open, onOpenChange, preselectCategory }: C
 
           <div>
             <Label htmlFor="close-notes">
-              {t('alerts.closeModal.notesLabel', 'Notes de résolution')}{' '}
+              {t('alerts.closeModal.notesLabel', 'Resolution notes')}{' '}
               <span className="text-error">*</span>{' '}
               <span className="font-normal text-text-tertiary">
-                ({t('alerts.closeModal.notesHint', '20-2000 caractères')})
+                ({t('alerts.closeModal.notesHint', '20-2000 characters')})
               </span>
             </Label>
             <Textarea
@@ -140,7 +140,7 @@ export function CloseModal({ alertId, open, onOpenChange, preselectCategory }: C
               onChange={(e) => setNotes(e.target.value)}
               placeholder={t(
                 'alerts.closeModal.notesPlaceholder',
-                "Détail de l'investigation et des actions prises..."
+                "Detail of the investigation and actions taken..."
               )}
               hasError={notes.length > 0 && !notesValid}
               className="mt-1.5"
@@ -149,7 +149,7 @@ export function CloseModal({ alertId, open, onOpenChange, preselectCategory }: C
             <div className="mt-1 flex justify-between text-xs">
               <span className={notes.length > 0 && notes.length < 20 ? 'text-warning' : 'text-text-tertiary'}>
                 {notes.length < 20 && notes.length > 0
-                  ? t('alerts.closeModal.minChars', { count: 20 - notes.length, defaultValue: `${20 - notes.length} caractères minimum` })
+                  ? t('alerts.closeModal.minChars', { count: 20 - notes.length, defaultValue: `${20 - notes.length} characters minimum` })
                   : ''}
               </span>
               <span className="text-text-tertiary">{notes.length} / 2000</span>
@@ -159,7 +159,7 @@ export function CloseModal({ alertId, open, onOpenChange, preselectCategory }: C
 
         <DialogFooter>
           <Button variant="secondary" onClick={() => onOpenChange(false)}>
-            {t('common.cancel', 'Annuler')}
+            {t('common.cancel', 'Cancel')}
           </Button>
           <Button
             variant="primary"
@@ -167,7 +167,7 @@ export function CloseModal({ alertId, open, onOpenChange, preselectCategory }: C
             isLoading={mutation.isPending}
             disabled={!formValid}
           >
-            {t('alerts.closeModal.submit', "Fermer l'incident")}
+            {t('alerts.closeModal.submit', "Close incident")}
           </Button>
         </DialogFooter>
       </DialogContent>

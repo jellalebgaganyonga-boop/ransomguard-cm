@@ -179,7 +179,7 @@ test.describe('Add agent — the double-click installer (ADR-027)', () => {
         status: 200,
         headers: {
           'content-type': 'application/vnd.microsoft.portable-executable',
-          'content-disposition': 'attachment; filename="RansomGuard-CM-Installeur-localhost.exe"',
+          'content-disposition': 'attachment; filename="RansomGuard-CM-Installer-localhost.exe"',
         },
         body: Buffer.from('MZ fake installer'),
       });
@@ -195,7 +195,7 @@ test.describe('Add agent — the double-click installer (ADR-027)', () => {
     await page.getByTestId('download-installer').click();
     const download = await downloadPromise;
 
-    expect(download.suggestedFilename()).toBe('RansomGuard-CM-Installeur-localhost.exe');
+    expect(download.suggestedFilename()).toBe('RansomGuard-CM-Installer-localhost.exe');
     // The agent channel's port, not the console's: see AGENT_CHANNEL_PORT.
     expect(sent).toEqual({ otp: 'RG-CAM-2026-X7K9P3', host: 'localhost', port: 443 });
     await expect(page.getByText(/Unknown publisher/)).toBeVisible(); // SmartScreen, said as such

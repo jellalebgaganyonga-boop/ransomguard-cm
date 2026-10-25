@@ -70,12 +70,12 @@ export function CreateUserModal({ onClose, onSuccess }: CreateUserModalProps) {
     <div
       role="dialog"
       aria-modal="true"
-      aria-label={t('users.createModal.title', 'Créer un utilisateur')}
+      aria-label={t('users.createModal.title', 'Create user')}
       className="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-4"
     >
       <div className="w-full max-w-md rounded-lg border border-border-default bg-elevated p-6 shadow-lg">
         <h2 className="mb-4 text-sm font-semibold text-text-primary">
-          {t('users.createModal.title', 'Créer un utilisateur')}
+          {t('users.createModal.title', 'Create user')}
         </h2>
 
         <form onSubmit={handleSubmit(onSubmit)} noValidate>
@@ -128,7 +128,7 @@ export function CreateUserModal({ onClose, onSuccess }: CreateUserModalProps) {
               className="w-full rounded-md border border-border-default bg-surface px-3 py-2 text-sm text-text-primary placeholder-text-placeholder focus:border-primary focus:outline-none"
             />
             <p className="mt-1 text-xs text-text-secondary">
-              {t('users.createModal.passwordHint', '8 caractères minimum')}
+              {t('users.createModal.passwordHint', 'Minimum 8 characters')}
             </p>
             {errors.password && (
               <p className="mt-1 text-xs text-severity-critical">{t('common.error')}</p>
@@ -138,7 +138,7 @@ export function CreateUserModal({ onClose, onSuccess }: CreateUserModalProps) {
           {/* Roles */}
           <fieldset className="mb-6">
             <legend className="mb-2 text-xs font-medium text-text-secondary">
-              {t('users.createModal.roles', 'Rôles initiaux (facultatif)')}
+              {t('users.createModal.roles', 'Initial roles (optional)')}
             </legend>
             <div className="space-y-2">
               {KNOWN_ROLE_NAMES.map((role) => (
@@ -159,18 +159,18 @@ export function CreateUserModal({ onClose, onSuccess }: CreateUserModalProps) {
 
           {mutation.error && (
             <p className="mb-4 rounded-md bg-severity-critical-subtle px-3 py-2 text-xs text-severity-critical-on-subtle">
-              {t('common.error', 'Une erreur est survenue')}
+              {t('common.error', 'An error occurred')}
             </p>
           )}
 
           <div className="flex justify-end gap-3">
             <Button type="button" variant="ghost" onClick={onClose} disabled={isSubmitting}>
-              {t('common.cancel', 'Annuler')}
+              {t('common.cancel', 'Cancel')}
             </Button>
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting
-                ? t('common.loading', 'Chargement...')
-                : t('users.createModal.submit', 'Créer')}
+                ? t('common.loading', 'Loading...')
+                : t('users.createModal.submit', 'Create')}
             </Button>
           </div>
         </form>

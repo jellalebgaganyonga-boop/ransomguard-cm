@@ -133,11 +133,11 @@ export function AuditLogPage() {
             {t('audit.title', 'Journal d\'audit')}
           </h1>
           <p className="mt-1 text-sm text-text-secondary">
-            {t('audit.subtitle', 'Intégrité du journal d\'audit — chaîne Ed25519 par agent')}
+            {t('audit.subtitle', 'Agent audit chain integrity — Ed25519 signed batches')}
           </p>
           {total > 0 && (
             <p className="mt-0.5 text-xs text-text-secondary">
-              {total} {t('audit.totalEntries', 'entrées')}
+              {total} {t('audit.totalEntries', 'entries')}
             </p>
           )}
         </div>
@@ -171,7 +171,7 @@ export function AuditLogPage() {
 
         <div className="flex-1 min-w-[160px]">
           <label htmlFor="audit-filter-after" className="mb-1 block text-xs font-medium text-text-secondary">
-            {t('audit.filterAfter', 'Reçu après')}
+            {t('audit.filterAfter', 'Received after')}
           </label>
           <input
             id="audit-filter-after"
@@ -184,7 +184,7 @@ export function AuditLogPage() {
 
         <div className="flex-1 min-w-[160px]">
           <label htmlFor="audit-filter-before" className="mb-1 block text-xs font-medium text-text-secondary">
-            {t('audit.filterBefore', 'Reçu avant')}
+            {t('audit.filterBefore', 'Received before')}
           </label>
           <input
             id="audit-filter-before"
@@ -197,11 +197,11 @@ export function AuditLogPage() {
 
         <div className="flex items-center gap-2">
           <Button size="sm" onClick={applyFilters}>
-            {t('common.search', 'Rechercher')}
+            {t('common.search', 'Search')}
           </Button>
           {hasActiveFilters && (
             <Button variant="ghost" size="sm" onClick={resetFilters}>
-              {t('common.resetFilters', 'Réinitialiser')}
+              {t('common.resetFilters', 'Reset filters')}
             </Button>
           )}
         </div>
@@ -211,7 +211,7 @@ export function AuditLogPage() {
       <div className="rounded-lg border border-border-subtle bg-elevated shadow-sm">
         {isLoading && (
           <p className="py-10 text-center text-sm text-text-secondary">
-            {t('common.loading', 'Chargement...')}
+            {t('common.loading', 'Loading...')}
           </p>
         )}
 
@@ -219,14 +219,14 @@ export function AuditLogPage() {
           <div className="py-10 text-center">
             <p className="mb-3 text-sm text-severity-critical">{t('common.error')}</p>
             <Button variant="ghost" size="sm" onClick={() => void refetch()}>
-              {t('common.retry', 'Réessayer')}
+              {t('common.retry', 'Retry')}
             </Button>
           </div>
         )}
 
         {!isLoading && !isError && items.length === 0 && (
           <p className="py-10 text-center text-sm text-text-secondary">
-            {t('audit.empty', 'Aucune entrée trouvée')}
+            {t('audit.empty', 'No entries found')}
           </p>
         )}
 
@@ -238,9 +238,9 @@ export function AuditLogPage() {
                 <tr className="border-b border-border-default">
                   {[
                     t('audit.col.agentId', 'Agent'),
-                    t('audit.col.sequenceNumber', 'Séquence'),
-                    t('audit.col.signingKeyId', 'Clé de signature'),
-                    t('audit.col.receivedAt', 'Reçu le'),
+                    t('audit.col.sequenceNumber', 'Sequence'),
+                    t('audit.col.signingKeyId', 'Signing key'),
+                    t('audit.col.receivedAt', 'Received'),
                   ].map((h) => (
                     <th
                       key={h}
@@ -266,7 +266,7 @@ export function AuditLogPage() {
                             <AlertTriangle className="size-3.5 shrink-0" aria-hidden="true" />
                             {t(
                               'audit.gapWarning',
-                              'Discontinuité détectée dans la séquence — entrées manquantes ou désordonnées.',
+                              'Sequence gap detected — entries are missing or out of order.',
                             )}
                           </div>
                         </td>
@@ -318,7 +318,7 @@ export function AuditLogPage() {
             disabled={offset === 0}
             onClick={() => setOffset((o) => Math.max(0, o - PAGE_SIZE))}
           >
-            {t('common.previous', 'Précédent')}
+            {t('common.previous', 'Previous')}
           </Button>
           <span className="text-xs text-text-secondary">
             {t('common.page', 'Page {page} / {totalPages}')
@@ -331,7 +331,7 @@ export function AuditLogPage() {
             disabled={offset + PAGE_SIZE >= total}
             onClick={() => setOffset((o) => o + PAGE_SIZE)}
           >
-            {t('common.next', 'Suivant')}
+            {t('common.next', 'Next')}
           </Button>
         </div>
       )}

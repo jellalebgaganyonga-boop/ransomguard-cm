@@ -40,10 +40,10 @@ function AgentNotFound() {
     <div className="flex flex-col items-center justify-center gap-3 py-20 text-center">
       <FileQuestion className="size-10 text-text-secondary" aria-hidden="true" />
       <p className="font-semibold text-text-primary">
-        {t('agents.detail.notFound', 'Agent non trouvé')}
+        {t('agents.detail.notFound', 'Agent not found')}
       </p>
       <Button variant="secondary" onClick={() => navigate('/agents')}>
-        {t('agents.detail.backToList', 'Retour aux agents')}
+        {t('agents.detail.backToList', 'Back to agents')}
       </Button>
     </div>
   );
@@ -76,7 +76,7 @@ export function AgentDetailPage() {
   if (isLoading) {
     return (
       <div className="py-20 text-center text-sm text-text-secondary">
-        {t('common.loading', 'Chargement...')}
+        {t('common.loading', 'Loading...')}
       </div>
     );
   }
@@ -98,7 +98,7 @@ export function AgentDetailPage() {
         onClick={() => navigate('/agents')}
       >
         <ChevronLeft className="size-3.5" />
-        {t('agents.detail.backToList', 'Retour aux agents')}
+        {t('agents.detail.backToList', 'Back to agents')}
       </button>
 
       {/* Header */}
@@ -190,7 +190,7 @@ export function AgentDetailPage() {
           <div className="rounded-lg border border-border-subtle bg-elevated p-6 shadow-sm">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-text-primary">
-                {t('agents.detail.recentAlerts', 'Alertes récentes')}
+                {t('agents.detail.recentAlerts', 'Recent alerts')}
               </h2>
               <Link
                 to={`/alerts?agent=${id}`}
@@ -201,7 +201,7 @@ export function AgentDetailPage() {
             </div>
             {!alertsData || alertsData.items.length === 0 ? (
               <p className="text-sm text-text-secondary">
-                {t('agents.detail.noAlerts', 'Aucune alerte pour cet agent')}
+                {t('agents.detail.noAlerts', 'No alerts for this agent')}
               </p>
             ) : (
               <ul className="space-y-2">
@@ -232,7 +232,7 @@ export function AgentDetailPage() {
       {activeTab === 'alerts' && (
         <div className="rounded-lg border border-border-subtle bg-elevated shadow-sm">
           <div className="border-b border-border-subtle px-4 py-3 text-sm font-semibold uppercase tracking-wide text-text-primary">
-            {t('agents.detail.allAlerts', 'Toutes les alertes')}
+            {t('agents.detail.allAlerts', 'All alerts')}
             {alertsData && (
               <span className="ml-2 font-normal text-text-secondary">
                 ({alertsData.total})
@@ -241,7 +241,7 @@ export function AgentDetailPage() {
           </div>
           {!alertsData || alertsData.items.length === 0 ? (
             <div className="py-12 text-center text-sm text-text-secondary">
-              {t('agents.detail.noAlerts', 'Aucune alerte pour cet agent')}
+              {t('agents.detail.noAlerts', 'No alerts for this agent')}
             </div>
           ) : (
             // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
@@ -249,8 +249,8 @@ export function AgentDetailPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border-subtle text-left text-xs font-semibold uppercase tracking-wide text-text-secondary">
-                    <th className="px-4 py-3">{t('alerts.list.col.detected', 'Détecté')}</th>
-                    <th className="px-4 py-3">{t('alerts.list.col.severity', 'Sévérité')}</th>
+                    <th className="px-4 py-3">{t('alerts.list.col.detected', 'Detected')}</th>
+                    <th className="px-4 py-3">{t('alerts.list.col.severity', 'Severity')}</th>
                     <th className="px-4 py-3">{t('alerts.list.col.status', 'Statut')}</th>
                     <th className="px-4 py-3">{t('alerts.list.col.module', 'Module')}</th>
                     <th className="px-4 py-3"></th>

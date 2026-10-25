@@ -89,7 +89,7 @@ export function AlertsListPage() {
           aria-hidden="true"
         />
         <Input
-          placeholder={t('alerts.list.searchPlaceholder', 'Rechercher (hôte...)')}
+          placeholder={t('alerts.list.searchPlaceholder', 'Search (hostname...)')}
           className="pl-9"
           defaultValue={filters.agent ?? ''}
           onChange={(e) => setFilter('agent', e.target.value)}
@@ -102,9 +102,9 @@ export function AlertsListPage() {
           className="rounded border border-border-default bg-canvas px-2 py-1 text-xs text-text-secondary"
           value={filters.severity ?? ''}
           onChange={(e) => setFilter('severity', e.target.value || undefined)}
-          aria-label={t('alerts.list.col.severity', 'Sévérité')}
+          aria-label={t('alerts.list.col.severity', 'Severity')}
         >
-          <option value="">{t('alerts.list.allSeverities', 'Toutes sévérités')}</option>
+          <option value="">{t('alerts.list.allSeverities', 'All severities')}</option>
           {SEVERITIES.map((s) => (
             <option key={s} value={s}>
               {t(`severity.${s.toLowerCase()}`, s)}
@@ -118,7 +118,7 @@ export function AlertsListPage() {
           onChange={(e) => setFilter('status', e.target.value || undefined)}
           aria-label={t('alerts.list.col.status', 'Statut')}
         >
-          <option value="">{t('alerts.list.allStatuses', 'Tous statuts')}</option>
+          <option value="">{t('alerts.list.allStatuses', 'All statuses')}</option>
           {STATUSES.map((s) => (
             <option key={s} value={s}>
               {t(`status.${s.toLowerCase()}`, s)}
@@ -131,7 +131,7 @@ export function AlertsListPage() {
             className="text-xs text-primary hover:underline"
             onClick={resetFilters}
           >
-            {t('common.resetFilters', 'Réinitialiser les filtres')}
+            {t('common.resetFilters', 'Reset filters')}
           </button>
         )}
       </div>
@@ -176,7 +176,7 @@ export function AlertsListPage() {
             {isLoading && (
               <tr>
                 <td colSpan={6} className="px-3 py-8 text-center text-sm text-text-secondary">
-                  {t('common.loading', 'Chargement...')}
+                  {t('common.loading', 'Loading...')}
                 </td>
               </tr>
             )}
@@ -188,17 +188,17 @@ export function AlertsListPage() {
                   <div className="flex flex-col items-center gap-3 text-center">
                     <Shield className="size-9 text-text-tertiary" aria-hidden="true" />
                     <p className="font-semibold text-text-primary">
-                      {t('alerts.list.empty.title', 'Aucune alerte ne correspond à vos filtres')}
+                      {t('alerts.list.empty.title', 'No alerts match your filters')}
                     </p>
                     <p className="text-sm text-text-secondary">
                       {t(
                         'alerts.list.empty.body',
-                        "Essayez d'élargir votre recherche ou de réinitialiser les filtres."
+                        "Try widening your search or resetting filters."
                       )}
                     </p>
                     {hasActiveFilters && (
                       <Button variant="secondary" size="sm" onClick={resetFilters}>
-                        {t('common.resetFilters', 'Réinitialiser les filtres')}
+                        {t('common.resetFilters', 'Reset filters')}
                       </Button>
                     )}
                   </div>
@@ -275,7 +275,7 @@ export function AlertsListPage() {
             onClick={() => setFilter('offset', Math.max(0, offset - limit))}
             className="flex items-center gap-1 disabled:opacity-40"
           >
-            <ChevronLeft className="size-4" /> {t('common.previous', 'Précédent')}
+            <ChevronLeft className="size-4" /> {t('common.previous', 'Previous')}
           </button>
           <span className="font-medium">
             {t('common.page', { page: currentPage, totalPages, defaultValue: `Page ${currentPage} / ${totalPages}` })}
@@ -285,7 +285,7 @@ export function AlertsListPage() {
             onClick={() => setFilter('offset', offset + limit)}
             className="flex items-center gap-1 disabled:opacity-40"
           >
-            {t('common.next', 'Suivant')} <ChevronRight className="size-4" />
+            {t('common.next', 'Next')} <ChevronRight className="size-4" />
           </button>
         </div>
       )}

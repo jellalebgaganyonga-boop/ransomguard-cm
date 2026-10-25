@@ -17,7 +17,7 @@ export const MOCK_ME_ANALYST = {
   is_active: true,
   tenant: {
     id: '650e8400-e29b-41d4-a716-446655440001',
-    name: 'Hôpital Régional de Yaoundé',
+    name: 'Yaounde Regional Hospital',
     status: 'active' as const,
   },
   roles: ['security_analyst'],

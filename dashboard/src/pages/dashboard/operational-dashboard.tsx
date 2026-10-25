@@ -47,9 +47,9 @@ function AgentRow({ agent }: { agent: AgentItem }) {
   const navigate = useNavigate();
   const statusLabel: Record<string, string> = {
     active: t('status.active', 'Actif'),
-    provisioned: t('status.provisioned', 'Provisionné'),
-    disconnected: t('status.disconnected', 'Déconnecté'),
-    decommissioned: t('status.decommissioned', 'Désactivé'),
+    provisioned: t('status.provisioned', 'Provisioned'),
+    disconnected: t('status.disconnected', 'Disconnected'),
+    decommissioned: t('status.decommissioned', 'Decommissioned'),
   };
 
   return (
@@ -117,7 +117,7 @@ export function OperationalDashboard() {
   return (
     <div>
       <h1 className="text-2xl font-semibold text-text-primary">
-        {t('dashboard.ops.title', 'Console opérationnelle')}
+        {t('dashboard.ops.title', 'Operational console')}
       </h1>
       <p className="mb-6 mt-1 text-xs text-text-secondary">
         &#x2318;K {t('dashboard.ops.commandHint', 'pour la palette de commandes')}
@@ -130,7 +130,7 @@ export function OperationalDashboard() {
           <p className="text-sm text-text-primary">
             {t('dashboard.ops.staleWarning', {
               count: staleCount,
-              defaultValue: `${staleCount} agents n'ont pas envoyé de heartbeat depuis plus d'1 heure`,
+              defaultValue: `${staleCount} agents have sent no heartbeat for more than an hour`,
             })}
           </p>
         </div>
@@ -146,7 +146,7 @@ export function OperationalDashboard() {
           },
           {
             n: staleCount,
-            label: t('dashboard.ops.agents.stale', 'obsolètes'),
+            label: t('dashboard.ops.agents.stale', 'stale'),
             color: 'var(--sys-color-status-stale)',
           },
           {
@@ -179,7 +179,7 @@ export function OperationalDashboard() {
               className="size-2 animate-pulse rounded-full bg-success"
               aria-hidden="true"
             />
-            {t('dashboard.ops.feed.refresh', 'Toutes les 15s')}
+            {t('dashboard.ops.feed.refresh', 'Every 15s')}
           </span>
         </div>
 
@@ -187,9 +187,9 @@ export function OperationalDashboard() {
         <div className="mb-4 flex gap-2">
           {(
             [
-              { key: 'all', label: t('common.all', 'Tous') },
+              { key: 'all', label: t('common.all', 'All') },
               { key: 'critical', label: t('severity.critical', 'Critique') },
-              { key: 'last_hour', label: t('dashboard.ops.feed.lastHour', 'Dernière heure') },
+              { key: 'last_hour', label: t('dashboard.ops.feed.lastHour', 'Last hour') },
             ] as const
           ).map((f) => (
             <button
@@ -218,7 +218,7 @@ export function OperationalDashboard() {
         <div>
           {alertList.length === 0 ? (
             <p className="py-6 text-center text-sm text-text-secondary">
-              {t('common.noResults', 'Aucun résultat')}
+              {t('common.noResults', 'No results')}
             </p>
           ) : (
             alertList.map((alert, i) => (
@@ -278,10 +278,10 @@ export function OperationalDashboard() {
             <thead>
               <tr className="border-b border-border-default">
                 {[
-                  t('agents.hostname', 'Hôte'),
+                  t('agents.hostname', 'Host'),
                   t('agents.os', 'OS'),
                   t('agents.heartbeat', 'Heartbeat'),
-                  t('agents.status', 'État'),
+                  t('agents.status', 'Status'),
                 ].map((h) => (
                   <th
                     key={h}

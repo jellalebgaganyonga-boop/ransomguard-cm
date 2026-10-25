@@ -203,10 +203,10 @@ export async function updateAlertStatus(
  */
 export function formatClosingNote(category: ResolutionCategory, notes: string): string {
   const categoryLabels: Record<ResolutionCategory, string> = {
-    false_positive: 'Faux positif',
-    true_positive_contained: 'Vrai positif — Contenu',
-    true_positive_escalated: 'Vrai positif — Escaladé',
-    inconclusive: 'Non concluant',
+    false_positive: 'False positive',
+    true_positive_contained: 'True positive — contained',
+    true_positive_escalated: 'True positive — escalated',
+    inconclusive: 'Inconclusive',
   };
   return `${categoryLabels[category]}: ${notes}`;
 }

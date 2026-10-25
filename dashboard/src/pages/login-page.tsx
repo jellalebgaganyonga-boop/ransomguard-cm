@@ -101,7 +101,7 @@ export function LoginPage() {
 
       {/* ── Tenant code field ── */}
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor="tenantCode">{t('auth.login.tenantCode', 'Code établissement')}</Label>
+        <Label htmlFor="tenantCode">{t('auth.login.tenantCode', 'Organization code')}</Label>
         <Input
           id="tenantCode"
           type="text"
@@ -177,7 +177,7 @@ export function LoginPage() {
         {capsLock && (
           <p className="flex items-center gap-1 text-xs text-warning" role="status">
             <AlertCircle className="size-3" aria-hidden="true" />
-            {t('auth.login.capsLockWarning', 'Verrouillage majuscules activé')}
+            {t('auth.login.capsLockWarning', 'Caps Lock is on')}
           </p>
         )}
       </div>

@@ -39,15 +39,15 @@ export function AlertResponse({ alert, role }: { alert: AlertDetail; role: Role 
     ? `${view.processName}${view.processId != null ? ` (PID ${view.processId})` : ''}`
     : view.processId != null
       ? `PID ${view.processId}`
-      : t('alerts.response.unnamedProcess', 'processus sans nom connu');
+      : t('alerts.response.unnamedProcess', 'process with no known name');
 
   let stateText: string;
   switch (view.state) {
     case 'suspended':
-      stateText = t('alerts.response.suspended', 'Processus suspendu : {who} — en attente de votre décision, rien ne reprend tout seul', { who });
+      stateText = t('alerts.response.suspended', 'Process suspended: {who} — waiting for your decision, nothing resumes by itself', { who });
       break;
     case 'resumed':
-      stateText = t('alerts.response.resumed', 'Processus repris sur votre demande : {who}', { who });
+      stateText = t('alerts.response.resumed', 'Process resumed at your request: {who}', { who });
       break;
     case 'suspend_failed':
       stateText = t('alerts.response.suspendFailed', 'Suspension impossible : {who} tourne encore ({reason})', {
@@ -55,12 +55,12 @@ export function AlertResponse({ alert, role }: { alert: AlertDetail; role: Role 
       });
       break;
     case 'isolation_recommended':
-      stateText = t('alerts.response.isolationRecommended', "Plusieurs canaris touchés sans processus désigné : isolez ce poste (l'agent ne le fait pas)");
+      stateText = t('alerts.response.isolationRecommended', "Several canaries written with no process named: isolate this endpoint (the agent does not)");
       break;
     default:
       stateText = alert.attribution?.state === 'resolved'
-        ? t('alerts.response.noneResolved', 'Aucune réponse automatique sur cette alerte')
-        : t('alerts.response.noneUnresolved', 'Aucune réponse possible : le processus n’est pas identifié, l’agent ne frappe pas au hasard');
+        ? t('alerts.response.noneResolved', 'No automatic response on this alert')
+        : t('alerts.response.noneUnresolved', 'No response possible: the process is not identified, the agent never acts on a guess');
   }
 
   const commandLabel = (type: string) =>
@@ -75,13 +75,13 @@ export function AlertResponse({ alert, role }: { alert: AlertDetail; role: Role 
   return (
     <div className="mb-6 border-t border-border-subtle pt-5" data-testid="alert-response" data-state={view.state}>
       <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-secondary">
-        {t('alerts.response.title', 'Réponse')}
+        {t('alerts.response.title', 'Response')}
       </h3>
       <p className="text-text-primary">{stateText}</p>
 
       {view.lastCommand && (
         <p className="mt-1 text-sm text-text-secondary" data-testid="alert-command-status" data-status={view.lastCommand.status}>
-          {t('alerts.response.commandLine', 'Commande « {command} » : {status}', {
+          {t('alerts.response.commandLine', 'Command "{command}": {status}', {
             command: commandLabel(view.lastCommand.type),
             status: t(`alerts.response.status.${view.lastCommand.status}`, view.lastCommand.status),
           })}
@@ -97,12 +97,12 @@ export function AlertResponse({ alert, role }: { alert: AlertDetail; role: Role 
             <>
               {view.canSuspend && (
                 <Button variant="primary" onClick={() => setConfirming('suspend_process')}>
-                  {t('alerts.response.suspendButton', 'Suspendre le processus détecté')}
+                  {t('alerts.response.suspendButton', 'Suspend the detected process')}
                 </Button>
               )}
               {view.canResume && (
                 <Button variant="secondary" onClick={() => setConfirming('resume_process')}>
-                  {t('alerts.response.resumeButton', 'Reprendre le processus')}
+                  {t('alerts.response.resumeButton', 'Resume the process')}
                 </Button>
               )}
             </>
@@ -114,7 +114,7 @@ export function AlertResponse({ alert, role }: { alert: AlertDetail; role: Role 
                   : t('alerts.response.confirmResume', 'Confirmer la reprise')}
               </Button>
               <Button variant="secondary" onClick={() => setConfirming(null)} disabled={mutation.isPending}>
-                {t('common.cancel', 'Annuler')}
+                {t('common.cancel', 'Cancel')}
               </Button>
             </>
           )}
@@ -123,7 +123,7 @@ export function AlertResponse({ alert, role }: { alert: AlertDetail; role: Role 
 
       {mutation.isError && (
         <p role="alert" className="mt-2 text-sm text-error">
-          {t('alerts.response.sendFailed', "La commande n'a pas pu être envoyée")}
+          {t('alerts.response.sendFailed', "The command could not be sent")}
         </p>
       )}
     </div>

@@ -367,9 +367,9 @@ jobs:
           @{ grid_base_url = 'https://grid.ci.invalid:8443'; otp = 'RG-CAM-2026-CITEST'; otp_expires_at = $expires; tenant_code = 'ci';
              agent_package_sha256 = $sha; grid_ca_pem = (Get-Content "$env:WORK\ca.crt" -Raw) } |
             ConvertTo-Json -Compress | Set-Content "$env:WORK\config.json" -Encoding utf8
-          & "$env:WORK\stub\RansomGuard-Installer.exe" --append "$env:WORK\stub\RansomGuard-Installer.exe" "$env:WORK\RansomGuard-Agent-win-x64.zip" "$env:WORK\config.json" "$env:WORK\RansomGuard-CM-Installeur-grid.ci.invalid.exe"
+          & "$env:WORK\stub\RansomGuard-Installer.exe" --append "$env:WORK\stub\RansomGuard-Installer.exe" "$env:WORK\RansomGuard-Agent-win-x64.zip" "$env:WORK\config.json" "$env:WORK\RansomGuard-CM-Installer-grid.ci.invalid.exe"
           if ($LASTEXITCODE -ne 0) { exit 1 }
-          Write-Host "installer: $((Get-Item "$env:WORK\RansomGuard-CM-Installeur-grid.ci.invalid.exe").Length) bytes"
+          Write-Host "installer: $((Get-Item "$env:WORK\RansomGuard-CM-Installer-grid.ci.invalid.exe").Length) bytes"
 
       - name: Double-click (no argument, no command typed)
         shell: pwsh
@@ -377,7 +377,7 @@ jobs:
           $desktop = [Environment]::GetFolderPath('Desktop'); $documents = [Environment]::GetFolderPath('MyDocuments')
           "USER_DESKTOP=$desktop" >> $env:GITHUB_ENV
           "USER_DOCUMENTS=$documents" >> $env:GITHUB_ENV
-          $out = & "$env:WORK\RansomGuard-CM-Installeur-grid.ci.invalid.exe" 2>&1 | Out-String
+          $out = & "$env:WORK\RansomGuard-CM-Installer-grid.ci.invalid.exe" 2>&1 | Out-String
           $code = $LASTEXITCODE
           Write-Host $out
           Write-Host "exit code: $code"

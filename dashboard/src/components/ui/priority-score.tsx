@@ -35,7 +35,7 @@ export function PriorityScore({ score, className }: PriorityScoreProps) {
         className
       )}
       role="img"
-      aria-label={`Score de priorité ${clamped} sur 100`}
+      aria-label={`Priority score ${clamped} out of 100`}
     >
       {clamped}
     </span>

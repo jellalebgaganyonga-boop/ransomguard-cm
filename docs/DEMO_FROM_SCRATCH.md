@@ -91,7 +91,7 @@ The script fetches a fresh installer from the GRID (code valid **5 minutes**), b
 ### A.3 Install the agent in the VM
 
 1. Open **This PC** → double-click the DVD (usually `D:`).
-2. Double-click **`RansomGuard-CM-Installeur-192.168.56.1.exe`**.
+2. Double-click **`RansomGuard-CM-Installer-192.168.56.1.exe`**.
 3. Windows → **Yes** on the UAC prompt (Publisher: Unknown — it's your own unsigned build).
 4. The installer runs 6 steps. Last line: **"Poste enrôlé (agent …). Il apparaît dans la console sous une minute."** — press any key.
 5. In the console: **Agents** → within ~60 s your new VM appears with protection **PARTIAL** (orange, honest since B4).
@@ -183,7 +183,7 @@ The console embeds the GRID address when you click **Download the installer**. T
 - Open the console on the physical machine's own name of this PC:
   - Tailscale: `http://100.68.173.117:5175` (if 5175 is bound to 0.0.0.0 too — see below)
   - LAN: `http://192.168.1.120:5175`
-- Sign in, click **Add agent**, **Download the installer**. The downloaded file will be named `RansomGuard-CM-Installeur-100.68.173.117.exe` (or the LAN IP, depending).
+- Sign in, click **Add agent**, **Download the installer**. The downloaded file will be named `RansomGuard-CM-Installer-100.68.173.117.exe` (or the LAN IP, depending).
 
 Or, if you want to drive the download from the host and carry the file to the physical machine, do it from the command line with the right host:
 

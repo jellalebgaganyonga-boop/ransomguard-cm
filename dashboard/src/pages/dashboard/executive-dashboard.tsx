@@ -44,12 +44,12 @@ function StatusCard({ critical24h, alerts24h }: { critical24h: number; alerts24h
           <p className="font-semibold text-severity-critical-on-subtle">
             {t('dashboard.exec.criticalStatus', {
               count: critical24h,
-              defaultValue: `${critical24h} incidents critiques requièrent votre attention`,
+              defaultValue: `${critical24h} critical incidents need your attention`,
             })}
           </p>
         </div>
         <Button variant="ghost" size="sm" onClick={() => navigate('/alerts')}>
-          {t('dashboard.exec.viewDetails', 'Voir les détails →')}
+          {t('dashboard.exec.viewDetails', 'View details →')}
         </Button>
       </div>
     );
@@ -66,7 +66,7 @@ function StatusCard({ critical24h, alerts24h }: { critical24h: number; alerts24h
         <p className="font-semibold text-severity-high">
           {t('dashboard.exec.highStatus', {
             count: alerts24h,
-            defaultValue: `${alerts24h} alertes à examiner`,
+            defaultValue: `${alerts24h} alerts to review`,
           })}
         </p>
       </div>
@@ -81,7 +81,7 @@ function StatusCard({ critical24h, alerts24h }: { critical24h: number; alerts24h
     >
       <Shield className="size-6 shrink-0 text-success" aria-hidden="true" />
       <p className="font-semibold text-text-primary">
-        {t('dashboard.exec.allNormal', 'Tous les systèmes normaux')}
+        {t('dashboard.exec.allNormal', 'All systems normal')}
       </p>
     </div>
   );
@@ -137,10 +137,10 @@ export function ExecutiveDashboard() {
   return (
     <div>
       <h1 className="text-2xl font-semibold text-text-primary">
-        {t('dashboard.exec.title', 'Tableau de bord exécutif')}
+        {t('dashboard.exec.title', 'Executive dashboard')}
       </h1>
       <p className="mb-6 mt-1 text-sm text-text-secondary">
-        {t('dashboard.exec.subtitle', "Vue d'ensemble de la sécurité de l'hôpital")}
+        {t('dashboard.exec.subtitle', "Hospital security overview")}
       </p>
 
       {/* AC2.2.1: Status card */}
@@ -185,7 +185,7 @@ export function ExecutiveDashboard() {
       <div className="mb-6 rounded-lg border border-border-subtle bg-elevated p-5 shadow-sm">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-text-secondary">
-            {t('dashboard.exec.recentAlerts', 'ALERTES RÉCENTES')}
+            {t('dashboard.exec.recentAlerts', 'RECENT ALERTS')}
           </h2>
           <button
             className="text-sm text-primary hover:underline"
@@ -196,7 +196,7 @@ export function ExecutiveDashboard() {
         </div>
         {alerts.length === 0 ? (
           <p className="py-4 text-center text-sm text-text-secondary">
-            {t('dashboard.exec.noAlerts', 'Aucune alerte récente')}
+            {t('dashboard.exec.noAlerts', 'No recent alerts')}
           </p>
         ) : (
           <div>
@@ -216,7 +216,7 @@ export function ExecutiveDashboard() {
           <div className="flex flex-col gap-2">
             <Button variant="secondary" className="w-full justify-start" onClick={() => navigate('/users')}>
               <Users className="size-4" aria-hidden="true" />
-              {t('dashboard.exec.manageUsers', 'Gérer les utilisateurs')}
+              {t('dashboard.exec.manageUsers', 'Manage users')}
             </Button>
             <Button variant="secondary" className="w-full justify-start" onClick={() => navigate('/audit')}>
               <ScrollText className="size-4" aria-hidden="true" />

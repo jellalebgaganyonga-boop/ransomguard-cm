@@ -54,27 +54,27 @@ describe('Close resolution notes validation (AC3.4.1)', () => {
 import { formatClosingNote } from '@/api/alerts';
 
 describe('formatClosingNote (AC3.4.1 format)', () => {
-  it('formats false_positive with French label', () => {
+  it('formats false_positive with its English label', () => {
     expect(formatClosingNote('false_positive', 'Test légitime confirmé')).toBe(
-      'Faux positif: Test légitime confirmé'
+      'False positive: Test légitime confirmé'
     );
   });
 
   it('formats true_positive_contained', () => {
     expect(
       formatClosingNote('true_positive_contained', 'Ransomware isolé et nettoyé')
-    ).toBe('Vrai positif — Contenu: Ransomware isolé et nettoyé');
+    ).toBe('True positive — contained: Ransomware isolé et nettoyé');
   });
 
   it('formats true_positive_escalated', () => {
     expect(formatClosingNote('true_positive_escalated', 'Escaladé au CERT')).toBe(
-      'Vrai positif — Escaladé: Escaladé au CERT'
+      'True positive — escalated: Escaladé au CERT'
     );
   });
 
   it('formats inconclusive', () => {
     expect(formatClosingNote('inconclusive', 'Preuves insuffisantes')).toBe(
-      'Non concluant: Preuves insuffisantes'
+      'Inconclusive: Preuves insuffisantes'
     );
   });
 });
