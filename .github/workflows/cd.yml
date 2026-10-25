@@ -124,6 +124,16 @@ jobs:
           New-Item -ItemType Directory -Force packages | Out-Null
           $version = [Diagnostics.FileVersionInfo]::GetVersionInfo((Resolve-Path publish/agent/RansomGuard.Agent.Service.dll)).ProductVersion
           "version=$version" >> $env:GITHUB_OUTPUT
+          # NSec.Cryptography -> libsodium -> vcruntime140.dll / msvcp140.dll / vcruntime140_1.dll
+          # (Visual C++ 2015-2022 Redistributable). Clean Windows 10 workstations do NOT ship these:
+          # without them, the agent service crashes in AuditLogSigner's type initializer with
+          # DllNotFoundException and sc.exe start fails with 1053 (observed on bench VM `win`
+          # on 2026-10-25). GitHub Actions `windows-latest` has them in System32, so copy them in
+          # before zipping. See deployment/grid/publish-local-installer.ps1 step [2b] for the
+          # same fix on the local-publish script.
+          foreach ($dll in 'vcruntime140.dll','msvcp140.dll','vcruntime140_1.dll') {
+            Copy-Item (Join-Path $env:WINDIR 'System32' $dll) publish/agent/ -Force
+          }
           $zip = "packages/RansomGuard-Agent-win-x64.zip"
           Compress-Archive -Path publish/agent/* -DestinationPath $zip -Force
           $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
