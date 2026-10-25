@@ -62,6 +62,28 @@ public sealed class AlertTypeContractTests
             UsbScanResultId = Guid.NewGuid(), Title = "t", Description = "d", Severity = "High", ActionTaken = "AlertOnly",
         }).AlertType;
 
+        // SENTINEL responses (ADR-026): the suspension, each way it can close, the escalation and
+        // the isolation advice. They were missing from both sides of this contract, so the alerts
+        // the console needs most -- the ones that say a suspended process is no longer suspended --
+        // were the only ones nothing checked.
+        var suspension = new SuspendedProcess
+        {
+            ProcessId = 1, ProcessCreatedAt = DateTime.UnixEpoch, CanaryPath = @"C:\canary.docx",
+            AlertId = Guid.NewGuid(), ClientMessageId = new string('a', 20), SuspendedAt = DateTime.UnixEpoch,
+        };
+
+        yield return AlertMapper.FromProcessSuspension(suspension).AlertType;
+
+        foreach (string close in typeof(AlertMapper.SuspensionClose)
+            .GetFields(BindingFlags.Public | BindingFlags.Static)
+            .Select(f => (string)f.GetRawConstantValue()!))
+        {
+            yield return AlertMapper.FromSuspensionClosed(suspension, close, "operator", DateTime.UnixEpoch).AlertType;
+        }
+
+        yield return AlertMapper.FromSuspensionEscalation(suspension, TimeSpan.FromMinutes(15), 1, DateTime.UnixEpoch).AlertType;
+        yield return AlertMapper.FromIsolationRecommended(Guid.NewGuid(), [@"C:\canary.docx"], DateTime.UnixEpoch).AlertType;
+
         // EXFIL WATCH: one per detection rule
         foreach (IExfilDetectionRule rule in Instances<IExfilDetectionRule>())
         {

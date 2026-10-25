@@ -278,7 +278,7 @@ public static class AlertMapper
     /// <param name="at">When.</param>
     public static AlertIngestRequest FromSuspensionClosed(SuspendedProcess suspension, string close, string by, DateTime at) => new()
     {
-        ClientMessageId = $"{DeterministicId(suspension.Id)}-{close}",
+        ClientMessageId = DeterministicId(suspension.Id, close),
         AlertType = close switch
         {
             SuspensionClose.Resumed => "SentinelProcessResumed",
@@ -316,7 +316,7 @@ public static class AlertMapper
     /// <summary>A suspended process waiting for a decision past the escalation delay (ADR-026, 2c). One per escalation.</summary>
     public static AlertIngestRequest FromSuspensionEscalation(SuspendedProcess suspension, TimeSpan age, int escalation, DateTime at) => new()
     {
-        ClientMessageId = $"{DeterministicId(suspension.Id)}-e{escalation}",
+        ClientMessageId = DeterministicId(suspension.Id, $"e{escalation}"),
         AlertType = "SentinelProcessSuspendedNoDecision",
         MitreTechniqueId = "T1486",
         Severity = "Critical",
@@ -360,6 +360,28 @@ public static class AlertMapper
     public static string DeterministicId(Guid id)
     {
         byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(id.ToString()));
+        return Convert.ToHexString(hash).ToLowerInvariant();
+    }
+
+    /// <summary>
+    /// Deterministic client_message_id for one of several alerts about the same Guid -- a suspension
+    /// that is resumed, then escalated, is one suspension but several alerts, and each needs its own
+    /// id or the GRID treats the second as a duplicate of the first.
+    ///
+    /// <para>
+    /// The discriminator goes into the hash, it is not appended to it. Appending overflowed: the hex
+    /// of SHA-256 is already the full 64 characters the GRID allows, so
+    /// <c>{hash}-process_resumed</c> was 72 and the GRID answered 422. Every closure and escalation
+    /// alert was refused -- which is why a resumed process stayed listed as suspended in the console
+    /// -- while the suspension alert itself, with a bare hash, went through. Hashing the pair keeps
+    /// the length at exactly 64 and the value still deterministic, so a resend is still a duplicate.
+    /// </para>
+    /// </summary>
+    /// <param name="id">The entity the alerts are about.</param>
+    /// <param name="discriminator">What distinguishes this alert from the others about it.</param>
+    public static string DeterministicId(Guid id, string discriminator)
+    {
+        byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes($"{id}|{discriminator}"));
         return Convert.ToHexString(hash).ToLowerInvariant();
     }
 

@@ -1,3 +1,4 @@
+using System.Reflection;
 using RansomGuard.Agent.Core.Communication;
 using RansomGuard.Agent.Core.Communication.Models;
 using RansomGuard.Agent.Core.Detection.ExfilWatch.Rules;
@@ -350,5 +351,90 @@ public sealed class AlertMapperTests
         };
 
         AlertMapper.FromCanaryAlert(alert).Details.ShouldBeEmpty();
+    }
+
+    // ===== Test 17: every client_message_id fits the GRID contract =====
+    //
+    // The GRID validates client_message_id as 10..64 characters (AlertIngestRequest schema) and
+    // stores it in String(64). The hex of SHA-256 is exactly 64, so the closure and escalation
+    // alerts, which appended a suffix to it, produced 66..77 characters and the GRID answered 422
+    // on every one of them: a process resumed on the console stayed listed as suspended, because
+    // the alert that says so never got in. These bounds are the GRID's, asserted here on the agent
+    // side so the next discriminator cannot overflow them unnoticed.
+    private const int GridClientMessageIdMin = 10;
+    private const int GridClientMessageIdMax = 64;
+
+    public static TheoryData<string, string> EverySuspensionMessageId()
+    {
+        var suspension = new SuspendedProcess
+        {
+            ProcessId = 3792,
+            ProcessCreatedAt = DateTime.UtcNow,
+            ProcessName = "cmd.exe",
+            CanaryPath = @"C:\Users\Public\Documents\0001_dossier_patient.docx",
+            AlertId = Guid.NewGuid(),
+            ClientMessageId = AlertMapper.DeterministicId(Guid.NewGuid()),
+            SuspendedAt = DateTime.UtcNow,
+        };
+
+        DateTime at = DateTime.UtcNow;
+        var data = new TheoryData<string, string>
+        {
+            { "suspended", AlertMapper.FromProcessSuspension(suspension).ClientMessageId },
+            { "escalation 1", AlertMapper.FromSuspensionEscalation(suspension, TimeSpan.FromMinutes(15), 1, at).ClientMessageId },
+            { "escalation 12", AlertMapper.FromSuspensionEscalation(suspension, TimeSpan.FromHours(3), 12, at).ClientMessageId },
+            { "isolation", AlertMapper.FromIsolationRecommended(Guid.NewGuid(), [@"C:\a.docx"], at).ClientMessageId },
+        };
+
+        // Every closure reason, read from the class so a new one is covered the day it is added.
+        foreach (string close in typeof(AlertMapper.SuspensionClose)
+            .GetFields(BindingFlags.Public | BindingFlags.Static)
+            .Select(f => (string)f.GetRawConstantValue()!))
+        {
+            data.Add(close, AlertMapper.FromSuspensionClosed(suspension, close, "operator", at).ClientMessageId);
+        }
+
+        return data;
+    }
+
+    [Theory]
+    [MemberData(nameof(EverySuspensionMessageId))]
+    public void Every_client_message_id_fits_what_the_Grid_accepts(string which, string clientMessageId)
+    {
+        clientMessageId.Length.ShouldBeInRange(
+            GridClientMessageIdMin,
+            GridClientMessageIdMax,
+            $"client_message_id for '{which}' is {clientMessageId.Length} characters; the GRID rejects it with 422");
+    }
+
+    [Fact]
+    public void The_alerts_about_one_suspension_each_get_their_own_id()
+    {
+        string[] ids = EverySuspensionMessageId().Select(row => (string)row[1]!).ToArray();
+
+        // Distinct, or the GRID would take the second alert for a duplicate of the first and the
+        // closure would be dropped as silently as it was rejected.
+        ids.ShouldBeUnique();
+    }
+
+    [Fact]
+    public void The_id_of_a_closure_is_the_same_every_time_it_is_built()
+    {
+        var suspension = new SuspendedProcess
+        {
+            Id = Guid.Parse("11111111-2222-3333-4444-555555555555"),
+            ProcessId = 3792,
+            ProcessCreatedAt = DateTime.UnixEpoch,
+            CanaryPath = @"C:\a.docx",
+            AlertId = Guid.NewGuid(),
+            ClientMessageId = "x".PadRight(20, 'x'),
+            SuspendedAt = DateTime.UnixEpoch,
+        };
+
+        // Idempotency: a resend after a restart must be recognised as the same message.
+        AlertMapper.FromSuspensionClosed(suspension, AlertMapper.SuspensionClose.Resumed, "a", DateTime.UnixEpoch)
+            .ClientMessageId
+            .ShouldBe(AlertMapper.FromSuspensionClosed(suspension, AlertMapper.SuspensionClose.Resumed, "b", DateTime.UtcNow)
+                .ClientMessageId);
     }
 }
