@@ -42,7 +42,7 @@ public sealed class MultiFormatCanaryTests : IDisposable
     public void Txt_generator_should_produce_content()
     {
         var gen = new TxtCanaryGenerator();
-        byte[] content = gen.Generate("dossier_patient");
+        byte[] content = gen.Generate("patient_record");
 
         content.Length.ShouldBeGreaterThan(100);
         gen.Extension.ShouldBe(".txt");
@@ -52,7 +52,7 @@ public sealed class MultiFormatCanaryTests : IDisposable
     public void Docx_generator_should_produce_valid_openxml()
     {
         var gen = new DocxCanaryGenerator();
-        byte[] content = gen.Generate("dossier_patient");
+        byte[] content = gen.Generate("patient_record");
 
         // .docx is a ZIP archive — verify it has valid ZIP structure
         content.Length.ShouldBeGreaterThan(100);
@@ -72,10 +72,10 @@ public sealed class MultiFormatCanaryTests : IDisposable
     }
 
     [Fact]
-    public void Docx_content_should_contain_french_medical_text()
+    public void Docx_content_reads_like_a_medical_record()
     {
         var gen = new DocxCanaryGenerator();
-        byte[] content = gen.Generate("dossier_patient");
+        byte[] content = gen.Generate("patient_record");
 
         // Extract the document.xml and check for medical content
         using var ms = new MemoryStream(content);
@@ -87,7 +87,7 @@ public sealed class MultiFormatCanaryTests : IDisposable
         using var reader = new StreamReader(docEntry!.Open());
         string xml = reader.ReadToEnd();
 
-        xml.ShouldContain("DOSSIER");
+        xml.ShouldContain("MEDICAL RECORD");
     }
 
     [Fact]

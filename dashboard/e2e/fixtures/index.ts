@@ -31,7 +31,7 @@ export const MOCK_ME = {
     email: 'admin@yde-hospital.cm',
     full_name: 'Admin E2E',
     is_active: true,
-    tenant: { id: TENANT_ID, name: 'Hôpital Régional de Yaoundé', status: 'active' },
+    tenant: { id: TENANT_ID, name: 'Yaounde Regional Hospital', status: 'active' },
     roles: ['tenant_admin'],
     last_login_at: '2026-06-21T12:00:00+00:00',
     preferences: { language: null, timezone: 'Africa/Douala' }, // no stored choice: the browser's language (en-US here)
@@ -41,7 +41,7 @@ export const MOCK_ME = {
     email: 'analyst@yde-hospital.cm',
     full_name: 'Analyste E2E',
     is_active: true,
-    tenant: { id: TENANT_ID, name: 'Hôpital Régional de Yaoundé', status: 'active' },
+    tenant: { id: TENANT_ID, name: 'Yaounde Regional Hospital', status: 'active' },
     roles: ['security_analyst'],
     last_login_at: '2026-06-21T11:00:00+00:00',
     preferences: { language: null, timezone: 'Africa/Douala' }, // no stored choice: the browser's language (en-US here)
@@ -51,7 +51,7 @@ export const MOCK_ME = {
     email: 'auditor@yde-hospital.cm',
     full_name: 'Auditeur E2E',
     is_active: true,
-    tenant: { id: TENANT_ID, name: 'Hôpital Régional de Yaoundé', status: 'active' },
+    tenant: { id: TENANT_ID, name: 'Yaounde Regional Hospital', status: 'active' },
     roles: ['read_only_auditor'],
     last_login_at: '2026-06-20T10:00:00+00:00',
     preferences: { language: null, timezone: 'Africa/Douala' }, // no stored choice: the browser's language (en-US here)
@@ -76,7 +76,7 @@ export const MOCK_ALERT_NEW = {
   status: 'New',
   detected_at: '2026-06-21T10:00:00+00:00',
   ingested_at: '2026-06-21T10:00:05+00:00',
-  summary: 'Processus suspect détecté sur le poste de travail cardio-01.',
+  summary: 'Suspicious process detected on workstation cardio-01.',
   confidence_score: null,
   artifacts: null,
   status_history: null,

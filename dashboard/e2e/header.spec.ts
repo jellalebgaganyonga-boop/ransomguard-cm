@@ -23,43 +23,38 @@ test.describe('Header — user menu', () => {
     await expect(page.getByRole('tab', { name: 'Profile' })).toHaveAttribute('aria-selected', 'true');
   });
 
-  test('the language item switches to the other language and stores it on the GRID', async ({ page }) => {
+  test('the user menu offers no way to leave English, and stays accessible', async ({ page }) => {
+    // The console is English (owner's decision, 2026-10-25). French is kept but is not offered:
+    // VITE_ENABLE_FRENCH is false, so the menu must not carry a language item at all. A console
+    // that can be switched to French by a stray click is the thing this guards against.
     await setupMocks(page, 'security_analyst');
     const sent: unknown[] = [];
-    let preferences = { ...MOCK_ME.security_analyst.preferences };
-    await page.route('**/api/v1/dashboard/me', (r) => r.fulfill({ status: 200, json: { ...MOCK_ME.security_analyst, preferences } }));
     await page.route('**/api/v1/dashboard/me/preferences', (r) => {
-      const body = r.request().postDataJSON() as { language: 'en' | 'fr' };
-      sent.push(body);
-      preferences = { ...preferences, ...body };
-      return r.fulfill({ status: 200, json: preferences });
+      sent.push(r.request().postDataJSON());
+      return r.fulfill({ status: 200, json: { language: 'en' } });
     });
     await loginAs(page, 'security_analyst');
 
     await page.getByTestId('user-menu').click();
-    await page.getByRole('menuitem', { name: 'Switch to Français' }).click();
-    await expect(page.getByTestId('toast')).toContainText('Langue enregistrée.');
-    await expect(page.getByTestId('user-menu')).toHaveAttribute('aria-label', 'Menu du compte');
-    // The menu that was just used is still unmounting; a click on the trigger during that time is
-    // swallowed (CI run 39693599525, chromium only) and the menu never reopens.
-    await expect(page.getByRole('menu')).toHaveCount(0);
-
-    await page.getByTestId('user-menu').click();
     const menu = page.getByRole('menu');
-    await expect(menu.getByRole('menuitem', { name: 'Passer en English' })).toBeVisible();
-    await expect(menu.getByRole('menuitem', { name: 'Mes paramètres' })).toBeVisible();
-    await expect(menu.getByRole('menuitem', { name: 'Se déconnecter', exact: true })).toBeVisible();
 
-    // The open menu on its own (Radix hides the rest of the page with aria-hidden while it is open,
-    // so a whole-page scan now would only report that), then the whole page once it is closed.
+    await expect(menu.getByRole('menuitem', { name: /Switch to/ })).toHaveCount(0);
+    await expect(menu.getByRole('menuitem', { name: /Passer en/ })).toHaveCount(0);
+    await expect(menu.getByRole('menuitem', { name: 'My settings' })).toBeVisible();
+    await expect(menu.getByRole('menuitem', { name: 'Sign out', exact: true })).toBeVisible();
+    await expect(page.getByTestId('user-menu')).toHaveAttribute('aria-label', 'Account menu');
+
+    // The open menu on its own (Radix hides the rest of the page with aria-hidden while it is
+    // open, so a whole-page scan now would only report that).
     const forbidden = (violations: { impact?: string | null }[]) =>
       violations.filter((v) => v.impact === 'critical' || v.impact === 'serious');
     const open = await new AxeBuilder({ page }).include('[role="menu"]').analyze();
     expect(forbidden(open.violations), `Menu a11y violations: ${JSON.stringify(open.violations, null, 2)}`).toEqual([]);
 
-    await menu.getByRole('menuitem', { name: 'Passer en English' }).click();
-    await expect(page.getByTestId('user-menu')).toHaveAttribute('aria-label', 'Account menu');
-    expect(sent).toEqual([{ language: 'fr' }, { language: 'en' }]);
+    // Nothing was stored: no language was chosen, because none could be.
+    expect(sent).toEqual([]);
+
+    await page.keyboard.press('Escape');
 
     // The page is scanned once the menu has gone: while it unmounts, Radix still keeps the rest of
     // the page aria-hidden, and a scan then reports every button of the page (CI run 39695870874).
@@ -69,15 +64,4 @@ test.describe('Header — user menu', () => {
     expect(forbidden(closed.violations), `Page a11y violations: ${JSON.stringify(closed.violations, null, 2)}`).toEqual([]);
   });
 
-  test('a language the GRID could not store is not applied, and the failure is said', async ({ page }) => {
-    await setupMocks(page, 'read_only_auditor');
-    await page.route('**/api/v1/dashboard/me/preferences', (r) => r.fulfill({ status: 503, json: { detail: 'down' } }));
-    await loginAs(page, 'read_only_auditor');
-
-    await page.getByTestId('user-menu').click();
-    await page.getByRole('menuitem', { name: 'Switch to Français' }).click();
-
-    await expect(page.getByTestId('toast')).toHaveAttribute('data-kind', 'error');
-    await expect(page.getByTestId('user-menu')).toHaveAttribute('aria-label', 'Account menu');
-  });
 });

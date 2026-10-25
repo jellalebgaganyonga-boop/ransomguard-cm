@@ -92,7 +92,7 @@ test.describe('Alert detail — security_analyst happy path', () => {
     await page.getByRole('option', { name: /true positive.*contained/i }).click();
 
     // Type resolution notes (min 20 chars)
-    const notes = 'Investigation complète : processus isolé et neutralisé avec succès.';
+    const notes = 'Investigation complete: process isolated and neutralised successfully.';
     await page.getByRole('textbox').fill(notes);
 
     // Submit

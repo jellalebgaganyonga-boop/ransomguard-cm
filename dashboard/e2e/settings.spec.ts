@@ -34,7 +34,7 @@ test.describe('Settings', () => {
     await expect(page.getByTestId('profile-name')).toHaveText('Auditeur E2E');
     const panel = page.getByRole('tabpanel');
     await expect(panel.getByText('auditor@yde-hospital.cm')).toBeVisible();
-    await expect(panel.getByText('Hôpital Régional de Yaoundé')).toBeVisible();
+    await expect(panel.getByText('Yaounde Regional Hospital')).toBeVisible();
 
     await page.getByRole('button', { name: 'Edit' }).click();
     await page.getByLabel('Display name').fill('  Auditrice E2E ');
@@ -49,31 +49,29 @@ test.describe('Settings', () => {
     expect(critical, `Critical/serious a11y violations: ${JSON.stringify(critical, null, 2)}`).toEqual([]);
   });
 
-  test('the language is stored on the GRID and applied at once', async ({ page }) => {
+  test('the Language tab offers English only', async ({ page }) => {
+    // The console is English (owner's decision, 2026-10-25). French is kept -- fr.json is still
+    // there and still loads if VITE_ENABLE_FRENCH is turned on -- but it is not offered, so the
+    // Settings tab must show one choice and storing a language must not be reachable from it.
     await setupMocks(page, 'security_analyst');
     await mockPrefs(page);
-    let sent: unknown = null;
-    let preferences = { ...MOCK_ME.security_analyst.preferences };
-    await page.route('**/api/v1/dashboard/me', (r) => r.fulfill({ status: 200, json: { ...MOCK_ME.security_analyst, preferences } }));
+    const sent: unknown[] = [];
     await page.route('**/api/v1/dashboard/me/preferences', (r) => {
-      sent = r.request().postDataJSON();
-      preferences = { ...preferences, ...(sent as object) };
-      return r.fulfill({ status: 200, json: preferences });
+      sent.push(r.request().postDataJSON());
+      return r.fulfill({ status: 200, json: { language: 'en' } });
     });
     await loginAs(page, 'security_analyst');
     await navigateTo(page, '/settings?tab=language');
 
     await expect(page.getByRole('tab', { name: 'Language' })).toHaveAttribute('aria-selected', 'true');
-    await page.getByRole('tabpanel').getByRole('combobox').selectOption('fr');
 
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Paramètres');
-    expect(sent).toEqual({ language: 'fr' });
-    await expect(page.getByTestId('toast')).toContainText('Langue enregistrée.');
-    await expect(page.getByText('Choix enregistré sur le GRID.')).toBeVisible();
+    const select = page.getByRole('tabpanel').getByRole('combobox');
+    await expect(select.getByRole('option')).toHaveCount(1);
+    await expect(select.getByRole('option', { name: 'English' })).toHaveCount(1);
 
-    // Stored on the GRID: a fresh load comes up in French before any click, in an English browser.
-    await page.reload();
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Paramètres');
+    // The page stays English, and nothing was stored because nothing could be chosen.
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Settings');
+    expect(sent).toEqual([]);
   });
 
   test('the bell leads every role to the notifications tab; a preference is stored on the GRID', async ({ page }) => {
