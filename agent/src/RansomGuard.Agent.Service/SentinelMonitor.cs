@@ -641,7 +641,14 @@ public sealed class SentinelMonitor : BackgroundService
                     // fresh install planted came back as a Critical attack on itself, each
                     // restoration produced another one, and SENTINEL ended up reporting a
                     // SUSTAINED ATTACK against a file only it had ever touched.
-                    if (_ownWrites.WasWrittenByAgent(record.FileName))
+                    // Only a write that names nobody, on a path the agent has just written
+                    // itself. PID 0 and 4 are the system's deferred writes -- the cache manager
+                    // flushing what some process wrote earlier, which is how the agent's own
+                    // canary writes come back (measured on the bench: written 17:51:28, reported
+                    // 17:51:46 as system_pid). A write that names a real process is never
+                    // dropped here, whatever path it is on: that is the writer SENTINEL exists to
+                    // suspend, and dropping it left a canary's attacker running.
+                    if (record.ProcessId is 0 or 4 && _ownWrites.WasWrittenByAgent(record.FileName))
                     {
                         continue;
                     }
