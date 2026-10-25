@@ -67,7 +67,9 @@ class Settings(BaseSettings):
     rate_limit_per_minute: int = Field(default=120, ge=1)
 
     # Agent enrollment
-    enrollment_otp_validity_minutes: int = Field(default=30, ge=5, le=1440)
+    # 5 minutes by default: the console shows the code live for an admin who is picking up the
+    # installer right now; a longer window would leave a usable enrollment token lying around.
+    enrollment_otp_validity_minutes: int = Field(default=5, ge=1, le=1440)
 
     # Email notifications (Mailjet SMTP relay)
     smtp_host: str = Field(default="in-v3.mailjet.com")

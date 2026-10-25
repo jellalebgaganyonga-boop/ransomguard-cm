@@ -88,7 +88,8 @@ async def test_the_installer_is_the_stub_plus_the_package_the_configuration_and_
     assert config["agent_package_sha256"] == PACKAGE_SHA
     assert config["grid_ca_pem"] == CA_PEM
     expires = datetime.fromisoformat(str(config["otp_expires_at"]))
-    assert before + timedelta(minutes=29) <= expires <= before + timedelta(minutes=31)
+    # 5-minute enrollment code (enrollment_otp_validity_minutes default), +/- 1 min slack for clock skew.
+    assert before + timedelta(minutes=4) <= expires <= before + timedelta(minutes=6)
 
     # Logged, without the code itself.
     db_session.expire_all()

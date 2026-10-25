@@ -52,7 +52,7 @@ proves this on the published artefact before anything else: a bare stub exits
 | Field | Required | Content |
 |---|---|---|
 | `grid_base_url` | yes | HTTPS URL agents will call (same host the console was opened on) |
-| `otp` | yes | 30-min enrollment code the console just generated |
+| `otp` | yes | 5-min enrollment code the console just generated |
 | `otp_expires_at` | yes | ISO-8601 UTC |
 | `tenant_code` | — | copied into `appsettings.json` for the log |
 | `agent_package_sha256` | — | hex, verified against the embedded zip before extraction |
@@ -102,7 +102,7 @@ proves this on the published artefact before anything else: a bare stub exits
 valid, else 404. Streams `Content-Disposition: attachment;
 filename="RansomGuard-CM-Installeur-<host>.exe"`. No cache. Logs
 `installer_downloaded` to `UserActionLog` without the code. The code remains
-single-use: the downloaded file is one 30-minute, one-workstation ticket.
+single-use: the downloaded file is one 5-minute, one-workstation ticket.
 
 ### Console flow
 

@@ -315,7 +315,7 @@
     },
     "provision": {
       "title": "Add new agent",
-      "subtitle": "An enrollment code is generated, valid for 30 minutes. Download the installer: it embeds this code, the GRID address and the agent package. On the endpoint, a double-click is all it takes.",
+      "subtitle": "An enrollment code is generated, valid for 5 minutes. Download the installer: it embeds this code, the GRID address and the agent package. On the endpoint, a double-click is all it takes.",
       "otpLabel": "Enrollment code",
       "expires": "— expires in {n} min",
       "copyOtp": "Copy the enrollment code",

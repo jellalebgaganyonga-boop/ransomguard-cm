@@ -1145,13 +1145,18 @@ async def provision_agent(
 ) -> ProvisionAgentResponse:
     """Generate a one-time enrollment token for a new agent. Admin only.
 
-    The OTP is valid for 30 minutes and can only be used once. install.ps1 writes it into the
-    agent's configuration; nobody copies it by hand. The response carries the SHA-256 of the
-    installer this GRID serves, which the console's install command checks before running it
-    (GRID-SEC-006).
+    Validity comes from `enrollment_otp_validity_minutes` (5 by default: short on purpose so a
+    code that is not used quickly is not left lying around). Single-use. install.ps1 writes it
+    into the agent's configuration; nobody copies it by hand. The response carries the SHA-256
+    of the installer this GRID serves, which the console's install command checks before running
+    it (GRID-SEC-006).
     """
+    settings = get_settings()
+    validity_minutes = settings.enrollment_otp_validity_minutes
     try:
-        otp_string = await EnrollmentOtpService(store).generate(tenant_id=user.tenant_id, validity_minutes=30)
+        otp_string = await EnrollmentOtpService(store).generate(
+            tenant_id=user.tenant_id, validity_minutes=validity_minutes,
+        )
     except SessionStoreUnavailableError:
         raise HTTPException(503, "Session store unavailable") from None
 
@@ -1162,7 +1167,9 @@ async def provision_agent(
     )
 
     return ProvisionAgentResponse(
-        otp=otp_string, expires_in_minutes=30, installer_sha256=installer_sha256(get_settings().agent_packages_dir)
+        otp=otp_string,
+        expires_in_minutes=validity_minutes,
+        installer_sha256=installer_sha256(settings.agent_packages_dir),
     )
 
 

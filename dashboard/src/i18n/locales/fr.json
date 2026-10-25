@@ -315,7 +315,7 @@
     },
     "provision": {
       "title": "Ajouter un nouvel agent",
-      "subtitle": "Un code d'enrôlement est généré, valable 30 minutes. Téléchargez l'installeur : il embarque ce code, l'adresse du GRID et le paquet de l'agent. Sur le poste, un double-clic suffit.",
+      "subtitle": "Un code d'enrôlement est généré, valable 5 minutes. Téléchargez l'installeur : il embarque ce code, l'adresse du GRID et le paquet de l'agent. Sur le poste, un double-clic suffit.",
       "otpLabel": "Code d'enrôlement",
       "expires": "— expire dans {n} min",
       "copyOtp": "Copier le code d'enrôlement",

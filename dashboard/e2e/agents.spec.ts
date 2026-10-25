@@ -167,7 +167,7 @@ test.describe('Agent detail — security_analyst RBAC (AC4.1.3)', () => {
 });
 
 test.describe('Add agent — the double-click installer (ADR-027)', () => {
-  const PROVISION = { otp: 'RG-CAM-2026-X7K9P3', expires_in_minutes: 30, installer_sha256: null };
+  const PROVISION = { otp: 'RG-CAM-2026-X7K9P3', expires_in_minutes: 5, installer_sha256: null };
 
   test('the GRID builds the installer for this code and this host; the browser saves it', async ({ page }) => {
     await setupMocks(page, 'tenant_admin');

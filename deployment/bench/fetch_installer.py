@@ -10,7 +10,7 @@ Credentials come from the environment and are required -- no default account:
     python fetch_installer.py --grid https://192.168.56.1:8443 --agent-host 192.168.56.1 \
         --agent-port 443 --ca ../grid/pki/ca.crt --out ./media
 
-The enrollment code inside the file is valid 30 minutes: install within that window.
+The enrollment code inside the file is valid 5 minutes: install within that window.
 Prints the file's path, size and SHA-256, and checks its RGINST01 trailer before saying OK.
 """
 

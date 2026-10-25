@@ -4,7 +4,7 @@
 
 .DESCRIPTION
     1. Downloads a double-click installer from the GRID (fetch_installer.py: same calls as the
-       console, TLS validated against the GRID's CA). Its enrollment code is valid 30 minutes.
+       console, TLS validated against the GRID's CA). Its enrollment code is valid 5 minutes.
     2. Builds an ISO with the installer, trigger-sentinel.ps1/.cmd and a LISEZ-MOI.txt.
     3. Inserts it into the VM's DVD drive (VirtualBox, works on a running VM).
 
@@ -69,8 +69,9 @@ RansomGuard-CM -- banc de demonstration / demo bench
 
 1. Double-cliquez / double-click: $installer
    Windows demande l'elevation (UAC, "Editeur : inconnu" / "Publisher: Unknown") : Oui / Yes.
-   Le code d'enrolement expire 30 minutes apres la preparation de ce disque.
-   The enrollment code expires 30 minutes after this disc was prepared.
+   Le code d'enrolement expire 5 minutes apres la preparation de ce disque.
+   The enrollment code expires 5 minutes after this disc was prepared.
+
 
 2. Attendez "Poste enrole" / wait for "enrolled". Le poste apparait dans la console.
 
@@ -117,4 +118,4 @@ Write-Host "[3/3] insert into $VmName"
 if ($LASTEXITCODE -ne 0) { throw "VBoxManage storageattach failed ($LASTEXITCODE)" }
 
 Write-Host ''
-Write-Host "Done. In the VM, open the DVD drive (usually D:) and follow LISEZ-MOI.txt, within 30 minutes."
+Write-Host "Done. In the VM, open the DVD drive (usually D:) and follow LISEZ-MOI.txt, within 5 minutes."
