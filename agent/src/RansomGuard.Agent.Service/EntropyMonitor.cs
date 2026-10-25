@@ -12,6 +12,7 @@ using Microsoft.EntityFrameworkCore;
 using RansomGuard.Agent.Core.Communication;
 using RansomGuard.Agent.Core.Detection.CrossModule;
 using RansomGuard.Agent.Core.Detection.Genealogy;
+using RansomGuard.Agent.Core.Detection.Sentinel.Etw;
 using RansomGuard.Agent.Core.Security.RateLimiting;
 
 namespace RansomGuard.Agent.Service;
@@ -43,6 +44,18 @@ public sealed class EntropyMonitor : BackgroundService
     private readonly TaskCompletionSource _watcherFault = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     /// <summary>
+    /// Who wrote the file ENTROPY just read (AGT-ATTR-001). Null in unit tests that build the
+    /// monitor by hand: an alert then carries no writer, as before.
+    /// </summary>
+    private readonly FileWriteAttributionCache? _attribution;
+
+    /// <summary>The fan-out the cache subscribes to; null means no attribution source.</summary>
+    private readonly FileIoFanout? _fanout;
+
+    /// <summary>The session, read for whether it is running when an attribution is decided.</summary>
+    private readonly EtwFileIoSession? _etwSession;
+
+    /// <summary>
     /// Initializes the entropy monitor.
     /// </summary>
     /// <param name="logger">Logger.</param>
@@ -60,6 +73,9 @@ public sealed class EntropyMonitor : BackgroundService
     /// </param>
     /// <param name="faultInjector">Development fault injection; null or the production one never stops anything.</param>
     /// <param name="profiles">The real user profiles that %EACHUSERPROFILE% expands to (AGT-PATH-001); null: the Windows registry.</param>
+    /// <param name="attribution">Names the process that wrote a file (AGT-ATTR-001); null leaves alerts without a writer.</param>
+    /// <param name="fanout">The session fan-out the cache subscribes to; null leaves the cache unfed.</param>
+    /// <param name="etwSession">The session, read for whether it is running; null means attribution answers etw_unavailable.</param>
     public EntropyMonitor(
         ILogger<EntropyMonitor> logger,
         IOptionsMonitor<AgentConfiguration> config,
@@ -73,8 +89,14 @@ public sealed class EntropyMonitor : BackgroundService
         IAlertForwardingQueue? alertQueue = null,
         TimeSpan? startupDelay = null,
         IModuleFaultInjector? faultInjector = null,
-        UserProfileEnumerator? profiles = null)
+        UserProfileEnumerator? profiles = null,
+        FileWriteAttributionCache? attribution = null,
+        FileIoFanout? fanout = null,
+        EtwFileIoSession? etwSession = null)
     {
+        _attribution = attribution;
+        _fanout = fanout;
+        _etwSession = etwSession;
         _logger = logger;
         _config = config.CurrentValue;
         _scopeFactory = scopeFactory;
@@ -161,6 +183,21 @@ public sealed class EntropyMonitor : BackgroundService
                 _watchers.Add(watcher);
             }
 
+            // AGT-ATTR-001: subscribe the attribution cache to the same kernel session SENTINEL
+            // opens, bounded to the folders actually being watched. Only the folders whose watcher
+            // was created are given: a folder that does not exist or was refused generates no event
+            // worth keeping. Without a fan-out or a cache, nothing is subscribed and an alert
+            // carries no writer, exactly as before.
+            if (_attribution is not null && _fanout is not null)
+            {
+                string[] watchedDirs = [.. _watchers.Select(w => w.Path)];
+                _attribution.SetWatchedDirectories(watchedDirs);
+                _fanout.Subscribe(_attribution.OnFileIo);
+                _logger.LogInformation(
+                    "ENTROPY attribution: reading the kernel FileIO session for {Count} folders; an alert can name the process that wrote the file",
+                    watchedDirs.Length);
+            }
+
             // Zero watcher is not "active": the module would see no modification at all.
             if (_watchers.Count == 0)
             {
@@ -217,6 +254,32 @@ public sealed class EntropyMonitor : BackgroundService
         finally
         {
             await StopModuleAsync(moduleCts, consumerTask);
+        }
+    }
+
+    /// <summary>
+    /// Names the process that wrote <paramref name="filePath"/>, or says why nobody is named
+    /// (AGT-ATTR-001). Never throws: a failed attribution must not cost the detection.
+    /// </summary>
+    private AttributionOutcome ResolveWriter(string filePath)
+    {
+        if (_attribution is null)
+        {
+            return new AttributionOutcome(AttributionState.Unavailable, Reason: AttributionReason.EtwUnavailable);
+        }
+
+        try
+        {
+            // The session running right now, not when the write happened: a session that has since
+            // stopped means the cache may be missing the record, and "could not see" is the honest
+            // answer rather than "saw nothing".
+            bool etwRunning = _etwSession?.State == EtwSessionState.Running;
+            return _attribution.Resolve(filePath, etwRunning);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "ENTROPY attribution failed for {FilePath}; the alert leaves without a writer", filePath);
+            return new AttributionOutcome(AttributionState.Unavailable, Reason: AttributionReason.NoWriteEvent);
         }
     }
 
@@ -351,15 +414,25 @@ public sealed class EntropyMonitor : BackgroundService
 
                 if (alert is not null)
                 {
+                    // AGT-ATTR-001: who wrote it. Decided before the alert leaves, so the GRID gets
+                    // the writer with the detection rather than in a later complement. The cache
+                    // answers "unavailable" with a reason far more often than it names somebody
+                    // (no ETW, a write by PID 4, two writers, a reused PID) -- and the alert says
+                    // which, rather than implying nobody touched the file.
+                    AttributionOutcome attribution = ResolveWriter(filePath);
+
                     // The GRID first (AGT-AUD-002), skipping Suppressed alerts: nothing local —
                     // database, audit — may delay or cancel the alert.
-                    var mapped = AlertMapper.FromEntropyAlert(alert);
+                    var mapped = AlertMapper.FromEntropyAlert(alert, attribution);
                     if (mapped is not null) _alertQueue?.TryEnqueue(mapped);
 
                     _logger.LogCritical(
-                        "ENTROPY ALERT: Rule {RuleId} ({RuleName}) on {FilePath} | Baseline: {Baseline:F2} Current: {Current:F2} Delta: {Delta:F2} | Severity: {Severity}",
+                        "ENTROPY ALERT: Rule {RuleId} ({RuleName}) on {FilePath} | Baseline: {Baseline:F2} Current: {Current:F2} Delta: {Delta:F2} | Severity: {Severity} | Writer: {Writer}",
                         alert.RuleId, alert.RuleName, filePath,
-                        alert.BaselineEntropy, alert.CurrentEntropy, alert.Delta, alert.Severity);
+                        alert.BaselineEntropy, alert.CurrentEntropy, alert.Delta, alert.Severity,
+                        attribution.State == AttributionState.Resolved
+                            ? $"{attribution.ProcessName} (PID {attribution.ProcessId})"
+                            : $"not named ({attribution.StateCode}{(attribution.Reason is null ? "" : "/" + attribution.Reason)})");
 
                     // From here the alert has left: its local record and its audit entry are
                     // completed even during a shutdown, so a sent detection never lacks its trace.
@@ -395,7 +468,10 @@ public sealed class EntropyMonitor : BackgroundService
                         }
                     }, CancellationToken.None);
 
-                    // Publish EntropySignal for cross-module correlation (fire-and-forget)
+                    // Publish EntropySignal for cross-module correlation (fire-and-forget).
+                    // The signal carries the attributed writer when there is one; 0 and empty keep
+                    // their old meaning -- "nobody named" -- so a consumer that correlates on PID
+                    // behaves exactly as before when the attribution could not resolve.
                     if (_eventBus is not null)
                     {
                         _ = _eventBus.PublishAsync(new EntropySignal
@@ -404,8 +480,8 @@ public sealed class EntropyMonitor : BackgroundService
                             SourceModule = "ENTROPY",
                             EmittedAt = DateTime.UtcNow,
                             FilePath = filePath,
-                            ProcessId = 0,
-                            ProcessName = string.Empty,
+                            ProcessId = attribution.ProcessId ?? 0,
+                            ProcessName = attribution.ProcessName ?? string.Empty,
                             EntropyValue = alert.CurrentEntropy,
                             FileSize = size,
                             EntropyAlertId = alert.Id

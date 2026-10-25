@@ -65,6 +65,12 @@ public sealed class SentinelMonitor : BackgroundService
     private readonly TimeProvider _time;
 
     /// <summary>
+    /// Lets ENTROPY read the same session (AGT-ATTR-001). Null in the unit tests that build the
+    /// monitor by hand: the canary filter is then handed straight to the session, as before.
+    /// </summary>
+    private readonly FileIoFanout? _fanout;
+
+    /// <summary>
     /// Initializes the SENTINEL monitor.
     /// </summary>
     /// <param name="logger">Logger.</param>
@@ -85,6 +91,7 @@ public sealed class SentinelMonitor : BackgroundService
     /// <param name="processTimes">Process creation times for the attribution; the OS by default (test seam).</param>
     /// <param name="profiles">The real user profiles that %EACHUSERPROFILE% expands to (AGT-PATH-001); null: the Windows registry.</param>
     /// <param name="responseEngine">The response (ADR-026): suspends the attributed writer. Required when Sentinel:Response:SuspendProcess is true.</param>
+    /// <param name="fanout">Dispatches the session's records to several readers (AGT-ATTR-001); null hands the canary filter straight to the session, as before.</param>
     public SentinelMonitor(
         ILogger<SentinelMonitor> logger,
         IOptionsMonitor<AgentConfiguration> config,
@@ -99,8 +106,10 @@ public sealed class SentinelMonitor : BackgroundService
         TimeProvider? time = null,
         ProcessCreationTimes? processTimes = null,
         UserProfileEnumerator? profiles = null,
-        CanaryResponseEngine? responseEngine = null)
+        CanaryResponseEngine? responseEngine = null,
+        FileIoFanout? fanout = null)
     {
+        _fanout = fanout;
         _response = responseEngine;
         _processTimes = processTimes ?? new ProcessCreationTimes();
         _profiles = profiles ?? UserProfileEnumerator.Windows;
@@ -223,7 +232,20 @@ public sealed class SentinelMonitor : BackgroundService
             if (sentinel.EtwEnabled && _etwSession is not null)
             {
                 await RefreshCanariesAsync(moduleToken);
-                _correlator.EtwRunning = _etwSession.Start(_etwFilter.OnFileIo, _processTimes.OnProcessStart);
+
+                // SENTINEL owns the session; it is not its only reader any more (AGT-ATTR-001).
+                // The canary filter is subscribed first and keeps receiving every record exactly
+                // as before; ENTROPY subscribes its attribution cache to the same fan-out. With no
+                // fan-out injected (unit tests construct the monitor directly) the filter is still
+                // handed straight to the session, so the behaviour is unchanged.
+                Action<FileIoRecord> onFileIo = _etwFilter.OnFileIo;
+                if (_fanout is not null)
+                {
+                    _fanout.Subscribe(_etwFilter.OnFileIo);
+                    onFileIo = _fanout.OnFileIo;
+                }
+
+                _correlator.EtwRunning = _etwSession.Start(onFileIo, _processTimes.OnProcessStart);
                 etwConsumerTask = ConsumeEtwAsync(moduleToken);
             }
 

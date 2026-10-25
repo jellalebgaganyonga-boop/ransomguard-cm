@@ -166,6 +166,13 @@ public static class ServiceRegistration
             TimeProvider.System,
             scopeFactory: sp.GetRequiredService<IServiceScopeFactory>()));
 
+        // One kernel FileIO session, several readers (AGT-ATTR-001). SENTINEL opens the session and
+        // subscribes its canary filter; ENTROPY subscribes the attribution cache. Both singletons,
+        // because they must be the same instances the two modules share.
+        services.AddSingleton<ProcessCreationTimes>();
+        services.AddSingleton<FileIoFanout>();
+        services.AddSingleton(sp => new FileWriteAttributionCache(sp.GetRequiredService<ProcessCreationTimes>()));
+
         // Rate limiting
         services.AddSingleton<RateLimiterFactory>();
 

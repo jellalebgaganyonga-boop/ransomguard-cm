@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using RansomGuard.Agent.Core.Communication.Models;
 using RansomGuard.Agent.Core.Detection.ExfilWatch.Rules;
+using RansomGuard.Agent.Core.Detection.Sentinel.Etw;
 using RansomGuard.Agent.Core.Persistence.Entities;
 
 namespace RansomGuard.Agent.Core.Communication;
@@ -48,11 +49,64 @@ public static class AlertMapper
     }
 
     /// <summary>Map an ENTROPY alert to an AlertIngestRequest.</summary>
-    public static AlertIngestRequest? FromEntropyAlert(EntropyAlert alert)
+    /// <param name="alert">The entropy detection.</param>
+    /// <param name="attribution">
+    /// Who wrote the file (AGT-ATTR-001). Null keeps the pre-attribution shape: the alert carries
+    /// no attribution_state and the console shows "process not identified". When given, the same
+    /// detail keys SENTINEL uses are written, so the GRID's _attribution_for() reads an ENTROPY
+    /// alert exactly as it reads a canary one -- no new server-side contract.
+    /// </param>
+    public static AlertIngestRequest? FromEntropyAlert(EntropyAlert alert, AttributionOutcome? attribution = null)
     {
         // Suppressed alerts are not forwarded to GRID
         if (string.Equals(alert.Severity, "Suppressed", StringComparison.OrdinalIgnoreCase))
             return null;
+
+        List<AlertDetailInput> details =
+        [
+            new AlertDetailInput { Key = "baseline_entropy", Value = alert.BaselineEntropy.ToString("F4") },
+            new AlertDetailInput { Key = "current_entropy", Value = alert.CurrentEntropy.ToString("F4") },
+            new AlertDetailInput { Key = "delta", Value = alert.Delta.ToString("F4") },
+            new AlertDetailInput { Key = "rule_id", Value = alert.RuleId.ToString() },
+        ];
+
+        string summary = $"Entropy spike on {alert.FilePath}: {alert.BaselineEntropy:F2} -> {alert.CurrentEntropy:F2} ({alert.RuleName})";
+
+        if (attribution is not null)
+        {
+            details.Add(new AlertDetailInput { Key = "attribution_state", Value = attribution.StateCode });
+            if (attribution.Reason is not null)
+            {
+                details.Add(new AlertDetailInput { Key = "attribution_reason", Value = attribution.Reason });
+            }
+
+            if (attribution.State == AttributionState.Resolved)
+            {
+                details.Add(new AlertDetailInput { Key = "process_id", Value = attribution.ProcessId!.Value.ToString() });
+                if (attribution.ProcessName is not null)
+                {
+                    details.Add(new AlertDetailInput { Key = "process_name", Value = attribution.ProcessName });
+                }
+
+                if (attribution.ImagePath is not null)
+                {
+                    details.Add(new AlertDetailInput { Key = "process_path", Value = attribution.ImagePath });
+                }
+
+                if (attribution.ProcessCreatedAtUtc is not null)
+                {
+                    details.Add(new AlertDetailInput
+                    {
+                        Key = "process_created_at",
+                        Value = attribution.ProcessCreatedAtUtc.Value.ToString("O"),
+                    });
+                }
+
+                // Named in the summary too: the console's list shows the summary alone, and "who"
+                // is the first thing an analyst looks for.
+                summary += $", written by {attribution.ProcessName ?? "?"} (PID {attribution.ProcessId})";
+            }
+        }
 
         return new AlertIngestRequest
         {
@@ -61,14 +115,8 @@ public static class AlertMapper
             MitreTechniqueId = "T1486",
             Severity = alert.Severity,
             DetectedAt = alert.DetectedAt,
-            Summary = Truncate($"Entropy spike on {alert.FilePath}: {alert.BaselineEntropy:F2} -> {alert.CurrentEntropy:F2} ({alert.RuleName})", 500),
-            Details =
-            [
-                new AlertDetailInput { Key = "baseline_entropy", Value = alert.BaselineEntropy.ToString("F4") },
-                new AlertDetailInput { Key = "current_entropy", Value = alert.CurrentEntropy.ToString("F4") },
-                new AlertDetailInput { Key = "delta", Value = alert.Delta.ToString("F4") },
-                new AlertDetailInput { Key = "rule_id", Value = alert.RuleId.ToString() },
-            ],
+            Summary = Truncate(summary, 500),
+            Details = [.. details],
             RawPayload = new Dictionary<string, object>
             {
                 ["file_path"] = alert.FilePath,
