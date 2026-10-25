@@ -383,8 +383,9 @@ jobs:
           Write-Host "exit code: $code"
           "INSTALLER_EXIT=$code" >> $env:GITHUB_ENV
           # The GRID is unreachable on purpose: 4, said honestly, never 0.
-          # ASCII only in the match: the captured output goes through the runner's console code page,
-          # and the accented "enrôlé" of the message did not survive it (run 39659654794).
+          # ASCII only in the match: the captured output goes through the runner console code page,
+          # and an accented character in the message did not survive it (run 39659654794). The
+          # installer speaks English now, but the rule still holds for anything it prints.
           if ($code -ne 4 -or $out -notmatch "120 s") { Write-Host "::error::ADR-027: expected exit 4 with the 'not enrolled after 120 s' message (GRID unreachable), got $code"; exit 1 }
           # The runner ends a pwsh step with `exit $LASTEXITCODE`, still the installer's 4 here, and
           # `pwsh -command` reports any non-zero exit as 1 (run 39665349132: "exit code: 4", step red,
@@ -405,7 +406,7 @@ jobs:
           $trusted = Get-ChildItem Cert:\LocalMachine\Root | Where-Object Thumbprint -eq $env:CA_THUMBPRINT
           if (-not $trusted) { $bad += 'GRID CA not in the machine root store' }
           $installLog = Get-Content "$env:DATA_ROOT\logs\install.log" -Raw
-          if ($installLog -notmatch 'ajoutée au magasin racine') { $bad += 'install.log does not record the CA addition' }
+          if ($installLog -notmatch 'added to the machine root store') { $bad += 'install.log does not record the CA addition' }
           $deadline = (Get-Date).AddSeconds(90)
           do { Start-Sleep 3
             $onDesktop = @(Get-ChildItem $env:USER_DESKTOP -File -Force -Filter '0001_*' -ErrorAction SilentlyContinue)

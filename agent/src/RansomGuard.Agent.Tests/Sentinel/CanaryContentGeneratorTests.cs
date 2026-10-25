@@ -9,6 +9,12 @@ namespace RansomGuard.Agent.Tests.Sentinel;
 public sealed class CanaryContentGeneratorTests
 {
     [Theory]
+    [InlineData("patient_record")]
+    [InlineData("lab_results")]
+    [InlineData("medical_imaging")]
+    [InlineData("pharmacy_prescription")]
+    [InlineData("consultation_report")]
+    // The French names a canary planted before 2026-10-25 still carries.
     [InlineData("dossier_patient")]
     [InlineData("analyses_laboratoire")]
     [InlineData("imagerie_medicale")]
@@ -23,63 +29,63 @@ public sealed class CanaryContentGeneratorTests
     }
 
     [Fact]
-    public void Patient_record_should_contain_french_medical_keywords()
+    public void Patient_record_reads_like_a_patient_record()
     {
-        (byte[] content, _) = CanaryContentGenerator.Generate("dossier_patient");
+        (byte[] content, _) = CanaryContentGenerator.Generate("patient_record");
         string text = System.Text.Encoding.UTF8.GetString(content);
 
-        text.ShouldContain("DOSSIER MÉDICAL");
+        text.ShouldContain("MEDICAL RECORD");
         text.ShouldContain("Patient");
-        text.ShouldContain("Médecin");
-        text.ShouldContain("ANTÉCÉDENTS");
+        text.ShouldContain("doctor");
+        text.ShouldContain("MEDICAL HISTORY");
     }
 
     [Fact]
     public void Lab_analysis_should_contain_medical_values()
     {
-        (byte[] content, _) = CanaryContentGenerator.Generate("analyses_laboratoire");
+        (byte[] content, _) = CanaryContentGenerator.Generate("lab_results");
         string text = System.Text.Encoding.UTF8.GetString(content);
 
-        text.ShouldContain("HÉMATOLOGIE");
-        text.ShouldContain("Hémoglobine");
-        text.ShouldContain("Glycémie");
+        text.ShouldContain("FULL BLOOD COUNT");
+        text.ShouldContain("Haemoglobin");
+        text.ShouldContain("glucose");
     }
 
     [Fact]
     public void Imaging_report_should_contain_radiology_terms()
     {
-        (byte[] content, _) = CanaryContentGenerator.Generate("imagerie_medicale");
+        (byte[] content, _) = CanaryContentGenerator.Generate("medical_imaging");
         string text = System.Text.Encoding.UTF8.GetString(content);
 
-        text.ShouldContain("IMAGERIE MÉDICALE");
-        text.ShouldContain("RADIOLOGIE");
+        text.ShouldContain("MEDICAL IMAGING");
+        text.ShouldContain("RADIOLOGY");
     }
 
     [Fact]
     public void Prescription_should_contain_medication_structure()
     {
-        (byte[] content, _) = CanaryContentGenerator.Generate("prescription_pharmacie");
+        (byte[] content, _) = CanaryContentGenerator.Generate("pharmacy_prescription");
         string text = System.Text.Encoding.UTF8.GetString(content);
 
-        text.ShouldContain("ORDONNANCE");
+        text.ShouldContain("PRESCRIPTION");
         text.ShouldContain("PRESCRIPTION");
     }
 
     [Fact]
     public void Consultation_should_contain_clinical_exam()
     {
-        (byte[] content, _) = CanaryContentGenerator.Generate("rapport_consultation");
+        (byte[] content, _) = CanaryContentGenerator.Generate("consultation_report");
         string text = System.Text.Encoding.UTF8.GetString(content);
 
         text.ShouldContain("CONSULTATION");
-        text.ShouldContain("EXAMEN CLINIQUE");
+        text.ShouldContain("EXAMINATION");
     }
 
     [Fact]
     public void Two_generations_should_produce_different_content()
     {
-        (byte[] content1, _) = CanaryContentGenerator.Generate("dossier_patient");
-        (byte[] content2, _) = CanaryContentGenerator.Generate("dossier_patient");
+        (byte[] content1, _) = CanaryContentGenerator.Generate("patient_record");
+        (byte[] content2, _) = CanaryContentGenerator.Generate("patient_record");
 
         string hash1 = CanaryContentGenerator.ComputeHash(content1);
         string hash2 = CanaryContentGenerator.ComputeHash(content2);
@@ -102,7 +108,7 @@ public sealed class CanaryContentGeneratorTests
     [Fact]
     public void Content_should_reference_cameroon_law()
     {
-        (byte[] content, _) = CanaryContentGenerator.Generate("dossier_patient");
+        (byte[] content, _) = CanaryContentGenerator.Generate("patient_record");
         string text = System.Text.Encoding.UTF8.GetString(content);
 
         text.ShouldContain("2024/017");
@@ -114,6 +120,6 @@ public sealed class CanaryContentGeneratorTests
         (byte[] content, _) = CanaryContentGenerator.Generate("unknown_template");
         string text = System.Text.Encoding.UTF8.GetString(content);
 
-        text.ShouldContain("DOSSIER MÉDICAL");
+        text.ShouldContain("MEDICAL RECORD");
     }
 }

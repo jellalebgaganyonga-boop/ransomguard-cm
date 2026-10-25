@@ -75,13 +75,15 @@ describe('the console shows no French of its own', () => {
     for (const file of files) {
       const text = readFileSync(file, 'utf8');
       for (const match of text.matchAll(T_CALL)) {
-        if (isFrench(match[3])) {
-          offenders.push(`${relative(SRC, file)}: ${match[3].slice(0, 70)}`);
+        const fallback = match[3] ?? '';
+        if (isFrench(fallback)) {
+          offenders.push(`${relative(SRC, file)}: ${fallback.slice(0, 70)}`);
         }
       }
       for (const match of text.matchAll(DEFAULT_VALUE)) {
-        if (isFrench(match[1])) {
-          offenders.push(`${relative(SRC, file)}: ${match[1].slice(0, 70)}`);
+        const fallback = match[1] ?? '';
+        if (isFrench(fallback)) {
+          offenders.push(`${relative(SRC, file)}: ${fallback.slice(0, 70)}`);
         }
       }
     }
@@ -98,7 +100,7 @@ describe('the console shows no French of its own', () => {
     for (const file of files.filter((f) => f.endsWith('.tsx'))) {
       const text = readFileSync(file, 'utf8');
       for (const match of text.replace(/>/g, '&gt;').matchAll(jsxText)) {
-        const literal = match[1].trim();
+        const literal = (match[1] ?? '').trim();
         if (literal && isFrench(literal)) {
           offenders.push(`${relative(SRC, file)}: ${literal.slice(0, 70)}`);
         }
