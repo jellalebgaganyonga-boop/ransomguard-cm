@@ -18,10 +18,10 @@ from ransomguard_grid.api.v1.schemas.dashboard import (
     AgentItem,
     AgentPostureItem,
     AlertAttribution,
+    AlertCommandItem,
     AlertGenealogy,
     AlertGenealogyPattern,
     AlertGenealogyProcess,
-    AlertCommandItem,
     AlertItem,
     AlertResponseItem,
     AuditLogItem,
@@ -54,6 +54,7 @@ from ransomguard_grid.api.v1.schemas.dashboard import (
 from ransomguard_grid.core.alert_modules import module_for
 from ransomguard_grid.core.alert_transitions import ALLOWED_TRANSITIONS, is_allowed
 from ransomguard_grid.core.config import get_settings
+from ransomguard_grid.core.logging import get_logger
 from ransomguard_grid.core.security import hash_password, verify_password
 from ransomguard_grid.core.session_store import SessionStore, SessionStoreUnavailableError, get_session_store
 from ransomguard_grid.db.models.agent import Agent
@@ -76,6 +77,8 @@ from ransomguard_grid.services.agent_installer import (
 from ransomguard_grid.services.agent_posture import compute_protection_state, last_upload_age_seconds
 from ransomguard_grid.services.enrollment_otp_service import EnrollmentOtpService
 from ransomguard_grid.services.posture_store import count_recent_restarts, load_postures, snapshot
+
+logger = get_logger("dashboard")
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 

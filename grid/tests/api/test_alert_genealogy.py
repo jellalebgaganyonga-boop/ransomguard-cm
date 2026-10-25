@@ -212,8 +212,8 @@ async def test_the_console_reads_the_chain_back_on_the_alert_detail(
     client: AsyncClient, db_session: AsyncSession, test_cert_serial: str, test_cert_pem: str,
 ) -> None:
     """The point of sending it: the chain has to come back out on the page a human looks at."""
-    from ransomguard_grid.db.models.tenant_user import Role, User, UserRole
     from ransomguard_grid.core.security import hash_password
+    from ransomguard_grid.db.models.tenant_user import Role, User, UserRole
 
     ids = await _tenant_and_agent(db_session, test_cert_serial)
     alert_id = await _alert(db_session, ids, "cmid-console")
@@ -257,8 +257,8 @@ async def test_the_console_reads_the_chain_back_on_the_alert_detail(
 async def test_an_alert_with_no_chain_says_so_rather_than_showing_an_empty_tree(
     client: AsyncClient, db_session: AsyncSession, test_cert_serial: str, test_cert_pem: str,
 ) -> None:
-    from ransomguard_grid.db.models.tenant_user import Role, User, UserRole
     from ransomguard_grid.core.security import hash_password
+    from ransomguard_grid.db.models.tenant_user import Role, User, UserRole
 
     ids = await _tenant_and_agent(db_session, test_cert_serial)
     alert_id = await _alert(db_session, ids, "cmid-nochain")

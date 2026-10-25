@@ -16,10 +16,10 @@ from ransomguard_grid.api.v1.schemas.alert import (
     AlertIngestResponse,
     AttributionComplementRequest,
     AttributionComplementResponse,
-    GenealogyComplementRequest,
-    GenealogyComplementResponse,
     BatchAlertIngestRequest,
     BatchAlertIngestResponse,
+    GenealogyComplementRequest,
+    GenealogyComplementResponse,
 )
 from ransomguard_grid.core.alert_modules import UNKNOWN, module_for
 from ransomguard_grid.core.hourly_system_log import hourly_log_id, record_hourly
