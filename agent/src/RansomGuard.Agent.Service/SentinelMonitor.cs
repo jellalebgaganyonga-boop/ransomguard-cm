@@ -641,7 +641,7 @@ public sealed class SentinelMonitor : BackgroundService
                     // fresh install planted came back as a Critical attack on itself, each
                     // restoration produced another one, and SENTINEL ended up reporting a
                     // SUSTAINED ATTACK against a file only it had ever touched.
-                    if (_ownWrites.IsOwn(record.FileName))
+                    if (_ownWrites.WasWrittenByAgent(record.FileName))
                     {
                         continue;
                     }

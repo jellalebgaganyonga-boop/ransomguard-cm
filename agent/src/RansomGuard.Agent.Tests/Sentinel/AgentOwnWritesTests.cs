@@ -92,12 +92,11 @@ public sealed class AgentOwnWritesTests
     private static readonly TimeSpan ObservedKernelLazyWriteDelay = TimeSpan.FromSeconds(18);
 
     [Fact]
-    public void A_mark_outlives_the_kernels_own_view_of_the_write()
+    public void The_kernel_window_outlives_the_delay_the_kernel_was_measured_to_take()
     {
-        // A grace shorter than this is the sustained-attack loop: the agent repairs a decoy, the
-        // kernel surfaces that repair as somebody else's write, the agent repairs it again.
-        AgentOwnWrites.RestoreGrace.ShouldBeGreaterThan(ObservedKernelLazyWriteDelay);
-        AgentOwnWrites.DeploymentGrace.ShouldBeGreaterThan(ObservedKernelLazyWriteDelay);
+        // Shorter than this is the sustained-attack loop: the agent repairs a decoy, the kernel
+        // surfaces that repair as somebody else's write, the agent repairs it again.
+        AgentOwnWrites.KernelReportDelay.ShouldBeGreaterThan(ObservedKernelLazyWriteDelay);
     }
 
     [Fact]
@@ -109,8 +108,23 @@ public sealed class AgentOwnWritesTests
 
         time.Advance(ObservedKernelLazyWriteDelay);
 
-        own.IsOwn(CanaryPath).ShouldBeTrue(
+        own.WasWrittenByAgent(CanaryPath).ShouldBeTrue(
             "the kernel surfaced the agent's own rewrite 18 s later, attributed to a system PID");
+    }
+
+    [Fact]
+    public void A_repaired_canary_goes_straight_back_under_watch()
+    {
+        // The kernel window must not become a minute in which a decoy the agent has just repaired
+        // is unwatched. The watcher is prompt, so its grace stays short and it keeps reporting.
+        var time = Clock();
+        var own = new AgentOwnWrites(time);
+        own.Mark(CanaryPath, AgentOwnWrites.RestoreGrace);
+
+        time.Advance(TimeSpan.FromSeconds(5));
+
+        own.IsOwn(CanaryPath).ShouldBeFalse(
+            "a write 5 s after the agent repaired the decoy is an attack and must be reported");
     }
 
     [Fact]
