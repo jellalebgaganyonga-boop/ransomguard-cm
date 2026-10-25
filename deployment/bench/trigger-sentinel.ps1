@@ -22,7 +22,7 @@
 $ErrorActionPreference = 'Stop'
 
 $zone = Join-Path $env:USERPROFILE 'Desktop\RansomGuard-TestZone'
-$canary = Get-ChildItem -Path $zone -Filter '0001_*' -File -ErrorAction SilentlyContinue |
+$canary = Get-ChildItem -Path $zone -Filter '0001_*' -File -Force -ErrorAction SilentlyContinue |
     Sort-Object Name | Select-Object -First 1
 
 if (-not $canary) {

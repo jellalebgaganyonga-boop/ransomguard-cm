@@ -68,6 +68,22 @@ dotnet publish (Join-Path $Repo 'agent\src\RansomGuard.Agent.Installer\RansomGua
     -o $InstallerOut --nologo -v q
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish of the installer stub failed ($LASTEXITCODE)" }
 
+Write-Host '[2b] bundle the VC++ 2015-2022 runtime (libsodium.dll depends on it)'
+# NSec.Cryptography relies on libsodium.dll, which in turn needs vcruntime140.dll,
+# msvcp140.dll and vcruntime140_1.dll from the Visual C++ 2015-2022 Redistributable.
+# A clean Windows 10 install does NOT ship these: the agent service failed to start
+# (error 1053, DllNotFoundException: Unable to load DLL 'libsodium' or one of its
+# dependencies) until these were present. Copy them BEFORE zipping so endpoints never
+# need the host-side redistributable.
+$sysNative = Join-Path $env:WINDIR 'System32'
+foreach ($dll in @('vcruntime140.dll', 'msvcp140.dll', 'vcruntime140_1.dll')) {
+    $src = Join-Path $sysNative $dll
+    if (-not (Test-Path $src)) {
+        throw "Missing $src on the publishing host; install Visual C++ 2015-2022 Redistributable first."
+    }
+    Copy-Item $src $ServiceOut -Force
+}
+
 Write-Host '[3/4] zip the package, write its .sha256'
 $zip = Join-Path $OutDir 'RansomGuard-Agent-win-x64.zip'
 if (Test-Path $zip) { Remove-Item -Force $zip }
