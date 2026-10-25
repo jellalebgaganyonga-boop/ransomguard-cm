@@ -366,9 +366,9 @@ class ProvisionAgentResponse(BaseModel):
     """Response for agent provisioning — contains the one-time enrollment token."""
 
     otp: str = Field(description="One-time enrollment token (format: RG-CAM-YYYY-XXXXXX)")
-    # Default matches core.config.Settings.enrollment_otp_validity_minutes (5 min). The dashboard
+    # Default matches core.config.Settings.enrollment_otp_validity_minutes (15 min). The dashboard
     # route always sets this explicitly from settings; the default is just the Pydantic fallback.
-    expires_in_minutes: int = Field(default=5)
+    expires_in_minutes: int = Field(default=15)
     # SHA-256 (upper-case hex, as Get-FileHash prints it) of the install.ps1 this GRID serves at
     # /agent/install.ps1. Null when no installer is published: the console then shows no command.
     installer_sha256: str | None = None

@@ -67,9 +67,13 @@ class Settings(BaseSettings):
     rate_limit_per_minute: int = Field(default=120, ge=1)
 
     # Agent enrollment
-    # 5 minutes by default: the console shows the code live for an admin who is picking up the
-    # installer right now; a longer window would leave a usable enrollment token lying around.
-    enrollment_otp_validity_minutes: int = Field(default=5, ge=1, le=1440)
+    # 15 minutes by default. It was 5, which is the time an admin has between downloading the
+    # installer and the agent finishing its enrolment on the workstation -- and that is not enough
+    # in practice: carrying the installer to the machine, answering the UAC prompt and waiting for
+    # the service to start took longer than that on the bench, and the enrolment then failed with
+    # the code already expired. 15 minutes still leaves a usable token lying around for a short
+    # while only, and the token is single-use.
+    enrollment_otp_validity_minutes: int = Field(default=15, ge=1, le=1440)
 
     # Email notifications (Mailjet SMTP relay)
     smtp_host: str = Field(default="in-v3.mailjet.com")

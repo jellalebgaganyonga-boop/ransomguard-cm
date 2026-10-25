@@ -7,8 +7,11 @@ import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ransomguard_grid.core.session_store import SessionStore
+from ransomguard_grid.db.models.agent import Agent
+from ransomguard_grid.db.models.enums import AgentStatus
 from ransomguard_grid.services.enrollment_otp_service import EnrollmentOtpService
 
 # The agent's own audit-signing public key, sent at enrollment (GRID-SEC-003).
@@ -93,6 +96,47 @@ async def test_enrollment_duplicate_fingerprint_rejected(client: AsyncClient, se
         "ed25519_public_key_b64": _PUBLIC_KEY,
     })
     assert r2.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_a_decommissioned_workstation_can_enrol_again(
+    client: AsyncClient, session_store: SessionStore, db_session: AsyncSession
+) -> None:
+    """A decommissioned agent does not keep holding its machine's fingerprint.
+
+    The fingerprint check used to ignore status, so a workstation could be enrolled exactly once
+    in its life: reinstall the agent, rebuild the machine, or decommission it on purpose, and the
+    GRID answered 409 for ever. The console offered a decommission button and no way to undo what
+    it caused. Seen on the bench on 2026-10-25, reinstalling the agent on PC-LABO.
+    """
+    otp_service = EnrollmentOtpService(session_store)
+    fp = "e" * 64
+    body = {
+        "hostname": "pc-labo", "fqdn": "pc-labo.local",
+        "os_version": "10", "agent_version": "1.0.0", "hardware_fingerprint": fp,
+        "ed25519_public_key_b64": _PUBLIC_KEY,
+    }
+
+    first = await client.post("/api/v1/agents/enroll", json={
+        "otp": await otp_service.generate("default", validity_minutes=5), **body})
+    assert first.status_code == 200
+    agent_id = first.json()["agent_id"]
+
+    # While it is still live, the machine is still taken.
+    blocked = await client.post("/api/v1/agents/enroll", json={
+        "otp": await otp_service.generate("default", validity_minutes=5), **body})
+    assert blocked.status_code == 409
+
+    agent = await db_session.get(Agent, agent_id)
+    assert agent is not None
+    agent.status = AgentStatus.decommissioned
+    # Committed, not flushed: the request below runs on its own session and would not see it.
+    await db_session.commit()
+
+    again = await client.post("/api/v1/agents/enroll", json={
+        "otp": await otp_service.generate("default", validity_minutes=5), **body})
+    assert again.status_code == 200, "a decommissioned workstation must be able to enrol again"
+    assert again.json()["agent_id"] != agent_id, "it comes back as a new agent, not the old row"
 
 
 @pytest.mark.asyncio

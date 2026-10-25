@@ -5,7 +5,7 @@
 .DESCRIPTION
     1. Downloads a double-click installer from the GRID (fetch_installer.py: same calls as the
        console, TLS validated against the GRID's CA). Its enrollment code is valid 5 minutes.
-    2. Builds an ISO with the installer, trigger-sentinel.ps1/.cmd and a LISEZ-MOI.txt.
+    2. Builds an ISO with the installer, trigger-sentinel.ps1/.cmd and a README.txt.
     3. Inserts it into the VM's DVD drive (VirtualBox, works on a running VM).
 
     Why a disc: the bench VMs have no Guest Additions (no shared folder), and the VM does not
@@ -65,19 +65,17 @@ Copy-Item (Join-Path $PSScriptRoot 'trigger-sentinel.ps1') $Stage
 Copy-Item (Join-Path $PSScriptRoot 'trigger-sentinel.cmd') $Stage
 $installer = (Get-ChildItem $Stage -Filter 'RansomGuard-CM-Installeur-*.exe' | Select-Object -First 1).Name
 @"
-RansomGuard-CM -- banc de demonstration / demo bench
+RansomGuard-CM -- demonstration bench
 
-1. Double-cliquez / double-click: $installer
-   Windows demande l'elevation (UAC, "Editeur : inconnu" / "Publisher: Unknown") : Oui / Yes.
-   Le code d'enrolement expire 5 minutes apres la preparation de ce disque.
-   The enrollment code expires 5 minutes after this disc was prepared.
+1. Double-click: $installer
+   Windows asks for elevation (UAC, "Publisher: Unknown"): answer Yes.
+   The enrollment code expires 15 minutes after this disc was prepared.
 
+2. Wait for "enrolled". The workstation then appears in the console.
 
-2. Attendez "Poste enrole" / wait for "enrolled". Le poste apparait dans la console.
-
-3. Double-cliquez / double-click: trigger-sentinel.cmd
-   Ecrit dans UN fichier leurre de SENTINEL. Inoffensif. / Writes into ONE SENTINEL decoy. Harmless.
-"@ | Out-File -Encoding ascii (Join-Path $Stage 'LISEZ-MOI.txt')
+3. Double-click: trigger-sentinel.cmd
+   Writes into ONE SENTINEL decoy file. Harmless.
+"@ | Out-File -Encoding ascii (Join-Path $Stage 'README.txt')
 
 Write-Host '[2/3] ISO'
 if (-not ('IsoStreamWriter' -as [type])) {
@@ -118,4 +116,4 @@ Write-Host "[3/3] insert into $VmName"
 if ($LASTEXITCODE -ne 0) { throw "VBoxManage storageattach failed ($LASTEXITCODE)" }
 
 Write-Host ''
-Write-Host "Done. In the VM, open the DVD drive (usually D:) and follow LISEZ-MOI.txt, within 5 minutes."
+Write-Host "Done. In the VM, open the DVD drive (usually D:) and follow README.txt, within 15 minutes."

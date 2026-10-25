@@ -1145,8 +1145,9 @@ async def provision_agent(
 ) -> ProvisionAgentResponse:
     """Generate a one-time enrollment token for a new agent. Admin only.
 
-    Validity comes from `enrollment_otp_validity_minutes` (5 by default: short on purpose so a
-    code that is not used quickly is not left lying around). Single-use. install.ps1 writes it
+    Validity comes from `enrollment_otp_validity_minutes` (15 by default: long enough to carry the
+    installer to the workstation, answer the UAC prompt and let the service enrol, short enough
+    that a code nobody uses does not stay usable for long). Single-use. install.ps1 writes it
     into the agent's configuration; nobody copies it by hand. The response carries the SHA-256
     of the installer this GRID serves, which the console's install command checks before running
     it (GRID-SEC-006).
