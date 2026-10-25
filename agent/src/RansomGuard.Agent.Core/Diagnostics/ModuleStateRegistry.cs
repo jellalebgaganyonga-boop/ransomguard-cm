@@ -133,9 +133,13 @@ public interface IModuleStateRegistry
 ///   claiming a failure that has not happened; each flips itself to Active once
 ///   it reaches its "monitor active" point, and only a failure path publishes
 ///   init_failed;</item>
-/// <item>GENEALOGY is Degraded/attribution_unreliable: it is an enricher, not a
-///   detector, and its process attribution measured 0/120 (see AttributionBench).
-///   It becomes Active when ETW attribution exists and is measured;</item>
+/// <item>GENEALOGY starts Inactive/starting like the detectors. It used to be
+///   seeded Degraded/attribution_unreliable because its only source was the
+///   Restart Manager, which names nobody once the writer has closed its handle
+///   (0/120 attributed, AttributionBench) -- a permanent verdict written at
+///   construction. It has a source now (ProcessAncestryStore on the kernel
+///   FileIO session), so GenealogyMonitor owns its state and publishes what the
+///   module can actually do, re-checked while the agent runs;</item>
 /// <item>ANTI_TAMPERING is Inactive/not_implemented: its services are registered
 ///   but never started (dead code). It joins the posture when the Watchdog ships.</item>
 /// </list>
@@ -155,7 +159,7 @@ public sealed class InMemoryModuleStateRegistry : IModuleStateRegistry
         _entries[ModuleCode.Entropy] = new(ModuleCode.Entropy, ModuleState.Inactive, ModuleReasonCode.Starting, now);
         _entries[ModuleCode.UsbGuard] = new(ModuleCode.UsbGuard, ModuleState.Inactive, ModuleReasonCode.Starting, now);
         _entries[ModuleCode.ExfilWatch] = new(ModuleCode.ExfilWatch, ModuleState.Inactive, ModuleReasonCode.Starting, now);
-        _entries[ModuleCode.Genealogy] = new(ModuleCode.Genealogy, ModuleState.Degraded, ModuleReasonCode.AttributionUnreliable, now);
+        _entries[ModuleCode.Genealogy] = new(ModuleCode.Genealogy, ModuleState.Inactive, ModuleReasonCode.Starting, now);
         _entries[ModuleCode.AntiTampering] = new(ModuleCode.AntiTampering, ModuleState.Inactive, ModuleReasonCode.NotImplemented, now);
     }
 

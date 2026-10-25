@@ -17,21 +17,28 @@ public sealed class SentinelDeploymentService : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly AgentConfiguration _config;
     private readonly UserProfileEnumerator _profiles;
+    private readonly AgentOwnWrites? _ownWrites;
 
     /// <summary>
     /// Initializes the SENTINEL deployment service.
     /// </summary>
     /// <param name="profiles">The real user profiles that %EACHUSERPROFILE% expands to (AGT-PATH-001); null: the Windows registry.</param>
+    /// <param name="ownWrites">
+    /// The paths the agent writes itself. The canaries planted here are marked so the monitor's
+    /// watcher does not report their creation as an attack; null leaves that unmarked (tests).
+    /// </param>
     public SentinelDeploymentService(
         ILogger<SentinelDeploymentService> logger,
         IOptionsMonitor<AgentConfiguration> config,
         IServiceScopeFactory scopeFactory,
-        UserProfileEnumerator? profiles = null)
+        UserProfileEnumerator? profiles = null,
+        AgentOwnWrites? ownWrites = null)
     {
         _logger = logger;
         _config = config.CurrentValue;
         _scopeFactory = scopeFactory;
         _profiles = profiles ?? UserProfileEnumerator.Windows;
+        _ownWrites = ownWrites;
     }
 
     /// <inheritdoc />
@@ -114,7 +121,13 @@ public sealed class SentinelDeploymentService : BackgroundService
             string template = sentinel.CanaryTemplates[templateIndex % sentinel.CanaryTemplates.Length];
             templateIndex++;
 
-            await canaryService.CreateCanaryAsync(directory, template, sentinel.CanaryPrefix, cancellationToken);
+            SentinelCanary created = await canaryService.CreateCanaryAsync(
+                directory, template, sentinel.CanaryPrefix, cancellationToken);
+
+            // The decoy the agent just planted is the agent's own write. Marked before the monitor
+            // starts watching, so the creation event the watcher surfaces afterwards is dropped
+            // instead of being reported as "canary modified" -- a fresh install raises no alert.
+            _ownWrites?.Mark(created.FilePath, AgentOwnWrites.DeploymentGrace);
             deployed++;
         }
 

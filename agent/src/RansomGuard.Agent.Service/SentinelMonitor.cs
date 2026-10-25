@@ -50,11 +50,13 @@ public sealed class SentinelMonitor : BackgroundService
     private readonly Channel<CanaryFileEvent> _eventChannel;
     private readonly ConcurrentDictionary<string, RegenerationStats> _regenTracking = new();
 
-    /// <summary>Paths the agent itself is rewriting (V4 restoration), with the moment the grace ends.</summary>
-    private readonly ConcurrentDictionary<string, DateTime> _ownWrites = new(StringComparer.OrdinalIgnoreCase);
-
-    /// <summary>How long after a restoration the watcher's events on that path are the agent's own.</summary>
-    private static readonly TimeSpan OwnWriteGrace = TimeSpan.FromSeconds(3);
+    /// <summary>
+    /// Paths the agent is writing itself -- its restorations here, and the decoys the deployment
+    /// service plants at install. Shared with that service: when it lived in this class, the
+    /// canaries created before the watchers existed were invisible to it and a fresh install
+    /// raised a burst of Critical "canary modified" alerts for the agent's own work.
+    /// </summary>
+    private readonly AgentOwnWrites _ownWrites;
     private readonly EtwFileIoSession? _etwSession;
     private readonly EtwCanaryFilter _etwFilter = new();
     private readonly CanaryCorrelator _correlator;
@@ -92,6 +94,7 @@ public sealed class SentinelMonitor : BackgroundService
     /// <param name="profiles">The real user profiles that %EACHUSERPROFILE% expands to (AGT-PATH-001); null: the Windows registry.</param>
     /// <param name="responseEngine">The response (ADR-026): suspends the attributed writer. Required when Sentinel:Response:SuspendProcess is true.</param>
     /// <param name="fanout">Dispatches the session's records to several readers (AGT-ATTR-001); null hands the canary filter straight to the session, as before.</param>
+    /// <param name="ownWrites">The paths the agent writes itself, shared with the deployment service; null builds a private one (tests).</param>
     public SentinelMonitor(
         ILogger<SentinelMonitor> logger,
         IOptionsMonitor<AgentConfiguration> config,
@@ -107,8 +110,10 @@ public sealed class SentinelMonitor : BackgroundService
         ProcessCreationTimes? processTimes = null,
         UserProfileEnumerator? profiles = null,
         CanaryResponseEngine? responseEngine = null,
-        FileIoFanout? fanout = null)
+        FileIoFanout? fanout = null,
+        AgentOwnWrites? ownWrites = null)
     {
+        _ownWrites = ownWrites ?? new AgentOwnWrites();
         _fanout = fanout;
         _response = responseEngine;
         _processTimes = processTimes ?? new ProcessCreationTimes();
@@ -412,14 +417,9 @@ public sealed class SentinelMonitor : BackgroundService
     {
         // The agent's own restoration write (V4) is not an attack. ETW already leaves the agent's
         // PID out; the watcher does not know who wrote, so the path is marked before the rewrite.
-        if (_ownWrites.TryGetValue(filePath, out DateTime graceUntil))
+        if (_ownWrites.IsOwn(filePath))
         {
-            if (DateTime.UtcNow < graceUntil)
-            {
-                return;
-            }
-
-            _ownWrites.TryRemove(filePath, out _);
+            return;
         }
 
         if (!_deduplicator.ShouldProcess(filePath, changeType))
@@ -544,7 +544,7 @@ public sealed class SentinelMonitor : BackgroundService
         try
         {
             // The agent's own write must not come back as a detection: the path is marked first.
-            _ownWrites[canary.FilePath] = DateTime.UtcNow.Add(OwnWriteGrace);
+            _ownWrites.Mark(canary.FilePath, AgentOwnWrites.RestoreGrace);
             var canaryService = services.GetRequiredService<ICanaryFileService>();
             await canaryService.RestoreCanaryAsync(canary, CancellationToken.None);
             stats.RecordRegeneration();
@@ -757,20 +757,11 @@ public sealed class SentinelMonitor : BackgroundService
             await TryRestoreCanaryAsync(canary, alertType, services);
         }
 
-        // Fire-and-forget genealogy enrichment for process attribution
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                using var enrichScope = _scopeFactory.CreateScope();
-                var enricher = enrichScope.ServiceProvider.GetRequiredService<IGenealogyEnricher>();
-                await enricher.EnrichAlertAsync(alert.Id, canary.FilePath, default);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogDebug(ex, "Genealogy enrichment failed for canary alert {AlertId}", alert.Id);
-            }
-        }, CancellationToken.None);
+        // Genealogy enrichment is NOT started here any more. It used to run on the alert, before
+        // the attribution existed, so it had nothing but the Restart Manager -- which names nobody
+        // once the writer has closed the file. AttributeAsync now starts it with the writer it
+        // resolved, 1.5 s later, which is the whole point of ADR-025's delay. A detection the
+        // attribution cannot name gets the old file-lookup path from there.
     }
 
     /// <summary>
@@ -810,6 +801,30 @@ public sealed class SentinelMonitor : BackgroundService
                 $"{detection.Path}: {outcome.StateCode}"
                     + (outcome.ProcessId is int pid ? $" PID {pid} created {outcome.ProcessCreatedAtUtc:o} {outcome.ProcessName}" : $" ({outcome.Reason})"),
                 "CanaryAlert", alertId, CancellationToken.None).ConfigureAwait(false);
+
+            // GENEALOGY, on the writer this attribution named: its ancestry was captured while it
+            // was running, so the chain is available even though the canary write is long finished.
+            // Unattributed, the enricher falls back to the file lookup, as before.
+            var enricher = scope.ServiceProvider.GetRequiredService<IGenealogyEnricher>();
+            try
+            {
+                if (outcome.State == AttributionState.Resolved && outcome.ProcessId is int writerPid)
+                {
+                    await enricher.EnrichFromWriterAsync(
+                        alertId, writerPid, outcome.ProcessCreatedAtUtc, detection.Path, CancellationToken.None)
+                        .ConfigureAwait(false);
+                }
+                else
+                {
+                    await enricher.EnrichAlertAsync(alertId, detection.Path, CancellationToken.None).ConfigureAwait(false);
+                }
+            }
+            catch (Exception ex)
+            {
+                // Enrichment is forensic detail; the alert, its attribution and the response stand
+                // without it.
+                _logger.LogDebug(ex, "Genealogy enrichment failed for canary alert {AlertId}", alertId);
+            }
 
             // The response (ADR-026): decided on the final attribution, after the complement left.
             if (_response is not null)

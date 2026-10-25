@@ -61,14 +61,35 @@ public sealed class ProcessSnapshotService : IProcessSnapshotService
 
         var ancestors = new List<ProcessSnapshot>();
         int currentPpid = root.ParentProcessId;
+        DateTime? childStart = root.StartTime;
         int depth = 0;
+        var seen = new HashSet<int> { pid };
 
         while (currentPpid > 0 && depth < maxDepth)
         {
             ProcessSnapshot? parent = CaptureProcess(currentPpid);
             if (parent is null) break;
 
+            // Windows reuses PIDs within minutes, so the process holding the recorded parent PID
+            // now may be a stranger that started later. A parent cannot start after its child: when
+            // it looks like it did, the PID was reused and the chain stops here rather than naming
+            // an innocent process as the ancestor of a ransomware write.
+            if (childStart is not null && parent.StartTime is not null && parent.StartTime > childStart)
+            {
+                _logger.LogDebug(
+                    "GENEALOGY stopped the ancestor walk at PID {ParentPid}: it started {ParentStart:O}, after its child {ChildStart:O} -- the PID was reused",
+                    parent.ProcessId, parent.StartTime, childStart);
+                break;
+            }
+
+            // A cycle (PID 0's parent, or a corrupted chain) would otherwise loop to maxDepth.
+            if (!seen.Add(parent.ProcessId))
+            {
+                break;
+            }
+
             ancestors.Add(parent);
+            childStart = parent.StartTime;
             currentPpid = parent.ParentProcessId;
             depth++;
         }

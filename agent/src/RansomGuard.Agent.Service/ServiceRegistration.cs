@@ -59,6 +59,8 @@ public static class ServiceRegistration
         // The suspended processes (ADR-026): ended ones closed, undecided ones escalated.
         services.AddHostedService<SuspensionWatchService>();
         services.AddHostedService<EntropyMonitor>();
+        // GENEALOGY: feeds the ancestry store from the session and owns the module's state.
+        services.AddHostedService<GenealogyMonitor>();
 
         // USB GUARD monitor
         services.AddHostedService<UsbDeviceMonitor>();
@@ -172,6 +174,14 @@ public static class ServiceRegistration
         services.AddSingleton<ProcessCreationTimes>();
         services.AddSingleton<FileIoFanout>();
         services.AddSingleton(sp => new FileWriteAttributionCache(sp.GetRequiredService<ProcessCreationTimes>()));
+
+        // GENEALOGY's source: the ancestry of a writer, captured while it is still running. The
+        // Restart Manager it used before sees nobody once the writer has closed its handle.
+        services.AddSingleton<ProcessAncestryStore>();
+
+        // The paths the agent writes itself, shared by the deployment service (which plants the
+        // decoys) and the monitor (which watches them), so a fresh install raises no alert.
+        services.AddSingleton<AgentOwnWrites>();
 
         // Rate limiting
         services.AddSingleton<RateLimiterFactory>();

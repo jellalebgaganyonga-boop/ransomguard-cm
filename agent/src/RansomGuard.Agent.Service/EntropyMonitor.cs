@@ -586,18 +586,31 @@ public sealed class EntropyMonitor : BackgroundService
                     await EvaluateDirectoryShiftAsync(
                         detector, directoryWindow, filePath, alert, attribution, context, auditRepo);
 
-                    // Fire-and-forget genealogy enrichment for process attribution
+                    // Fire-and-forget genealogy enrichment. When the writer was attributed, start
+                    // from it: its ancestry was captured while it was running, so the chain is
+                    // there even though the process has since closed the file and exited. Without
+                    // an attribution the enricher falls back to the file lookup.
+                    Guid alertId = alert.Id;
+                    int? enrichPid = attribution.State == AttributionState.Resolved ? attribution.ProcessId : null;
+                    DateTime? enrichStart = attribution.ProcessCreatedAtUtc;
                     _ = Task.Run(async () =>
                     {
                         try
                         {
                             using var enrichScope = _scopeFactory.CreateScope();
                             var enricher = enrichScope.ServiceProvider.GetRequiredService<IGenealogyEnricher>();
-                            await enricher.EnrichAlertAsync(alert.Id, filePath, default);
+                            if (enrichPid is int pid)
+                            {
+                                await enricher.EnrichFromWriterAsync(alertId, pid, enrichStart, filePath, default);
+                            }
+                            else
+                            {
+                                await enricher.EnrichAlertAsync(alertId, filePath, default);
+                            }
                         }
                         catch (Exception ex)
                         {
-                            _logger.LogDebug(ex, "Genealogy enrichment failed for entropy alert {AlertId}", alert.Id);
+                            _logger.LogDebug(ex, "Genealogy enrichment failed for entropy alert {AlertId}", alertId);
                         }
                     }, CancellationToken.None);
 
