@@ -170,8 +170,21 @@ public sealed class AgentOwnWritesTests
         }
 
         own.Count.ShouldBe(100);
-        time.Advance(AgentOwnWrites.RestoreGrace + TimeSpan.FromSeconds(1));
 
+        // Past the watcher's grace the path is watched again, but the entry stays: the kernel may
+        // still be about to report that same write, and dropping it here would bring back the
+        // alert the agent raises against itself.
+        time.Advance(AgentOwnWrites.RestoreGrace + TimeSpan.FromSeconds(1));
+        for (int i = 0; i < 100; i++)
+        {
+            own.IsOwn($@"C:\Users\Public\Documents\{i:D4}_dossier_patient.docx").ShouldBeFalse();
+        }
+
+        own.Count.ShouldBe(100, "the kernel has not had its window yet");
+
+        // Past the kernel's window too, nobody can still be asking about these writes, so the
+        // entries go as they are read and the set does not grow.
+        time.Advance(AgentOwnWrites.KernelReportDelay);
         for (int i = 0; i < 100; i++)
         {
             own.IsOwn($@"C:\Users\Public\Documents\{i:D4}_dossier_patient.docx").ShouldBeFalse();
