@@ -21,13 +21,30 @@ namespace RansomGuard.Agent.Core.Detection.Sentinel;
 /// </summary>
 public sealed class AgentOwnWrites
 {
-    /// <summary>Grace for a restoration: the agent rewrites one file and the event follows at once.</summary>
-    public static readonly TimeSpan RestoreGrace = TimeSpan.FromSeconds(3);
+    /// <summary>
+    /// Grace for a restoration. It was 3 seconds, on the assumption that the event follows the
+    /// rewrite at once. It does not: the FileSystemWatcher is prompt, but the kernel's view is
+    /// not. Windows' cache manager flushes a file long after the process wrote it, and ETW
+    /// attributes that flush to a system PID rather than to the writer, so the agent's own
+    /// rewrite comes back as somebody else's write with no way left to recognise it. Measured on
+    /// the bench: canaries written at 17:51:28, the same writes surfacing at 17:51:46 -- eighteen
+    /// seconds. Three seconds meant every restoration raised a fresh alert, which triggered
+    /// another restoration, until SENTINEL reported a sustained attack on a file only it had
+    /// touched.
+    ///
+    /// <para>
+    /// The cost is stated rather than hidden: for this long after the agent repairs a decoy, a
+    /// write to that one path is taken for the agent's own. An attacker who writes to a canary in
+    /// that window, on that exact path, is not reported for it -- though the canaries it has not
+    /// just repaired are all still watched, and the same write would still reach ENTROPY.
+    /// </para>
+    /// </summary>
+    public static readonly TimeSpan RestoreGrace = TimeSpan.FromSeconds(60);
 
     /// <summary>
-    /// Grace for deployment. Longer than a restoration's: the canaries are created before the
-    /// monitor's watchers exist, and the events for them can surface once watching starts, which
-    /// is after the monitor's own startup delay.
+    /// Grace for deployment: the canaries are created before the monitor's watchers exist, the
+    /// events for them surface once watching starts, and the kernel's own view of those writes
+    /// arrives later still (see <see cref="RestoreGrace"/>).
     /// </summary>
     public static readonly TimeSpan DeploymentGrace = TimeSpan.FromSeconds(60);
 

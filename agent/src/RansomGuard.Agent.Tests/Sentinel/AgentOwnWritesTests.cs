@@ -82,6 +82,37 @@ public sealed class AgentOwnWritesTests
         own.IsOwn(CanaryPath).ShouldBeFalse();
     }
 
+    /// <summary>
+    /// The kernel's view of a write is not prompt. Windows' cache manager flushes a file long
+    /// after the process wrote it, and ETW attributes that flush to a system PID rather than to
+    /// the writer, so filtering the agent's own PID out of the session does not cover the agent's
+    /// own writes. Measured on the bench: canaries written at 17:51:28, the same writes surfacing
+    /// at 17:51:46.
+    /// </summary>
+    private static readonly TimeSpan ObservedKernelLazyWriteDelay = TimeSpan.FromSeconds(18);
+
+    [Fact]
+    public void A_mark_outlives_the_kernels_own_view_of_the_write()
+    {
+        // A grace shorter than this is the sustained-attack loop: the agent repairs a decoy, the
+        // kernel surfaces that repair as somebody else's write, the agent repairs it again.
+        AgentOwnWrites.RestoreGrace.ShouldBeGreaterThan(ObservedKernelLazyWriteDelay);
+        AgentOwnWrites.DeploymentGrace.ShouldBeGreaterThan(ObservedKernelLazyWriteDelay);
+    }
+
+    [Fact]
+    public void A_restored_canary_is_still_the_agents_own_write_when_the_kernel_reports_it()
+    {
+        var time = Clock();
+        var own = new AgentOwnWrites(time);
+        own.Mark(CanaryPath, AgentOwnWrites.RestoreGrace);
+
+        time.Advance(ObservedKernelLazyWriteDelay);
+
+        own.IsOwn(CanaryPath).ShouldBeTrue(
+            "the kernel surfaced the agent's own rewrite 18 s later, attributed to a system PID");
+    }
+
     [Fact]
     public void A_canary_the_agent_never_wrote_is_never_its_own()
     {

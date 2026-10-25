@@ -632,6 +632,20 @@ public sealed class SentinelMonitor : BackgroundService
             {
                 try
                 {
+                    // The agent's own write, seen by the kernel. Filtering the agent's PID out of
+                    // the session is not enough: Windows' cache manager flushes a file long after
+                    // the process wrote it and the flush is attributed to a system PID, not to the
+                    // writer. On the bench the canaries were planted at 17:51:28 and the kernel
+                    // surfaced those same writes at 17:51:46 as "system_pid" -- eighteen seconds
+                    // later, by which time nothing tied them to the agent any more. Every decoy a
+                    // fresh install planted came back as a Critical attack on itself, each
+                    // restoration produced another one, and SENTINEL ended up reporting a
+                    // SUSTAINED ATTACK against a file only it had ever touched.
+                    if (_ownWrites.IsOwn(record.FileName))
+                    {
+                        continue;
+                    }
+
                     CanaryDetection? detection = _correlator.OnEtw(record);
                     if (detection is null)
                     {
