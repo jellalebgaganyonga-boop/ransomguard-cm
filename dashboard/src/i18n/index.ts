@@ -85,4 +85,17 @@ void i18n
     },
   });
 
+// Keep <html lang> with the language actually in use. It is what a screen reader reads the page
+// with, and it was hardcoded to French: an English console announced itself as French, so the
+// text was read aloud with a French voice. index.html now starts at "en" and this follows any
+// later change.
+function syncDocumentLanguage(language: string): void {
+  if (typeof document !== 'undefined') {
+    document.documentElement.lang = language.split('-')[0] ?? 'en';
+  }
+}
+
+syncDocumentLanguage(i18n.language ?? 'en');
+i18n.on('languageChanged', syncDocumentLanguage);
+
 export default i18n;
