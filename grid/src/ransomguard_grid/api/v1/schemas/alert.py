@@ -48,6 +48,56 @@ AttributionReason = Literal["no_write_event", "system_pid", "pid_reused", "proce
 ATTRIBUTION_FINAL_STATES: frozenset[str] = frozenset({"resolved", "unavailable", "ambiguous"})
 
 
+class GenealogyProcess(BaseModel):
+    """One process in the chain behind a write."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    pid: int = Field(ge=0, le=2**32 - 1)
+    name: str = Field(max_length=260)
+    path: str | None = Field(default=None, max_length=1024)
+    started_at: datetime | None = None
+    command_line: str | None = Field(default=None, max_length=2048)
+
+
+class GenealogyPattern(BaseModel):
+    """A MITRE ATT&CK technique the chain matched."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    technique_id: str = Field(max_length=16)
+    technique_name: str = Field(max_length=120)
+    description: str = Field(max_length=500)
+
+
+class GenealogyComplementRequest(BaseModel):
+    """The chain of processes behind an alert (GENEALOGY), sent after the alert itself.
+
+    The chain is built while the writer is still running, which is necessarily after the alert has
+    gone: ransomware writes and exits, so waiting for the tree before sending the alert would
+    delay every alert for the one case where it cannot be built anyway. It arrives as a complement,
+    the same way the attribution does.
+
+    `writer` is the process that wrote the file; `ancestors` are its parent, grandparent and so on,
+    nearest first. The console reads them in that order and draws the chain the other way round.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    writer: GenealogyProcess
+    ancestors: list[GenealogyProcess] = Field(default_factory=list, max_length=10)
+    patterns: list[GenealogyPattern] = Field(default_factory=list, max_length=10)
+
+
+class GenealogyComplementResponse(BaseModel):
+    """What the GRID did with a genealogy complement."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    alert_id: str
+    status: Literal["applied", "unchanged"]
+
+
 class AttributionComplementRequest(BaseModel):
     """The attribution complement of a SENTINEL alert (ADR-025, section 3), bounded field by field.
 

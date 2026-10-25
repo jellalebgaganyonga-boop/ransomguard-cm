@@ -19,4 +19,11 @@ public interface IAlertForwardingQueue
     /// same order, same persistence and retries as the alerts: it never overtakes its alert.
     /// </summary>
     bool TryEnqueueAttribution(string clientMessageId, AttributionComplementRequest complement);
+
+    /// <summary>
+    /// Queues the chain of processes behind the alert of this client_message_id. It goes through
+    /// the same queue as the alert, so a GRID that is down holds it and it is retried, instead of
+    /// the chain being the one thing an outage loses.
+    /// </summary>
+    bool TryEnqueueGenealogy(string clientMessageId, GenealogyComplementRequest complement);
 }

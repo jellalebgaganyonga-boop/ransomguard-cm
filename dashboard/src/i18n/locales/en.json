@@ -257,6 +257,11 @@
       "notesPlaceholder": "Detail of the investigation and actions taken...",
       "minChars": "{count} characters minimum",
       "submit": "Close incident"
+    },
+    "genealogy": {
+      "title": "What started it",
+      "writer": "wrote the file",
+      "absent": "No process chain for this alert. The chain is built from the process that wrote the file, so there is none when no process could be named."
     }
   },
   "users": {

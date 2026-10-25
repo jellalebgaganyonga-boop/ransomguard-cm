@@ -139,6 +139,17 @@ public sealed class AlertForwardingService : BackgroundService, IAlertForwarding
     }
 
     /// <inheritdoc />
+    public bool TryEnqueueGenealogy(string clientMessageId, GenealogyComplementRequest complement)
+    {
+        if (_channel.Writer.TryWrite(new GenealogyMessage(clientMessageId, complement)))
+            return true;
+
+        _logger.LogWarning("Alert forwarding queue full, genealogy complement dropped. ClientMessageId={Id}",
+            clientMessageId);
+        return false;
+    }
+
+    /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         // Wait for enrollment before attempting to forward
@@ -249,6 +260,9 @@ public sealed class AlertForwardingService : BackgroundService, IAlertForwarding
             case AttributionMessage attribution:
                 await _gridClient.SendAttributionAsync(attribution.ClientMessageId, attribution.Complement, ct).ConfigureAwait(false);
                 return $"attribution {attribution.Complement.State}";
+            case GenealogyMessage genealogy:
+                await _gridClient.SendGenealogyAsync(genealogy.ClientMessageId, genealogy.Complement, ct).ConfigureAwait(false);
+                return $"genealogy {genealogy.Complement.Ancestors.Count + 1} process(es)";
             default:
                 throw new InvalidOperationException($"Unknown outbound message {message.GetType().Name}");
         }
@@ -258,6 +272,7 @@ public sealed class AlertForwardingService : BackgroundService, IAlertForwarding
     {
         AlertMessage alert => JsonSerializer.Serialize(alert.Request, JsonOptions),
         AttributionMessage attribution => JsonSerializer.Serialize(attribution.Complement, JsonOptions),
+        GenealogyMessage genealogy => JsonSerializer.Serialize(genealogy.Complement, JsonOptions),
         _ => throw new InvalidOperationException($"Unknown outbound message {message.GetType().Name}"),
     };
 
@@ -265,6 +280,8 @@ public sealed class AlertForwardingService : BackgroundService, IAlertForwarding
     {
         PendingUploadKind.Attribution => JsonSerializer.Deserialize<AttributionComplementRequest>(pending.SerializedPayload, JsonOptions)
             is { } complement ? new AttributionMessage(pending.ClientMessageId, complement) : null,
+        PendingUploadKind.Genealogy => JsonSerializer.Deserialize<GenealogyComplementRequest>(pending.SerializedPayload, JsonOptions)
+            is { } chain ? new GenealogyMessage(pending.ClientMessageId, chain) : null,
         _ => JsonSerializer.Deserialize<AlertIngestRequest>(pending.SerializedPayload, JsonOptions)
             is { } request ? new AlertMessage(request) : null,
     };
@@ -410,3 +427,7 @@ internal sealed record AlertMessage(AlertIngestRequest Request)
 /// <summary>The attribution complement of the alert of the same ClientMessageId.</summary>
 internal sealed record AttributionMessage(string Id, AttributionComplementRequest Complement)
     : OutboundMessage(Id, PendingUploadKind.Attribution);
+
+/// <summary>The chain of processes behind the alert of the same ClientMessageId.</summary>
+internal sealed record GenealogyMessage(string Id, GenealogyComplementRequest Complement)
+    : OutboundMessage(Id, PendingUploadKind.Genealogy);

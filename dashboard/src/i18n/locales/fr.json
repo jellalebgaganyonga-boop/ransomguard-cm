@@ -257,6 +257,11 @@
       "notesPlaceholder": "Détail de l'investigation et des actions prises...",
       "minChars": "{count} caractères minimum",
       "submit": "Fermer l'incident"
+    },
+    "genealogy": {
+      "title": "Ce qui l'a lancé",
+      "writer": "a écrit le fichier",
+      "absent": "Aucune chaîne de processus pour cette alerte. La chaîne part du processus qui a écrit le fichier : il n'y en a donc pas quand aucun processus n'a pu être nommé."
     }
   },
   "users": {

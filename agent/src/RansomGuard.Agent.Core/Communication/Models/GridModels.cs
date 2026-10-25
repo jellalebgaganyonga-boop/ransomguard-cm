@@ -195,7 +195,8 @@ public sealed record AttributionComplementRequest
     [JsonPropertyName("image_path")]
     public string? ImagePath { get; init; }
 
-    /// <summary>Closed reason code when unavailable (no_write_event, system_pid, pid_reused, process_exited, etw_unavailable).</summary>
+
+/// <summary>Closed reason code when unavailable (no_write_event, system_pid, pid_reused, process_exited, etw_unavailable).</summary>
     [JsonPropertyName("reason")]
     public string? Reason { get; init; }
 }
@@ -369,4 +370,63 @@ public sealed record CommandResultRequest
                 ? new Dictionary<string, object?> { ["reason"] = reason }
                 : new Dictionary<string, object?> { ["reason"] = reason, ["detail"] = detail },
         };
+}
+
+/// <summary>One process in the chain behind a write.</summary>
+public sealed class GenealogyProcessDto
+{
+    /// <summary>The process id.</summary>
+    [JsonPropertyName("pid")]
+    public required int Pid { get; init; }
+
+    /// <summary>Its image name, without the path.</summary>
+    [JsonPropertyName("name")]
+    public required string Name { get; init; }
+
+    /// <summary>Its full image path, when it could be read.</summary>
+    [JsonPropertyName("path")]
+    public string? Path { get; init; }
+
+    /// <summary>When it started, which is what distinguishes it from a reused PID.</summary>
+    [JsonPropertyName("started_at")]
+    public DateTime? StartedAt { get; init; }
+
+    /// <summary>Its command line, when it could be read.</summary>
+    [JsonPropertyName("command_line")]
+    public string? CommandLine { get; init; }
+}
+
+/// <summary>A MITRE ATT&amp;CK technique the chain matched.</summary>
+public sealed class GenealogyPatternDto
+{
+    /// <summary>The technique id, for example T1486.</summary>
+    [JsonPropertyName("technique_id")]
+    public required string TechniqueId { get; init; }
+
+    /// <summary>Its name.</summary>
+    [JsonPropertyName("technique_name")]
+    public required string TechniqueName { get; init; }
+
+    /// <summary>Why this chain matched it.</summary>
+    [JsonPropertyName("description")]
+    public required string Description { get; init; }
+}
+
+/// <summary>
+/// The chain of processes behind an alert, sent after the alert itself: the tree is built while
+/// the writer is still running, which is necessarily later.
+/// </summary>
+public sealed class GenealogyComplementRequest
+{
+    /// <summary>The process that wrote the file.</summary>
+    [JsonPropertyName("writer")]
+    public required GenealogyProcessDto Writer { get; init; }
+
+    /// <summary>Its parent, grandparent and so on, nearest first.</summary>
+    [JsonPropertyName("ancestors")]
+    public List<GenealogyProcessDto> Ancestors { get; init; } = [];
+
+    /// <summary>The techniques this chain matched.</summary>
+    [JsonPropertyName("patterns")]
+    public List<GenealogyPatternDto> Patterns { get; init; } = [];
 }

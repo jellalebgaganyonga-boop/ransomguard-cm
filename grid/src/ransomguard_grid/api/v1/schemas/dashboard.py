@@ -28,6 +28,38 @@ class AlertAttribution(BaseModel):
     process_created_at: str | None = None
 
 
+class AlertGenealogyProcess(BaseModel):
+    """One process in the chain the console draws."""
+
+    pid: int
+    name: str
+    path: str | None = None
+    started_at: str | None = None
+    command_line: str | None = None
+
+
+class AlertGenealogyPattern(BaseModel):
+    """A MITRE ATT&CK technique the chain matched."""
+
+    technique_id: str
+    technique_name: str
+    description: str
+
+
+class AlertGenealogy(BaseModel):
+    """The chain of processes behind an alert (GENEALOGY).
+
+    `chain` is the one-line reading, oldest first ("explorer -> cmd -> powershell"). `writer` is
+    the process that wrote the file and `ancestors` are its parent, grandparent and so on,
+    nearest first -- the console reverses them to draw the chain the way it reads.
+    """
+
+    chain: str
+    writer: AlertGenealogyProcess
+    ancestors: list[AlertGenealogyProcess] = []
+    patterns: list[AlertGenealogyPattern] = []
+
+
 class AlertCommandItem(BaseModel):
     """A command of the console on this alert, with the agent's answer when it came."""
 
@@ -99,6 +131,9 @@ class AlertItem(BaseModel):
     # The attribution, on the alert detail only; None for an alert that carries none (not SENTINEL,
     # or sent before ADR-025).
     attribution: AlertAttribution | None = None
+    # The chain of processes behind the write (GENEALOGY); detail only. None when the agent never
+    # sent one -- an alert whose writer could not be attributed has no chain to build from.
+    genealogy: AlertGenealogy | None = None
     # The console's commands on this alert and the agent's responses (ADR-026); detail only.
     commands: list[AlertCommandItem] = Field(default_factory=list)
     responses: list[AlertResponseItem] = Field(default_factory=list)

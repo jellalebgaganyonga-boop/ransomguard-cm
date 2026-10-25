@@ -40,6 +40,12 @@ public interface IGridApiClient
     Task SendAttributionAsync(string clientMessageId, AttributionComplementRequest request, CancellationToken ct = default);
 
     /// <summary>
+    /// Sends the chain of processes behind an alert already ingested, identified by its
+    /// client_message_id.
+    /// </summary>
+    Task SendGenealogyAsync(string clientMessageId, GenealogyComplementRequest request, CancellationToken ct = default);
+
+    /// <summary>
     /// Submit a batch of Ed25519-signed audit log entries.
     /// </summary>
     Task<AuditLogBatchResponse> SendAuditLogBatchAsync(AuditLogBatchRequest request, CancellationToken ct = default);

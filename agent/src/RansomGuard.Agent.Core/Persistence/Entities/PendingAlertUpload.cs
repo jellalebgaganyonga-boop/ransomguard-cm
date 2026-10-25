@@ -45,6 +45,13 @@ public enum PendingUploadKind
 
     /// <summary>An AttributionComplementRequest for the alert of the same ClientMessageId.</summary>
     Attribution,
+
+    /// <summary>
+    /// A GenealogyComplementRequest for the alert of the same ClientMessageId: the chain of
+    /// processes behind the write. Appended, never inserted -- the value is stored in the
+    /// agent's database and renumbering it would change the meaning of every row already there.
+    /// </summary>
+    Genealogy,
 }
 
 /// <summary>Upload status for pending alert retry queue.</summary>

@@ -18,6 +18,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AlertModule } from '@/components/alerts/alert-module';
 import { AlertAttribution } from '@/components/alerts/alert-attribution';
+import { AlertGenealogy } from '@/components/alerts/alert-genealogy';
 import { AlertResponse } from '@/components/alerts/alert-response';
 import { Copy, ChevronLeft, ChevronDown, ChevronUp, FileQuestion } from 'lucide-react';
 import { SeverityBadge } from '@/components/ui/severity-badge';
@@ -197,6 +198,7 @@ export function AlertDetailPage() {
         <p className="mb-4 max-w-2xl leading-relaxed text-text-primary">{alert.summary}</p>
 
         <AlertAttribution attribution={alert.attribution} detectedAt={alert.detected_at} />
+        <AlertGenealogy genealogy={alert.genealogy} />
 
         <AlertResponse alert={alert} role={role} />
 

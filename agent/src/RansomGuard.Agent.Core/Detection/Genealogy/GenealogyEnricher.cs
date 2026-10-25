@@ -1,5 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using RansomGuard.Agent.Core.Communication;
+using RansomGuard.Agent.Core.Communication.Models;
 using RansomGuard.Agent.Core.Detection.Sentinel;
 using RansomGuard.Agent.Core.Persistence;
 using RansomGuard.Agent.Core.Persistence.Entities;
@@ -20,6 +22,13 @@ public sealed class GenealogyEnricher : IGenealogyEnricher
     private readonly ProcessAncestryStore? _ancestry;
 
     /// <summary>
+    /// Where the chain is sent. Null keeps it on the workstation, which is what it used to do:
+    /// the tree was written to the agent's own database and never left, so the console could show
+    /// an alert with no idea what had produced it.
+    /// </summary>
+    private readonly IAlertForwardingQueue? _forwarding;
+
+    /// <summary>
     /// Initializes the genealogy enricher.
     /// </summary>
     /// <param name="snapshotService">Captures processes and walks their ancestors.</param>
@@ -30,18 +39,23 @@ public sealed class GenealogyEnricher : IGenealogyEnricher
     /// Ancestries captured while the writer was alive. Null leaves only the Restart Manager, which
     /// answers nothing once the writer has closed its handle -- the old behaviour.
     /// </param>
+    /// <param name="forwarding">
+    /// Where the chain is sent. Null keeps it on the workstation, which is what it used to do.
+    /// </param>
     public GenealogyEnricher(
         IProcessSnapshotService snapshotService,
         RestartManagerHelper restartManager,
         AgentDbContext context,
         ILogger<GenealogyEnricher> logger,
-        ProcessAncestryStore? ancestry = null)
+        ProcessAncestryStore? ancestry = null,
+        IAlertForwardingQueue? forwarding = null)
     {
         _snapshotService = snapshotService;
         _restartManager = restartManager;
         _context = context;
         _logger = logger;
         _ancestry = ancestry;
+        _forwarding = forwarding;
     }
 
     /// <inheritdoc />
@@ -122,8 +136,58 @@ public sealed class GenealogyEnricher : IGenealogyEnricher
                 p.TechniqueId, p.TechniqueName, p.Description);
         }
 
+        Forward(alertId, tree, patterns);
+
         return tree.Summary;
     }
+
+    /// <summary>
+    /// Sends the chain to the GRID, against the alert it belongs to.
+    ///
+    /// <para>
+    /// The alert's client_message_id is derived from its id the same way the alert itself derived
+    /// it, so no lookup is needed and the two cannot disagree. A failure here is logged and
+    /// dropped: the enrichment is not worth losing the alert over, and the chain is still in the
+    /// agent's own database.
+    /// </para>
+    /// </summary>
+    private void Forward(Guid alertId, ProcessTree tree, IReadOnlyList<SuspiciousPatternFlag> patterns)
+    {
+        if (_forwarding is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _forwarding.TryEnqueueGenealogy(
+                AlertMapper.DeterministicId(alertId),
+                new GenealogyComplementRequest
+                {
+                    Writer = Describe(tree.Root),
+                    Ancestors = [.. tree.Ancestors.Select(Describe)],
+                    Patterns = [.. patterns.Select(p => new GenealogyPatternDto
+                    {
+                        TechniqueId = p.TechniqueId,
+                        TechniqueName = p.TechniqueName,
+                        Description = p.Description,
+                    })],
+                });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "GENEALOGY chain for alert {AlertId} could not be queued", alertId);
+        }
+    }
+
+    private static GenealogyProcessDto Describe(ProcessSnapshot process) => new()
+    {
+        Pid = process.ProcessId,
+        Name = process.ProcessName,
+        Path = process.ExecutablePath,
+        StartedAt = process.StartTime,
+        CommandLine = process.CommandLine,
+    };
 
     /// <inheritdoc />
     public async Task<string?> EnrichAlertAsync(Guid alertId, string offendingFilePath, CancellationToken cancellationToken = default)

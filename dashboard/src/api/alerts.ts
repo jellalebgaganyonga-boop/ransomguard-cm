@@ -152,6 +152,36 @@ export const AlertResponseSchema = z.object({
 });
 export type AlertResponse = z.infer<typeof AlertResponseSchema>;
 
+/** One process in the chain behind a write (GENEALOGY). */
+export const GenealogyProcessSchema = z.object({
+  pid: z.number(),
+  name: z.string(),
+  path: z.string().nullable().optional(),
+  started_at: z.string().nullable().optional(),
+  command_line: z.string().nullable().optional(),
+});
+export type GenealogyProcess = z.infer<typeof GenealogyProcessSchema>;
+
+/** A MITRE ATT&CK technique the chain matched. */
+export const GenealogyPatternSchema = z.object({
+  technique_id: z.string(),
+  technique_name: z.string(),
+  description: z.string(),
+});
+export type GenealogyPattern = z.infer<typeof GenealogyPatternSchema>;
+
+/**
+ * The chain of processes behind an alert. `ancestors` arrives nearest-first (parent, then
+ * grandparent); the component reverses it so the chain reads the way it happened.
+ */
+export const AlertGenealogySchema = z.object({
+  chain: z.string(),
+  writer: GenealogyProcessSchema,
+  ancestors: z.array(GenealogyProcessSchema).default([]),
+  patterns: z.array(GenealogyPatternSchema).default([]),
+});
+export type AlertGenealogy = z.infer<typeof AlertGenealogySchema>;
+
 export const AlertDetailSchema = z.object({
   id: z.string(),
   detected_at: z.string(),
@@ -171,6 +201,7 @@ export const AlertDetailSchema = z.object({
   artifacts: z.array(AlertArtifactSchema).nullable().optional(),
   status_history: z.array(AlertStatusChangeSchema).nullable().optional(),
   attribution: AlertAttributionSchema.nullable().optional(),
+  genealogy: AlertGenealogySchema.nullable().optional(),
   commands: z.array(AlertCommandSchema).optional(),
   responses: z.array(AlertResponseSchema).optional(),
 });

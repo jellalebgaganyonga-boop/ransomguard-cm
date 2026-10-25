@@ -120,6 +120,17 @@ public sealed class GridApiClient : IGridApiClient
     }
 
     /// <inheritdoc />
+    public async Task SendGenealogyAsync(string clientMessageId, GenealogyComplementRequest request, CancellationToken ct = default)
+    {
+        EnsureEnrolled();
+        var client = CreateClient();
+        var response = await client.PostAsJsonAsync(
+            $"/api/v1/agents/{_agentId}/alerts/{Uri.EscapeDataString(clientMessageId)}/genealogy", request, JsonOptions, ct)
+            .ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+    }
+
+    /// <inheritdoc />
     public async Task<AuditLogBatchResponse> SendAuditLogBatchAsync(AuditLogBatchRequest request, CancellationToken ct = default)
     {
         EnsureEnrolled();

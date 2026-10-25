@@ -1,5 +1,6 @@
 """Alert ingestion endpoints — mTLS required."""
 
+import json
 from collections.abc import Callable
 from datetime import UTC, datetime
 from uuid import uuid4
@@ -15,6 +16,8 @@ from ransomguard_grid.api.v1.schemas.alert import (
     AlertIngestResponse,
     AttributionComplementRequest,
     AttributionComplementResponse,
+    GenealogyComplementRequest,
+    GenealogyComplementResponse,
     BatchAlertIngestRequest,
     BatchAlertIngestResponse,
 )
@@ -322,6 +325,83 @@ async def attribute_alert(
     _log_attribution(db, agent, alert.id, "AlertAttributionApplied", body.state, now, previous=current)
     await db.flush()
     return AttributionComplementResponse(alert_id=alert.id, status="applied")
+
+
+# Detail keys the genealogy complement writes on the alert. The chain and the patterns are
+# JSON in one detail each rather than a row per process: the console reads the whole chain or
+# none of it, and a row per process would have to be re-assembled in the right order anyway.
+_GENEALOGY_KEYS = ("genealogy_chain", "genealogy_tree", "genealogy_patterns")
+_GENEALOGY_COMPONENT = "alert-genealogy"
+
+
+@router.post(
+    "/alerts/{client_message_id}/genealogy",
+    response_model=GenealogyComplementResponse,
+)
+async def genealogy_for_alert(
+    agent_id: str,
+    client_message_id: str,
+    body: GenealogyComplementRequest,
+    agent: Agent = Depends(get_authenticated_agent),
+    db: AsyncSession = Depends(get_db),
+    limiter: InMemoryRateLimiter = Depends(get_rate_limiter),
+) -> GenealogyComplementResponse:
+    """The chain of processes behind an alert this agent sent.
+
+    Partitioned exactly like the attribution complement: the agent must be the authenticated one,
+    and the alert is found by client_message_id AND agent_id AND tenant_id, so an alert belonging
+    to another agent or another tenant is 404 and not a hint that it exists.
+
+    A second complement for the same alert replaces the first. The chain is rebuilt from the
+    ancestry the agent captured, and a later one is the better reading, not a duplicate.
+    """
+    if agent.id != agent_id:
+        raise HTTPException(403, "Agent ID mismatch")
+
+    if not await limiter.check_and_increment(f"genealogy:{agent.id}", limit=60, window_seconds=60):
+        raise HTTPException(429, "Rate limit exceeded: 60 genealogy complements per minute")
+
+    alert = await AlertRepository(db, agent.tenant_id).find_by_client_message_id(agent.id, client_message_id)
+    if alert is None:
+        raise HTTPException(404, "Alert not found")
+
+    chain = " -> ".join([p.name for p in reversed(body.ancestors)] + [body.writer.name])
+    values = {
+        "genealogy_chain": chain,
+        "genealogy_tree": json.dumps({
+            "writer": body.writer.model_dump(mode="json"),
+            "ancestors": [a.model_dump(mode="json") for a in body.ancestors],
+        }),
+        "genealogy_patterns": json.dumps([p.model_dump(mode="json") for p in body.patterns]),
+    }
+
+    existing = (await db.execute(select(AlertDetail).where(
+        AlertDetail.tenant_id == agent.tenant_id,
+        AlertDetail.alert_id == alert.id,
+        AlertDetail.key.in_(_GENEALOGY_KEYS),
+    ))).scalars().all()
+    for detail in existing:
+        await db.delete(detail)
+
+    for key, value in values.items():
+        db.add(AlertDetail(id=str(uuid4()), tenant_id=agent.tenant_id, alert_id=alert.id, key=key, value=value))
+
+    db.add(SystemLog(
+        id=str(uuid4()),
+        tenant_id=agent.tenant_id,
+        level=LogLevel.Info,
+        component=_GENEALOGY_COMPONENT,
+        message=f"AlertGenealogyApplied: alert {alert.id}, chain {chain}",
+        context_json={
+            "event": "AlertGenealogyApplied", "alert_id": alert.id, "agent_id": agent.id,
+            "chain": chain, "patterns": len(body.patterns),
+        },
+        created_at=datetime.now(UTC),
+    ))
+    logger.info("AlertGenealogyApplied", alert_id=alert.id, agent_id=agent.id, patterns=len(body.patterns))
+
+    await db.flush()
+    return GenealogyComplementResponse(alert_id=alert.id, status="applied")
 
 
 def _log_attribution(

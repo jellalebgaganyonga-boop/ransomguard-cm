@@ -1,5 +1,6 @@
 """Dashboard REST API endpoints — JWT authenticated, RBAC enforced, tenant-isolated."""
 
+import json
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 from uuid import uuid4
@@ -17,6 +18,9 @@ from ransomguard_grid.api.v1.schemas.dashboard import (
     AgentItem,
     AgentPostureItem,
     AlertAttribution,
+    AlertGenealogy,
+    AlertGenealogyPattern,
+    AlertGenealogyProcess,
     AlertCommandItem,
     AlertItem,
     AlertResponseItem,
@@ -297,6 +301,7 @@ async def get_alert(
     item = _alert_item(alert, await _hostname_for(db, alert))
     return item.model_copy(update={
         "attribution": await _attribution_for(db, alert),
+        "genealogy": await _genealogy_for(db, alert),
         "commands": await _commands_for(db, alert),
         "responses": await _responses_for(db, alert),
     })
@@ -322,6 +327,39 @@ async def _attribution_for(db: AsyncSession, alert: Alert) -> AlertAttribution |
         process_name=values.get("process_name"),
         process_path=values.get("process_path"),
         process_created_at=values.get("process_created_at"),
+    )
+
+
+async def _genealogy_for(db: AsyncSession, alert: Alert) -> AlertGenealogy | None:
+    """The chain of processes behind an alert, read in the alert's own tenant.
+
+    Absent until the agent sends it, and absent for good when it never could: the chain is built
+    from the writer, so an alert nobody could be attributed to has none. None means "not known",
+    which the console says rather than drawing an empty tree.
+    """
+    rows = (await db.execute(select(AlertDetail.key, AlertDetail.value).where(
+        AlertDetail.tenant_id == alert.tenant_id,
+        AlertDetail.alert_id == alert.id,
+        AlertDetail.key.in_(("genealogy_chain", "genealogy_tree", "genealogy_patterns")),
+    ))).all()
+    values = {key: value for key, value in rows}
+    if "genealogy_tree" not in values:
+        return None
+
+    try:
+        tree = json.loads(values["genealogy_tree"])
+        patterns = json.loads(values.get("genealogy_patterns") or "[]")
+    except (ValueError, TypeError):
+        # Written by this GRID from a validated body, so this should not happen; if it somehow
+        # does, the alert is still shown without its chain rather than failing to load at all.
+        logger.warning("alert genealogy is not readable JSON", alert_id=alert.id)
+        return None
+
+    return AlertGenealogy(
+        chain=values.get("genealogy_chain", ""),
+        writer=AlertGenealogyProcess(**tree["writer"]),
+        ancestors=[AlertGenealogyProcess(**a) for a in tree.get("ancestors", [])],
+        patterns=[AlertGenealogyPattern(**p) for p in patterns],
     )
 
 
