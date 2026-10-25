@@ -56,6 +56,12 @@ public sealed class EntropyMonitor : BackgroundService
     private readonly EtwFileIoSession? _etwSession;
 
     /// <summary>
+    /// The attribution capability the module state was last published for; null before the first
+    /// publish, so the startup state is always written once.
+    /// </summary>
+    private bool? _lastPublishedCanAttribute;
+
+    /// <summary>
     /// Initializes the entropy monitor.
     /// </summary>
     /// <param name="logger">Logger.</param>
@@ -209,29 +215,22 @@ public sealed class EntropyMonitor : BackgroundService
 
             _logger.LogInformation("ENTROPY monitor watching {DirCount} directories", _watchers.Count);
 
-            // What ENTROPY may claim about itself (B4, 2026-10-22). The detection is real: every
-            // write on a watched folder is read, its Shannon entropy computed, and rules 1 and 2
-            // (absolute threshold, delta against the file's baseline) decide. Two gaps are open,
-            // and a module that reads "active" would hide both from whoever looks at the console:
+            // What ENTROPY may claim about itself. Both gaps that held it at degraded since B4
+            // (2026-10-22) are now closed:
             //
-            //   AGT-ATTR-001 -- an ENTROPY signal names no process: it carries PID 0. The console
-            //                   shows "a file was encrypted" and cannot say by whom.
-            //   AGT-EN-002   -- rule 3, the directory-wide entropy shift, has no caller. It is the
-            //                   mass-encryption signal, and DirectoryShiftThreshold,
-            //                   DirectoryShiftWindowSeconds and DirectoryShiftMinFiles are read
-            //                   from the configuration and change nothing.
+            //   AGT-ATTR-001 -- an alert carries the process that wrote the file, read from the
+            //                   kernel FileIO session through FileWriteAttributionCache.
+            //   AGT-EN-002   -- rule 3 is evaluated: DirectoryEntropyWindow counts the distinct
+            //                   files of a folder inside DirectoryShiftWindowSeconds and
+            //                   EntropyDetector.AnalyzeDirectoryShift decides on them.
             //
-            // So: degraded, with the reason the operator can act on. It becomes active when a
-            // signal names its writer and rule 3 is evaluated.
-            _logger.LogWarning(
-                "ENTROPY degraded: its signals carry PID 0, no process is named (AGT-ATTR-001). "
-                + "An encrypted write is reported without its author.");
-            _logger.LogWarning(
-                "ENTROPY degraded: rule 3 (directory-wide entropy shift, the mass-encryption signal) is not "
-                + "evaluated (AGT-EN-002). DirectoryShiftThreshold {Shift}, DirectoryShiftWindowSeconds {Window} "
-                + "and DirectoryShiftMinFiles {MinFiles} are read and change nothing.",
-                entropy.DirectoryShiftThreshold, entropy.DirectoryShiftWindowSeconds, entropy.DirectoryShiftMinFiles);
-            _moduleState.Publish(ModuleCode.Entropy, ModuleState.Degraded, ModuleReasonCode.AttributionUnreliable);
+            // One condition is left, and it is a runtime one: naming a writer needs the kernel
+            // session, and that session needs administrator rights and a free system-logger slot.
+            // Without it the detection still runs but no alert can name anybody, which is exactly
+            // what degraded/attribution_unreliable means. So the state follows the session rather
+            // than the build: active when it is running, degraded when it is not, re-published if
+            // that changes while the agent runs (PublishEntropyState, called from ResolveWriter).
+            PublishEntropyState(entropy);
             reachedRunningState = true;
 
             await ModuleTaskObserver.ObserveUntilStoppedAsync(
@@ -258,11 +257,134 @@ public sealed class EntropyMonitor : BackgroundService
     }
 
     /// <summary>
+    /// Rule 3 (AGT-EN-002): many different files in one folder turning high-entropy at once is
+    /// mass encryption. Called after each per-file alert; raises at most one folder-wide Critical
+    /// per window, so a burst of fifty files is one alert naming the folder, not fifty.
+    ///
+    /// Never throws: the per-file alert has already left, and rule 3 failing must not cost it.
+    /// </summary>
+    private async Task EvaluateDirectoryShiftAsync(
+        EntropyDetector detector,
+        DirectoryEntropyWindow window,
+        string filePath,
+        EntropyAlert fileAlert,
+        AttributionOutcome fileAttribution,
+        AgentDbContext context,
+        IAuditLogRepository auditRepo)
+    {
+        try
+        {
+            int? writerPid = fileAttribution.State == AttributionState.Resolved ? fileAttribution.ProcessId : null;
+            DirectorySnapshot snapshot = window.Record(filePath, fileAlert.Delta, writerPid);
+            if (snapshot.InCooldown)
+            {
+                return; // this folder already said it; the rest of the burst is the same event
+            }
+
+            string directory = DirectoryEntropyWindow.DirectoryOf(filePath);
+            EntropyAlert? shift = detector.AnalyzeDirectoryShift(directory, snapshot.FileCount, snapshot.AverageDelta);
+            if (shift is null)
+            {
+                return;
+            }
+
+            window.MarkFired(filePath);
+
+            // The folder-wide alert names the writer only when every attributed file in the window
+            // agrees on one process. Files nobody could attribute do not contradict it; two
+            // different writers do, and then nobody is named.
+            AttributionOutcome shiftAttribution = snapshot.UnanimousWriterPid is int pid
+                ? (fileAttribution.State == AttributionState.Resolved && fileAttribution.ProcessId == pid
+                    ? fileAttribution
+                    : new AttributionOutcome(AttributionState.Resolved, pid))
+                : new AttributionOutcome(AttributionState.Ambiguous);
+
+            var mappedShift = AlertMapper.FromEntropyAlert(shift, shiftAttribution);
+            if (mappedShift is not null)
+            {
+                _alertQueue?.TryEnqueue(mappedShift);
+            }
+
+            _logger.LogCritical(
+                "ENTROPY MASS ENCRYPTION: {Count} files in {Directory} turned high-entropy within {Window}s "
+                + "(average rise {Average:F2}) | Writer: {Writer}",
+                snapshot.FileCount, directory, _config.Entropy?.DirectoryShiftWindowSeconds, snapshot.AverageDelta,
+                shiftAttribution.State == AttributionState.Resolved
+                    ? $"PID {shiftAttribution.ProcessId}"
+                    : "not named (several writers or none attributed)");
+
+            try
+            {
+                context.EntropyAlerts.Add(shift);
+                await context.SaveChangesAsync(CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "ENTROPY rule 3 alert {AlertId} sent, but its local record failed", shift.Id);
+                context.Entry(shift).State = EntityState.Detached;
+            }
+
+            await auditRepo.AppendAsync("EntropyDirectoryShift",
+                $"{snapshot.FileCount} files in {directory}, average entropy rise {snapshot.AverageDelta:F2}",
+                "EntropyAlert", shift.Id, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "ENTROPY rule 3 evaluation failed for {FilePath}; the per-file alert is unaffected", filePath);
+        }
+    }
+
+    /// <summary>
+    /// Whether an alert can name its writer right now: the cache is wired and the kernel session is
+    /// running. Everything else about ENTROPY (reading files, rules 1-3) works either way.
+    /// </summary>
+    private bool CanAttributeNow =>
+        _attribution is not null && _fanout is not null && _etwSession?.State == EtwSessionState.Running;
+
+    /// <summary>
+    /// Publishes active or degraded from the one runtime condition that remains (AGT-ATTR-001):
+    /// the kernel session. Logs only on a change, so a stopped session says so once rather than
+    /// on every alert.
+    /// </summary>
+    private void PublishEntropyState(EntropyOptions entropy)
+    {
+        bool canAttribute = CanAttributeNow;
+        if (_lastPublishedCanAttribute == canAttribute)
+        {
+            return;
+        }
+
+        _lastPublishedCanAttribute = canAttribute;
+        if (canAttribute)
+        {
+            _logger.LogInformation(
+                "ENTROPY active: an alert names the process that wrote the file, and rule 3 is evaluated "
+                + "(threshold {Shift}, window {Window}s, at least {MinFiles} files).",
+                entropy.DirectoryShiftThreshold, entropy.DirectoryShiftWindowSeconds, entropy.DirectoryShiftMinFiles);
+            _moduleState.Publish(ModuleCode.Entropy, ModuleState.Active);
+            return;
+        }
+
+        _logger.LogWarning(
+            "ENTROPY degraded: the kernel FileIO session is not running, so an encrypted write is reported "
+            + "without its author (AGT-ATTR-001). Detection and rule 3 are unaffected. The session needs "
+            + "administrator rights and a free system-logger slot; SENTINEL's log says which is missing.");
+        _moduleState.Publish(ModuleCode.Entropy, ModuleState.Degraded, ModuleReasonCode.AttributionUnreliable);
+    }
+
+    /// <summary>
     /// Names the process that wrote <paramref name="filePath"/>, or says why nobody is named
     /// (AGT-ATTR-001). Never throws: a failed attribution must not cost the detection.
     /// </summary>
     private AttributionOutcome ResolveWriter(string filePath)
     {
+        // The session can go down (stopped from outside) or come back (its restart timer) while the
+        // agent runs; the module state must follow it rather than stay at whatever startup saw.
+        if (_config.Entropy is not null)
+        {
+            PublishEntropyState(_config.Entropy);
+        }
+
         if (_attribution is null)
         {
             return new AttributionOutcome(AttributionState.Unavailable, Reason: AttributionReason.EtwUnavailable);
@@ -388,6 +510,11 @@ public sealed class EntropyMonitor : BackgroundService
     {
         var detector = new EntropyDetector(options);
 
+        // AGT-EN-002: rule 3's window. EntropyDetector.AnalyzeDirectoryShift has always existed and
+        // nothing ever called it, because nothing counted how many *different* files in one folder
+        // had turned high-entropy. This is that counter.
+        var directoryWindow = new DirectoryEntropyWindow(options.DirectoryShiftWindowSeconds);
+
         await foreach (string filePath in _fileChannel.Reader.ReadAllAsync(ct))
         {
             try
@@ -452,6 +579,12 @@ public sealed class EntropyMonitor : BackgroundService
                     await auditRepo.AppendAsync("EntropyAlert",
                         $"Rule {alert.RuleId} ({alert.RuleName}): {filePath} entropy {alert.BaselineEntropy:F2} -> {alert.CurrentEntropy:F2}",
                         "EntropyAlert", alert.Id, CancellationToken.None);
+
+                    // AGT-EN-002, rule 3: this file joins its folder's window; if enough *different*
+                    // files in that folder have turned high-entropy inside the window, that is mass
+                    // encryption and it is reported as one folder-wide Critical, not one per file.
+                    await EvaluateDirectoryShiftAsync(
+                        detector, directoryWindow, filePath, alert, attribution, context, auditRepo);
 
                     // Fire-and-forget genealogy enrichment for process attribution
                     _ = Task.Run(async () =>

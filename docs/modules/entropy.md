@@ -22,14 +22,24 @@ Fires when a text-like file (.docx, .pdf, .xlsx, .csv, .txt) has entropy > 7.5 A
 ### Rule 2 — SuddenEntropyDelta (High)
 Fires when any file's entropy increases by more than 2.5 bits/byte from baseline AND current entropy > 7.0. Catches encryption regardless of file type.
 
-### Rule 3 — DirectoryWideEntropyShift (Critical) — **not evaluated (AGT-EN-002)**
-It would fire when 5+ files in the same directory show an entropy increase > 1.5 within 60 seconds:
-the strongest ransomware indicator, mass encryption of a directory. **`DirectoryShiftRule` and
-`EntropyDetector.AnalyzeDirectoryShift` have no caller in the agent** — only the tests call them.
-`EntropyMonitor` evaluates rules 1, 2 and 4. `DirectoryShiftThreshold`,
-`DirectoryShiftWindowSeconds` and `DirectoryShiftMinFiles` below are read from the configuration
-and change nothing: an administrator who tunes them tunes nothing. Mass encryption is therefore
-seen as a series of single-file alerts (rules 1 and 2), not as one directory-wide signal.
+### Rule 3 — DirectoryWideEntropyShift (Critical)
+Fires when `DirectoryShiftMinFiles` (5) **distinct** files in the same directory show an average
+entropy increase above `DirectoryShiftThreshold` (1.5) within `DirectoryShiftWindowSeconds` (60):
+the strongest ransomware indicator, mass encryption of a directory.
+
+`DirectoryEntropyWindow` keeps the count. Two properties of it matter:
+
+- **Distinct files, not writes.** One document rewritten twenty times by a noisy application is one
+  file and can never reach the threshold on its own. Mass encryption is about breadth.
+- **One alert per burst.** After the rule fires for a directory it goes quiet for the length of the
+  window, so fifty encrypted files raise one Critical naming the directory, not fifty that would
+  bury it. A second wave after the window is reported again.
+
+The directory-wide alert names the writing process when every attributed file in the window agrees
+on one PID; files nobody could attribute do not contradict it, two different writers do, and then
+nobody is named.
+
+The three configuration values are read and act: an administrator who tunes them tunes the rule.
 
 ### Rule 4 — ExtensionWhitelist (Suppression)
 Prevents false positives on legitimately high-entropy files: .zip, .7z, .gz, .rar, .jpg, .jpeg, .png, .mp3, .mp4, .avi, .mkv. Evaluated first — if triggered, no other rules run.
@@ -72,11 +82,28 @@ At startup, ENTROPY scans all files in configured watch directories:
 |---|---|---|
 | `disabled_by_config` | `Entropy.Enabled` false | Not asked to run. |
 | `inactive / no_watch_directory` | none of the configured folders is watchable | It would see no write at all. |
-| `degraded / attribution_unreliable` | **running (since 2026-10-22)** | It watches, computes Shannon entropy and fires rules 1, 2 and 4 — that part is real. Two gaps keep it from reading `active`: every signal carries **PID 0**, so no process is named (AGT-ATTR-001), and **rule 3 is not evaluated** (AGT-EN-002, above). |
+| `active` | running **with the kernel FileIO session up** | It watches, computes Shannon entropy, evaluates rules 1–4, and an alert names the process that wrote the file. |
+| `degraded / attribution_unreliable` | running **without the kernel FileIO session** | Detection and all four rules still run; no alert can name its writer, so the console must not read green (AGT-ATTR-001). |
 
-It reads `active` when a signal names its writer and rule 3 is evaluated. Until then the console
-shows "ENTROPY degraded: attribution unreliable", and the agent logs both gaps by their debt
-identifiers at every start.
+The state follows the session at runtime, not the build: if the session is stopped from outside
+(`logman stop`, an anti-EDR tool) the module drops to `degraded` on the next alert, and returns to
+`active` when the session's restart succeeds.
+
+**How a writer is named.** The session is SENTINEL's — one per machine, shared through
+`FileIoFanout` rather than opening a second one. `FileWriteAttributionCache` keeps the write
+records of the watched folders for two minutes, so ENTROPY can still ask "who wrote this" after it
+has read and hashed the file, by which time the writer has closed its handle. (The Restart Manager,
+which GENEALOGY uses, only reports processes *currently holding* a file, so for the write-and-close
+that ransomware does it reports nobody — that is why it was never enough.)
+
+The refusals are reported as precisely as the answers, because a wrong PID is worse than no PID:
+`system_pid` (the write was PID 0 or 4), `pid_reused`, `process_exited`, `no_write_event`,
+`etw_unavailable`, or `ambiguous` when two processes wrote the same file in the window. The console
+shows each of these differently rather than implying the file wrote itself.
+
+**Needs administrator rights.** The kernel session needs them, and a free system-logger slot
+(Windows allows eight). Without either, ENTROPY runs degraded and SENTINEL's log says which is
+missing.
 
 ## Known Limitations
 
