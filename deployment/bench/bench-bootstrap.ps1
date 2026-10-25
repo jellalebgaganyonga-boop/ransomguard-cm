@@ -5,7 +5,7 @@
 .DESCRIPTION
     Run inside the VM, from the bench disc. It does three things and nothing else:
 
-      1. names the machine (PC-ACCUEIL, PC-LABO) -- the console shows the hostname, so the two
+      1. names the machine (PC-RECEPTION, PC-LAB) -- the console shows the hostname, so the two
          workstations have to be told apart there;
       2. creates the non-administrator account `infirmier`, the everyday user of such a
          workstation. The agent runs as a service: what that user can do is not what the agent
@@ -32,7 +32,7 @@
     How many documents to write (default 200).
 
 .EXAMPLE
-    powershell -NoProfile -ExecutionPolicy Bypass -File D:\bench-bootstrap.ps1 -ComputerName PC-LABO -NursePassword '...'
+    powershell -NoProfile -ExecutionPolicy Bypass -File D:\bench-bootstrap.ps1 -ComputerName PC-LAB -NursePassword '...'
 #>
 [CmdletBinding()]
 # The password arrives as text because the caller is a .cmd on the bench disc, which has no way

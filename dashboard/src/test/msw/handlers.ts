@@ -12,7 +12,7 @@ import { http, HttpResponse } from 'msw';
 
 export const MOCK_ME_ANALYST = {
   user_id: '550e8400-e29b-41d4-a716-446655440000',
-  email: 'marc.tchoumi@hopital-yde.cm',
+  email: 'marc.tchoumi@yde-hospital.cm',
   full_name: 'Marc Tchoumi',
   is_active: true,
   tenant: {

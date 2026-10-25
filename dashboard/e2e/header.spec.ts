@@ -15,7 +15,7 @@ test.describe('Header — user menu', () => {
     await expect(page.getByRole('navigation').first().getByRole('link', { name: 'Settings' })).toHaveCount(0);
     await page.getByTestId('user-menu').click();
     const menu = page.getByRole('menu');
-    await expect(menu).toContainText('analyst@hopital-yde.cm');
+    await expect(menu).toContainText('analyst@yde-hospital.cm');
     await menu.getByRole('menuitem', { name: 'My settings' }).click();
 
     await expect(page).toHaveURL(/\/settings$/);

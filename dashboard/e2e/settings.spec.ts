@@ -33,7 +33,7 @@ test.describe('Settings', () => {
     await expect(page.getByRole('tab', { name: 'Profile' })).toHaveAttribute('aria-selected', 'true');
     await expect(page.getByTestId('profile-name')).toHaveText('Auditeur E2E');
     const panel = page.getByRole('tabpanel');
-    await expect(panel.getByText('auditor@hopital-yde.cm')).toBeVisible();
+    await expect(panel.getByText('auditor@yde-hospital.cm')).toBeVisible();
     await expect(panel.getByText('Hôpital Régional de Yaoundé')).toBeVisible();
 
     await page.getByRole('button', { name: 'Edit' }).click();

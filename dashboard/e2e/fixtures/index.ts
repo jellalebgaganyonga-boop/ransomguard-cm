@@ -28,7 +28,7 @@ const ADMIN_ID  = 'a0e2e000-0000-0000-0000-000000000010';
 export const MOCK_ME = {
   tenant_admin: {
     user_id: ADMIN_ID,
-    email: 'admin@hopital-yde.cm',
+    email: 'admin@yde-hospital.cm',
     full_name: 'Admin E2E',
     is_active: true,
     tenant: { id: TENANT_ID, name: 'Hôpital Régional de Yaoundé', status: 'active' },
@@ -38,7 +38,7 @@ export const MOCK_ME = {
   },
   security_analyst: {
     user_id: 'a0e2e000-0000-0000-0000-000000000020',
-    email: 'analyst@hopital-yde.cm',
+    email: 'analyst@yde-hospital.cm',
     full_name: 'Analyste E2E',
     is_active: true,
     tenant: { id: TENANT_ID, name: 'Hôpital Régional de Yaoundé', status: 'active' },
@@ -48,7 +48,7 @@ export const MOCK_ME = {
   },
   read_only_auditor: {
     user_id: 'a0e2e000-0000-0000-0000-000000000030',
-    email: 'auditor@hopital-yde.cm',
+    email: 'auditor@yde-hospital.cm',
     full_name: 'Auditeur E2E',
     is_active: true,
     tenant: { id: TENANT_ID, name: 'Hôpital Régional de Yaoundé', status: 'active' },
@@ -96,7 +96,7 @@ export const MOCK_ALERTS_LIST = {
 const MOCK_AGENT_ITEM = {
   id: 'agent-e2e-aaa',
   hostname: 'ws-cardio-01',
-  fqdn: 'ws-cardio-01.hopital-yde.cm',
+  fqdn: 'ws-cardio-01.yde-hospital.cm',
   os_version: 'Windows 10 Pro',
   agent_version: '0.9.0',
   status: 'active',
@@ -147,14 +147,14 @@ export const MOCK_USERS_LIST = {
   items: [
     {
       id: ADMIN_ID,
-      email: 'admin@hopital-yde.cm',
+      email: 'admin@yde-hospital.cm',
       full_name: 'Admin E2E',
       is_active: true,
       last_login_at: '2026-06-21T12:00:00+00:00',
     },
     {
       id: 'a0e2e000-0000-0000-0000-000000000020',
-      email: 'analyst@hopital-yde.cm',
+      email: 'analyst@yde-hospital.cm',
       full_name: 'Analyste E2E',
       is_active: true,
       last_login_at: '2026-06-21T11:00:00+00:00',
@@ -304,7 +304,7 @@ export async function setupMocks(page: Page, role: Role): Promise<void> {
  */
 export async function loginAs(page: Page, role: Role): Promise<void> {
   await page.goto('/auth/login');
-  await page.getByLabel(/organization code/i).fill('hopital-yde');
+  await page.getByLabel(/organization code/i).fill('yde-hospital');
   await page.getByLabel(/^email/i).fill(MOCK_ME[role].email);
   await page.locator('#password').fill('MotDePasseTest123!');
   await page.getByRole('button', { name: /^sign in$/i }).click();

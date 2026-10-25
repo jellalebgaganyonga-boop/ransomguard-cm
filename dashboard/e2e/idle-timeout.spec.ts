@@ -39,7 +39,7 @@ test.describe('Idle timeout', () => {
 
     // Perform login
     await page.goto('/auth/login');
-    await page.getByLabel(/organization code/i).fill('hopital-yde');
+    await page.getByLabel(/organization code/i).fill('yde-hospital');
     await page.getByLabel(/^email/i).fill(MOCK_ME.tenant_admin.email);
     await page.locator('#password').fill('MotDePasseTest123!');
     await page.getByRole('button', { name: /^sign in$/i }).click();
@@ -67,7 +67,7 @@ test.describe('Idle timeout', () => {
     await setupMocks(page, 'tenant_admin');
 
     await page.goto('/auth/login');
-    await page.getByLabel(/organization code/i).fill('hopital-yde');
+    await page.getByLabel(/organization code/i).fill('yde-hospital');
     await page.getByLabel(/^email/i).fill(MOCK_ME.tenant_admin.email);
     await page.locator('#password').fill('MotDePasseTest123!');
     await page.getByRole('button', { name: /^sign in$/i }).click();

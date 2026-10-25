@@ -88,7 +88,7 @@ from ransomguard_grid.db.models.tenant_user import Tenant
 PROVENANCE_KEY = "data_provenance"
 PROVENANCE_VALUE = "synthetic_demo_seed"
 
-DEMO_TENANT_CODE = "hopital-yde"
+DEMO_TENANT_CODE = "yde-hospital"
 
 NOW = datetime.now(UTC)
 
@@ -131,7 +131,7 @@ AGENTS = [
         "modules": dict(_BASE_MODULES),
     },
     {
-        "hostname": "PC-LABO-02",
+        "hostname": "PC-LAB-02",
         "os_version": "Windows 10 Enterprise 22H2",
         "agent_version": "8.0.0-sprint8",
         "heartbeat_ago": timedelta(seconds=45),
@@ -184,7 +184,7 @@ ALERTS = [
     },
     {
         "cmid": "demo-seed-002",
-        "hostname": "PC-LABO-02",
+        "hostname": "PC-LAB-02",
         "alert_type": "EntropyAbsoluteHighEntropy",
         "mitre": "T1486",
         "severity": Severity.High,
@@ -247,7 +247,7 @@ ALERTS = [
     },
     {
         "cmid": "demo-seed-005",
-        "hostname": "PC-LABO-02",
+        "hostname": "PC-LAB-02",
         "alert_type": "UsbGuard",
         "mitre": "T1091",
         "severity": Severity.High,

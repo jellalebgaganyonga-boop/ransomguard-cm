@@ -7,7 +7,7 @@ Two paths depending on where the agent will run:
 
 Both end at the same place: the console shows the real machine, SENTINEL fires on a canary file, the process gets suspended, you click Resume. **Everything on this document is for the demo bench only, nothing goes to a production server.**
 
-Credentials for the console: tenant `hopital-yde`, email `admin@hopital-yde.cm`, password `MotDePasseDemo!2026`.
+Credentials for the console: tenant `yde-hospital`, email `admin@yde-hospital.cm`, password `MotDePasseDemo!2026`.
 
 ---
 
@@ -80,8 +80,8 @@ or enable DHCP on the host-only adapter from VirtualBox: **File → Preferences 
 
 ```powershell
 # On the host
-$env:RG_TENANT = 'hopital-yde'
-$env:RG_ADMIN_EMAIL = 'admin@hopital-yde.cm'
+$env:RG_TENANT = 'yde-hospital'
+$env:RG_ADMIN_EMAIL = 'admin@yde-hospital.cm'
 $env:RG_ADMIN_PASSWORD = 'MotDePasseDemo!2026'
 pwsh deployment/bench/prepare-vm-media.ps1 -VmName hospital-pc
 ```
@@ -189,8 +189,8 @@ Or, if you want to drive the download from the host and carry the file to the ph
 
 ```powershell
 # On the host
-$env:RG_TENANT = 'hopital-yde'
-$env:RG_ADMIN_EMAIL = 'admin@hopital-yde.cm'
+$env:RG_TENANT = 'yde-hospital'
+$env:RG_ADMIN_EMAIL = 'admin@yde-hospital.cm'
 $env:RG_ADMIN_PASSWORD = 'MotDePasseDemo!2026'
 python deployment\bench\fetch_installer.py `
   --grid https://192.168.56.1:8443 `

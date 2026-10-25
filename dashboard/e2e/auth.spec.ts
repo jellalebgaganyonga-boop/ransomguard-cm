@@ -9,8 +9,8 @@ test.describe('Login', () => {
   test('valid credentials → redirect to /dashboard', async ({ page }) => {
     await setupMocks(page, 'tenant_admin');
     await page.goto('/auth/login');
-    await page.getByLabel(/organization code/i).fill('hopital-yde');
-    await page.getByLabel(/^email/i).fill('admin@hopital-yde.cm');
+    await page.getByLabel(/organization code/i).fill('yde-hospital');
+    await page.getByLabel(/^email/i).fill('admin@yde-hospital.cm');
     await page.locator('#password').fill('MotDePasseTest123!');
     await page.getByRole('button', { name: /^sign in$/i }).click();
     await page.waitForURL('**/dashboard');
@@ -24,7 +24,7 @@ test.describe('Login', () => {
       r.fulfill({ status: 401, json: { detail: 'Invalid credentials' } }));
 
     await page.goto('/auth/login');
-    await page.getByLabel(/organization code/i).fill('hopital-yde');
+    await page.getByLabel(/organization code/i).fill('yde-hospital');
     await page.getByLabel(/^email/i).fill('wrong@example.cm');
     await page.locator('#password').fill('mauvais-mdp');
     await page.getByRole('button', { name: /^sign in$/i }).click();

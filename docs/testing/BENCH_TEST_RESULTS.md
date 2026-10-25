@@ -1,8 +1,8 @@
 # Bench test results — RansomGuard-CM serving a simulated hospital
 
 **Run on 2026-10-25.** Vendor stack: the compose GRID and console on the host (`192.168.56.1`,
-agents on 443, console on 8443). Customer 1: tenant `hopital-yde`, "Hopital Regional de Yaounde",
-whose workstations are the bench VMs. Customer 2: tenant `clinique-test`, to show that one
+agents on 443, console on 8443). Customer 1: tenant `yde-hospital`, "Hopital Regional de Yaounde",
+whose workstations are the bench VMs. Customer 2: tenant `test-clinic`, to show that one
 customer never sees another's data.
 
 Every figure below comes from a real run against that stack. Nothing here is seeded or imagined.
@@ -11,11 +11,11 @@ Every figure below comes from a real run against that stack. Nothing here is see
 
 | | |
 |---|---|
-| Workstation 1 | **PC-ACCUEIL** (VirtualBox VM `win`), 4 vCPU, 4 GB, NAT + host-only |
-| Workstation 2 | **PC-LABO** (VirtualBox VM `windows  10`), 4 vCPU, 4 GB, NAT + host-only |
+| Workstation 1 | **PC-RECEPTION** (VirtualBox VM `win`), 4 vCPU, 4 GB, NAT + host-only |
+| Workstation 2 | **PC-LAB** (VirtualBox VM `windows  10`), 4 vCPU, 4 GB, NAT + host-only |
 | Each workstation has | a non-administrator account `infirmier`, and 200 invented hospital documents in `C:\Users\Public\Documents\Hospital-FICTIONAL\` (50 each in Patients, Laboratory, Pharmacy, Imaging) |
 | Agent under test | `1.0.0+69041da` (CI green: CI `40221112773`, Agent full `40221112766`) |
-| Console accounts | `admin@hopital-yde.cm` (tenant_admin), `analyste@hopital-yde.cm` (security_analyst), `auditeur@hopital-yde.cm` (read_only_auditor), `admin@clinique-test.cm` (tenant_admin of the other customer) |
+| Console accounts | `admin@yde-hospital.cm` (tenant_admin), `analyst@yde-hospital.cm` (security_analyst), `auditor@yde-hospital.cm` (read_only_auditor), `admin@test-clinic.cm` (tenant_admin of the other customer) |
 
 Passwords are in `deployment/bench/credentials.local.md`, which is gitignored and never committed.
 
@@ -23,7 +23,7 @@ Passwords are in `deployment/bench/credentials.local.md`, which is gitignored an
 
 - **There is no Windows installation media on this host.** The directive asked for the VMs to be
   rebuilt with an unattended install. That is not possible without a ~6 GB download, so the bench
-  uses the two Windows VMs that already existed and work, renamed PC-ACCUEIL and PC-LABO. The
+  uses the two Windows VMs that already existed and work, renamed PC-RECEPTION and PC-LAB. The
   third VM, `windows`, is still stuck in "Preparing to configure Windows" and was left alone
   rather than rebuilt.
 - **Neither VM has Guest Additions**, so there is no shared folder and no guest control. Every
@@ -35,11 +35,11 @@ Passwords are in `deployment/bench/credentials.local.md`, which is gitignored an
 
 | ID | Test | Expected | Observed | Verdict |
 |---|---|---|---|---|
-| 1 | Install + enrolment on a fresh workstation | agent in the console within 2 min, **zero alerts** | PC-LABO enrolled and `active`, **0 alerts**, `rejected_alerts = 0`, `pending_alerts = 0`. The agent's own log for an install window holds 18 events: deployment starting, the ETW session opening, nine canaries deployed, ENTROPY attribution — and no alert, no restoration. Before the fixes below, the same window produced 105 events and 24 Critical alerts. | **PASS** |
+| 1 | Install + enrolment on a fresh workstation | agent in the console within 2 min, **zero alerts** | PC-LAB enrolled and `active`, **0 alerts**, `rejected_alerts = 0`, `pending_alerts = 0`. The agent's own log for an install window holds 18 events: deployment starting, the ETW session opening, nine canaries deployed, ENTROPY attribution — and no alert, no restoration. Before the fixes below, the same window produced 105 events and 24 Critical alerts. | **PASS** |
 | 2 | Posture and module table, honest per agent | each module's real state | `SENTINEL active`, `ENTROPY active`, `GENEALOGY active`, `USB_GUARD active`, `EXFIL_WATCH degraded/learning_phase`, `ANTI_TAMPERING inactive/not_implemented`. Verdict `partial`, and the only reason given is the one that is true: EXFIL WATCH is still learning. | **PASS** |
 | 3 | SENTINEL: run `trigger-sentinel.cmd` | Critical alert, "Who did it?" names the process, process suspended | `SentinelCanaryModified` (Critical), then `SentinelProcessSuspended` — *"Process suspended after writing a canary: powershell (PID 2560)"*. "Who did it?" reads `state: resolved, process_id: 2560, process_name: powershell` — the writer is named, not guessed. | **PASS** |
 | 4 | Resume from the console | the process continues on the VM **and** the console updates | `SentinelProcessResumed` — *"Process resumed on request"* — reached the GRID and the suspension left *Suspended processes*. The process really did resume: still inside its five-write loop, it wrote the canary again and was suspended again, each time. Resuming until the script finished left **0 suspensions listed** and the trigger reporting *"finished. A pause above was the suspension; the resume let the script continue."* | **PASS** |
-| 6 | Tenant isolation | `admin@clinique-test.cm` sees nothing of `hopital-yde` | `clinique-test`: 0 agents, 0 alerts, 1 user (its own admin). `hopital-yde`, at the same moment: 1 agent, 10 alerts, 3 users. | **PASS** |
+| 6 | Tenant isolation | `admin@test-clinic.cm` sees nothing of `yde-hospital` | `test-clinic`: 0 agents, 0 alerts, 1 user (its own admin). `yde-hospital`, at the same moment: 1 agent, 10 alerts, 3 users. | **PASS** |
 | 5 | Roles: auditor cannot act, analyst can triage, admin can do all | — | **not yet run** | — |
 | 7 | Audit log and user-actions log record the actions above | — | partly observed: decommissioning an agent through the console wrote a `agent_decommission` user action. Not yet checked end to end. | **not yet run** |
 | 8 | Agent offline then back, queued alerts delivered | — | **not yet run** | — |
@@ -115,7 +115,7 @@ back. The console offered the button and no way to undo what it caused.
 
 In a hospital that is a workstation permanently outside the console after a reinstall. Fixed in
 `f92a958`: a decommissioned agent no longer holds its machine's fingerprint, so decommissioning is
-the supported way to let a rebuilt workstation enrol again. Proven here — PC-LABO was reinstalled
+the supported way to let a rebuilt workstation enrol again. Proven here — PC-LAB was reinstalled
 four times during this run.
 
 ### 4. Enrolment codes expired before the job was done
@@ -145,5 +145,5 @@ in `d7e7c89`.
   learning phase ends. That is honest, but it means `protected` is not reachable on a new
   workstation on day one.
 - **ANTI_TAMPERING is not implemented.** It reports so.
-- **Decommissioned agents stay in the list.** After four reinstalls, PC-LABO appears four times in
+- **Decommissioned agents stay in the list.** After four reinstalls, PC-LAB appears four times in
   the console, three of them decommissioned. Nothing hides or groups them.

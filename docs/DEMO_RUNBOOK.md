@@ -11,7 +11,7 @@ Every output below is marked:
   run yet: the bench VM's account needs its expired password changed first, which is the owner's
   step (see [Status](#status-on-2026-10-24)).
 
-Credentials for the console: tenant `hopital-yde`, `admin@hopital-yde.cm`, `MotDePasseDemo!2026`.
+Credentials for the console: tenant `yde-hospital`, `admin@yde-hospital.cm`, `MotDePasseDemo!2026`.
 
 ---
 
@@ -144,8 +144,8 @@ installer has added the GRID's CA. So the installer goes in as a **disc**, like 
 The enrollment code is valid **30 minutes**: run this right before step 6.
 
 ```powershell
-$env:RG_TENANT = 'hopital-yde'
-$env:RG_ADMIN_EMAIL = 'admin@hopital-yde.cm'
+$env:RG_TENANT = 'yde-hospital'
+$env:RG_ADMIN_EMAIL = 'admin@yde-hospital.cm'
 $env:RG_ADMIN_PASSWORD = 'MotDePasseDemo!2026'
 pwsh deployment/bench/prepare-vm-media.ps1 -VmName win
 ```

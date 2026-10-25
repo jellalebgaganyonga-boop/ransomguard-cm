@@ -20,7 +20,7 @@ class AgentRepository(BaseRepository[Agent]):
         workstation could be enrolled exactly once in its life: reinstall the agent, rebuild
         the machine, or decommission it on purpose, and it could never come back -- the console
         offered a decommission button and no way to undo what it caused. Observed on the bench
-        on 2026-10-25: PC-LABO was reinstalled and the GRID answered 409 to every attempt.
+        on 2026-10-25: PC-LAB was reinstalled and the GRID answered 409 to every attempt.
 
         Decommissioning is now the supported way to let a workstation enrol again, which is what
         the word means.

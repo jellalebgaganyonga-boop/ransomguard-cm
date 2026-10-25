@@ -24,7 +24,7 @@ namespace RansomGuard.Agent.Tests.Sentinel;
 /// </para>
 ///
 /// <para>
-/// A fresh install on the bench produced fifteen of those (PC-LABO, 2026-10-25), each within a
+/// A fresh install on the bench produced fifteen of those (PC-LAB, 2026-10-25), each within a
 /// second of its canary being created, plus a SentinelIsolationRecommended on top because three
 /// canaries had been "written by nobody" inside a minute. The ordering is the fix, so the
 /// ordering is what these tests hold: the mark exists before the write, not after it.

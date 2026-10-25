@@ -19,7 +19,7 @@
     the endpoint-protection exclusion covers, and gitignored.
 
 .EXAMPLE
-    $env:RG_TENANT = 'hopital-yde'; $env:RG_ADMIN_EMAIL = 'admin@hopital-yde.cm'; $env:RG_ADMIN_PASSWORD = '...'
+    $env:RG_TENANT = 'yde-hospital'; $env:RG_ADMIN_EMAIL = 'admin@yde-hospital.cm'; $env:RG_ADMIN_PASSWORD = '...'
     pwsh deployment/bench/prepare-vm-media.ps1 -VmName win
 #>
 [CmdletBinding()]

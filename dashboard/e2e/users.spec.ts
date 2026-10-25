@@ -9,7 +9,7 @@ const ADMIN_ID = 'a0e2e000-0000-0000-0000-000000000010';
 
 const NEW_USER = {
   id: 'user-new-e2e-99',
-  email: 'nouveau@hopital-yde.cm',
+  email: 'nouveau@yde-hospital.cm',
   full_name: 'Nouveau Utilisateur',
   is_active: true,
   last_login_at: null,
@@ -51,14 +51,14 @@ test.describe('Users list — tenant_admin', () => {
 
     // Fill form
     await modal.getByLabel(/full name/i).fill('Nouveau Utilisateur');
-    await modal.getByLabel(/^email/i).fill('nouveau@hopital-yde.cm');
+    await modal.getByLabel(/^email/i).fill('nouveau@yde-hospital.cm');
     await modal.getByLabel(/temporary password/i).fill('MotDePasse123!');
 
     // Submit
     await modal.getByRole('button', { name: /^create$/i }).click();
 
     // List refreshes — new user appears
-    await expect(page.getByText('nouveau@hopital-yde.cm')).toBeVisible();
+    await expect(page.getByText('nouveau@yde-hospital.cm')).toBeVisible();
   });
 
   test('self-disable: Disable button ABSENT from own row (GRID-SEC-002)', async ({ page }) => {

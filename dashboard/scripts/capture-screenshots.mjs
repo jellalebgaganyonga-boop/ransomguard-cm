@@ -21,8 +21,8 @@ const GRID_URL = process.env.GRID_URL ?? 'http://127.0.0.1:8443';
 const OUT_DIR = path.resolve(process.cwd(), '..', 'docs', 'screenshots');
 
 const CREDENTIALS = {
-  tenant: 'hopital-yde',
-  email: 'admin@hopital-yde.cm',
+  tenant: 'yde-hospital',
+  email: 'admin@yde-hospital.cm',
   password: 'MotDePasseDemo!2026',
 };
 

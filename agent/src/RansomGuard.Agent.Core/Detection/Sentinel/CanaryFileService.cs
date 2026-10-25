@@ -81,7 +81,7 @@ public sealed class CanaryFileService : ICanaryFileService
         // services and start together, so by the time the first canary is written the watcher is
         // usually already watching: a mark set after WriteAllBytesAsync returns can arrive after
         // the watcher has already turned that write into a Critical "canary modified". A fresh
-        // install reported fifteen of those on the bench (PC-LABO, 2026-10-25), one per canary,
+        // install reported fifteen of those on the bench (PC-LAB, 2026-10-25), one per canary,
         // each within a second of its file being created, with no process named -- ETW filters
         // the agent's own PID out, so nothing could be attributed either.
         _ownWrites?.Mark(filePath, AgentOwnWrites.DeploymentGrace);

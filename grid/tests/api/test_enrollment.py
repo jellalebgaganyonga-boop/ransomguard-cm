@@ -107,7 +107,7 @@ async def test_a_decommissioned_workstation_can_enrol_again(
     The fingerprint check used to ignore status, so a workstation could be enrolled exactly once
     in its life: reinstall the agent, rebuild the machine, or decommission it on purpose, and the
     GRID answered 409 for ever. The console offered a decommission button and no way to undo what
-    it caused. Seen on the bench on 2026-10-25, reinstalling the agent on PC-LABO.
+    it caused. Seen on the bench on 2026-10-25, reinstalling the agent on PC-LAB.
     """
     otp_service = EnrollmentOtpService(session_store)
     fp = "e" * 64

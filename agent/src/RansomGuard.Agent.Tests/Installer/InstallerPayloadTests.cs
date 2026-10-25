@@ -18,7 +18,7 @@ public sealed class InstallerPayloadTests : IDisposable
         GridBaseUrl = "https://grid.hopital.local:8443",
         Otp = "ABCDEFGHIJKL",
         OtpExpiresAt = new DateTimeOffset(2026, 10, 21, 12, 0, 0, TimeSpan.Zero),
-        TenantCode = "hopital-yde",
+        TenantCode = "yde-hospital",
         AgentPackageSha256 = new string('a', 64),
         GridCaPem = "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n",
     };
@@ -57,7 +57,7 @@ public sealed class InstallerPayloadTests : IDisposable
         payload.Config!.GridBaseUrl.ShouldBe(_config.GridBaseUrl);
         payload.Config.Otp.ShouldBe(_config.Otp);
         payload.Config.OtpExpiresAt.ShouldBe(_config.OtpExpiresAt);
-        payload.Config.TenantCode.ShouldBe("hopital-yde");
+        payload.Config.TenantCode.ShouldBe("yde-hospital");
         payload.Config.GridCaPem.ShouldBe(_config.GridCaPem);
         payload.ZipLength.ShouldBe(_zip.Length);
         payload.ZipOffset.ShouldBe(new FileInfo(_stub).Length); // the zip starts right after the stub

@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ransomguard_grid.core.security import hash_password
 from ransomguard_grid.db.models.agent import Agent, AgentModuleStatus, AgentPosture, AgentPostureChange
+from ransomguard_grid.db.models.enums import AgentStatus
 from ransomguard_grid.db.models.operations import SystemLog
 from ransomguard_grid.db.models.tenant_user import Role, Tenant, User, UserRole
 from tests.api.test_heartbeat import _setup
@@ -399,3 +400,45 @@ async def test_restarts_of_the_last_hour_decide_whether_starting_keeps_its_grace
     detail = (await client.get(f"/api/v1/dashboard/agents/{agent.id}", headers=headers)).json()
 
     assert (detail["protection_state"], detail["reason_codes"]) == (state, reasons)
+
+
+@pytest.mark.asyncio
+async def test_a_decommissioned_agent_is_not_in_the_list_unless_it_is_asked_for(
+    client: AsyncClient, db_session: AsyncSession, test_cert_serial: str,
+) -> None:
+    """A rebuilt workstation must not fill the page with copies of itself.
+
+    Reinstalling brings a workstation back as a new agent and the old row stays, with its alerts
+    and its audit history. On the bench one workstation ended up listed five times, four of them
+    dead, and nothing could be done about it from the console. The dead ones are hidden now --
+    hidden, not deleted: they are still reachable by id and still returned when asked for.
+    """
+    tenant, agent = await _setup(db_session, test_cert_serial)
+    headers = await _admin_headers(client, db_session, tenant)
+
+    listed = (await client.get("/api/v1/dashboard/agents", headers=headers)).json()
+    assert [i["id"] for i in listed["items"]] == [agent.id]
+    assert listed["total"] == 1
+
+    row = await db_session.get(Agent, agent.id)
+    assert row is not None
+    row.status = AgentStatus.decommissioned
+    await db_session.commit()
+
+    hidden = (await client.get("/api/v1/dashboard/agents", headers=headers)).json()
+    assert hidden["items"] == []
+    assert hidden["total"] == 0, "the count must agree with the list, or the page shows 1 of 0"
+
+    asked_for = (
+        await client.get("/api/v1/dashboard/agents?include_decommissioned=true", headers=headers)
+    ).json()
+    assert [i["id"] for i in asked_for["items"]] == [agent.id]
+
+    by_status = (
+        await client.get("/api/v1/dashboard/agents?status=decommissioned", headers=headers)
+    ).json()
+    assert [i["id"] for i in by_status["items"]] == [agent.id]
+
+    # Still reachable on its own page: the history behind it did not go anywhere.
+    page = await client.get(f"/api/v1/dashboard/agents/{agent.id}", headers=headers)
+    assert page.status_code == 200

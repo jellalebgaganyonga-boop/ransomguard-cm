@@ -511,18 +511,30 @@ async def _agent_items(db: AsyncSession, tenant_id: str, agents: list[Agent]) ->
 @router.get("/agents", response_model=PaginatedAgentResponse)
 async def list_agents(
     status: str | None = None,
+    include_decommissioned: bool = False,
     offset: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
     user: User = Depends(require_roles("tenant_admin", "security_analyst", "read_only_auditor")),
     db: AsyncSession = Depends(get_db),
 ) -> PaginatedAgentResponse:
-    """List agents in tenant."""
+    """List the agents in the tenant.
+
+    Decommissioned agents are left out unless they are asked for. A workstation that is
+    reinstalled comes back as a new agent and its old row stays, with its alerts and its audit
+    history, so a machine rebuilt a few times filled the page with copies of itself that nothing
+    could be done about -- on the bench, one workstation appeared five times, four of them dead.
+    They are still there, still reachable by id, and still returned when `status=decommissioned`
+    or `include_decommissioned=true` asks for them: hidden by default, never deleted.
+    """
     stmt = select(Agent).where(Agent.tenant_id == user.tenant_id)
     count_stmt = select(func.count()).select_from(Agent).where(Agent.tenant_id == user.tenant_id)
 
     if status:
         stmt = stmt.where(Agent.status == status)
         count_stmt = count_stmt.where(Agent.status == status)
+    elif not include_decommissioned:
+        stmt = stmt.where(Agent.status != AgentStatus.decommissioned)
+        count_stmt = count_stmt.where(Agent.status != AgentStatus.decommissioned)
 
     total = (await db.execute(count_stmt)).scalar_one()
     items_result = await db.execute(stmt.offset(offset).limit(limit))
