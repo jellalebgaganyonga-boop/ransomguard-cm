@@ -33,6 +33,7 @@ VM: `win` (Windows 10 Pro 22H2, VirtualBox, 4 vCPU, host-only + NAT adapters), s
 | `13_alert_suspension_detail.png` | Suspension alert: "Process suspended after writing a canary: powershell (PID 3792)" |
 | `14_suspended_processes_block.png` | Focused block: `powershell (PID 3792)`, decoy file written, Resume button |
 | `15_after_resume_click.png` | Confirmation posted (showing the posture state during the resume dispatch) |
+| `16_vm_shell_resumed.png` | **Resume worked**: inside the VM, the suspended PowerShell (PID 3792) processed its queued keystrokes and printed `my PID is 3792 at 10/25/2026 13:22:41` — matching the GRID's command_queue `Completed` timestamp. NtResumeProcess returned success and the frozen process ran again. |
 
 ## What this proves
 
@@ -73,12 +74,16 @@ Two real bugs the test caught:
 
 ## What's open (not hidden)
 
-- The Resume command the console sent was accepted (`command_queue.status=Completed`) but no
-  `SentinelProcessResumed` alert came back and the suspension record didn't clear from the
-  Suspended Processes list in the time budget here. Could be (a) the agent couldn't POST the
-  result back because it got sent during the window when nginx was still 404ing /commands, or
-  (b) a resume-reporting bug in the agent. Needs a repro cycle after a fresh install with the
-  nginx fix already in place.
+- **Resume succeeded on the agent side but the console doesn't learn about it.** Three
+  separate Resume commands against PID 3792 all moved to `command_queue.status=Completed`.
+  The VM shell confirmed it was resumed: queued keystrokes to the frozen window got processed
+  as soon as NtResumeProcess returned (shot 16). But no `SentinelProcessResumed` /
+  `SentinelSuspensionEnded` alert was POSTed to `/api/v1/agents/{id}/alerts` and the
+  Suspended Processes list in the console still shows PID 3792 as frozen. The server-side
+  rendering of that list depends on a closure alert from the agent, so this is almost certainly
+  an agent-side gap in the ADR-026 Phase 2 reporting path: the resume command executes but the
+  closure alert is not emitted. Needs an issue to track and a fix in SentinelMonitor's resume
+  handler.
 - The 6 "startup" alerts were fired by SENTINEL writing the canary files for the first time,
   because the file-watcher sees the write before the newly-created canary is marked as owned.
   Not a false positive in the clinical sense — the detector did react to a real write — but on
