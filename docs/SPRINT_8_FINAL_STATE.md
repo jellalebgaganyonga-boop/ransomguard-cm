@@ -27,6 +27,14 @@ In order of merge onto `sprint8/recovery`:
 - `882599c` — fix(agent): ENTROPY reports degraded, it names no process and skips rule 3 (B4)
 - `db2614c` — docs(journal): B4 ENTROPY passe à dégradé, avec ses runs
 
+> **Superseded after this sprint.** B4 made ENTROPY declare two real gaps rather than hide them.
+> Both have since been closed — `ba31a85`, `1351327`, `4ccb71e`: an ENTROPY alert names the
+> process that wrote the file (AGT-ATTR-001) and rule 3, the directory-wide shift, is evaluated
+> (AGT-EN-002). The module now reads `active` whenever the kernel FileIO session is running, and
+> falls back to `degraded / attribution_unreliable` when it is not — the posture follows the
+> capability at runtime instead of being fixed at the build. B4's principle is unchanged: the
+> console never reads green for something the agent cannot do.
+
 ### Three review branches merged (Phase 1 of the directive)
 - `630f283` tip of five installer commits (`3b02ac8`, `ff0ffb0`, `afd7c2c`, `03644f9`, `630f283`) — ADR-027 double-click installer
 - `f4240fe` — feat(agent): EXFIL WATCH learning phase survives a restart (AGT-EXF-001, B2.3)

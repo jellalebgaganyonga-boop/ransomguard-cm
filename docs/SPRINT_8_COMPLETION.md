@@ -12,6 +12,7 @@
 - CI evidence: red run **39708552611** (2 of 919 tests red on `EntropyPostureTests`), green run **39709716541** (CI) + **39709716532** (agent-full)
 - ENTROPY now publishes `Degraded / AttributionUnreliable` and logs AGT-ATTR-001 and AGT-EN-002 at startup. The ancient `Publish(Active)` call is the mutation that the red run catches.
 - Consequence: a healthy endpoint reads "Partial protection" instead of green until the directory-shift rule exists and signals name a writer.
+- **Both conditions met after this sprint** (`ba31a85`, `1351327`, `4ccb71e`): signals name their writer and the directory-shift rule is evaluated. A healthy endpoint reads green once its agent is reinstalled from a freshly published installer and the kernel FileIO session is up; without that session it is still "Partial protection", which remains the honest answer.
 
 ### B2.3 — EXFIL Learning Phase Persistence (AGT-EXF-001)
 
