@@ -370,11 +370,12 @@ public static class AlertMapper
     ///
     /// <para>
     /// The discriminator goes into the hash, it is not appended to it. Appending overflowed: the hex
-    /// of SHA-256 is already the full 64 characters the GRID allows, so
-    /// <c>{hash}-process_resumed</c> was 72 and the GRID answered 422. Every closure and escalation
-    /// alert was refused -- which is why a resumed process stayed listed as suspended in the console
-    /// -- while the suspension alert itself, with a bare hash, went through. Hashing the pair keeps
-    /// the length at exactly 64 and the value still deterministic, so a resend is still a duplicate.
+    /// of SHA-256 is already the full 64 characters the GRID allows, so <c>{hash}-process_resumed</c>
+    /// was 80 characters (81 for suspension_ended, 78 for resume_failed, 67 and up for an
+    /// escalation) and the GRID answered 422. Every closure and escalation alert was refused --
+    /// which is why a resumed process stayed listed as suspended in the console -- while the
+    /// suspension alert itself, with a bare hash, went through. Hashing the pair keeps the length at
+    /// exactly 64 and the value still deterministic, so a resend is still a duplicate.
     /// </para>
     /// </summary>
     /// <param name="id">The entity the alerts are about.</param>
