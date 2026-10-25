@@ -3,7 +3,7 @@
  * the GRID, the same as in Settings), sign out. The sign-out paths are in auth.spec.ts.
  */
 
-import { test, expect, AxeBuilder, setupMocks, loginAs, MOCK_ME } from './fixtures/index';
+import { test, expect, AxeBuilder, setupMocks, loginAs } from './fixtures/index';
 
 test.describe('Header — user menu', () => {
   test('My settings opens the Settings page, for a role without the sidebar entry', async ({ page }) => {
