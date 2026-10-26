@@ -51,7 +51,7 @@ It runs to the end, prints PASS / FAIL / NOT BUILT / NOT TESTABLE HERE for each 
 | USB GUARD | **partial** | The module reports `active`, but nothing here exercised it: a real USB key must be passed into the VM. system-check §8 |
 | EXFIL WATCH | **partial** | Reports `degraded / learning_phase` honestly. It cannot raise an alert until it has learned the normal traffic, so no detection has been observed |
 | IRONCLAD (offline backup) | **partial** | The code exists and is tested against a *simulated* Arduino. Never connected to real hardware. system-check §8 |
-| Anti-tampering | **not built** | The services are registered but never started; the agent reports `inactive / not_implemented`. system-check §8 |
+| Anti-tampering | **not built — planned** | The services are registered but never started. As of 2026-10-26 the agent no longer reports it as a module and the console no longer shows the row: a line on every workstation reading "inactive — not implemented" is true and nothing anybody can act on. The GRID still *accepts* it, so an agent installed before that keeps its heartbeat. It is listed by system-check under what is not built, and it is the first thing in "what is weakest" below |
 
 ## Workstation offline and back
 
@@ -80,7 +80,10 @@ It runs to the end, prints PASS / FAIL / NOT BUILT / NOT TESTABLE HERE for each 
 ## What is weakest, in order
 
 1. **Anti-tampering does not exist.** An attacker with administrator rights can stop the agent,
-   and nothing notices. The console reports this honestly rather than hiding it.
+   and nothing notices. Removing its permanently grey row from the console on 2026-10-26 did not
+   change that and was not meant to: the gap is here, in the list of what is weakest, and in what
+   system-check prints as not built. A module table is for what a workstation is doing; a thing
+   that has not been written belongs in a plan.
 2. **The installer is unsigned.** Every install shows "Publisher: Unknown", which is exactly what
    a user is told to be suspicious of.
 3. **EXFIL WATCH has never raised an alert here.** It is honest about learning, but that means
