@@ -1,73 +1,89 @@
 # USB GUARD with a real key
 
-**Status on 2026-10-26: waiting for a USB key.** Nothing here is a pass. USB GUARD reports
-`active` on both workstations and has never been shown a real device, because none has been
-plugged into this machine. What follows is everything needed to do it in about five minutes when
-one is.
+**Run on 2026-10-26 on PC-RECEPTION, agent `1.0.0+aa16d56`, with a real USB key belonging to the
+owner.** It detected the key in under a second and raised a Critical alert. It did not touch the
+key, because it was deliberately put in a mode where it cannot.
 
-## Why it has not been done
+## What happened
 
-Two things are missing, and only one of them is in our hands.
+| | |
+|---|---|
+| Key | Kingston USB DISK 2.0, FAT32, 7.21 GB, 4.84 GB free — an ordinary key with files on it |
+| Attached | `VBoxManage controlvm PC-RECEPTION usbattach <uuid>` |
+| Seen by the agent | 20:00:37, as `Class: MassStorage`, `Removable Disk E:` |
+| Alert | `UsbGuard`, **Critical**, MITRE **T1091** (Replication Through Removable Media) |
+| Reached the GRID | 20:01:00 — two seconds after the alert |
+| Action taken | **AlertOnly**. Nothing was done to the key |
+| Key afterwards | back on the host, E:, FAT32, **Healthy**, same free space. Nothing written, nothing removed |
 
-1. **PC-LAB has no USB controller.** `VBoxManage showvminfo PC-LAB` reports `usb="off"`. A virtual
-   machine with no controller cannot be given a device at all. Adding one needs the machine shut
-   down; it is not a setting that can be changed while it runs.
-2. **No USB key is plugged into the host.** `VBoxManage list usbhost` shows an Intel Bluetooth
-   radio and a Realtek device built into the laptop, and no removable drive. There is nothing to
-   pass through.
+From the agent's own log:
 
-## Preparing the workstation (once, with the VM shut down)
-
-```powershell
-$vb = 'C:\Program Files\Oracle\VirtualBox\VBoxManage.exe'
-
-# The machine has to be off. Shut it down from inside Windows, or:
-& $vb controlvm PC-LAB acpipowerbutton
-
-# A USB 2.0 controller. Not 3.0: that needs the Oracle extension pack, which is a separate
-# install and a separate licence, and a USB key does not need the speed.
-& $vb modifyvm PC-LAB --usbehci on
-
-& $vb startvm PC-LAB --type gui
+```
+20:00:37  USB GUARD: Device connected - Class MassStorage, Product "Removable Disk E:"
+20:00:37  USB GUARD: MBR boot signature detected on Drive E:
+20:00:37  USB GUARD: BOOTABLE USB detected on Drive E:                    [Fatal]
+20:00:37  USB ACTION: AlertOnly on "Removable Disk E:"
+          (mode Audit, severity Critical,
+           reason "Boot signature (MBR/GPT) detected - blocked by policy")
+20:00:59  USB GUARD ALERT: Critical - Removable Disk E:, Action: AlertOnly
 ```
 
-Confirm it took: `VBoxManage showvminfo PC-LAB --machinereadable | findstr usb` should read
-`usb="on"` or show `usbehci="on"`.
+## The finding that matters more than the pass
 
-## When a key is plugged into the host
+**It called an ordinary key Critical, and the reason was its boot signature.**
+
+`BlockBootableUsb` is `true` by default, and `BootableUsbDetector` raises Critical on any MBR or
+GPT boot signature. Essentially every USB key formatted by Windows has one: it is two bytes,
+`0x55AA`, at the end of the first sector, and it is there on a blank key. This key had no malware
+on it and was flagged on that alone.
+
+That matters because of what the shipped default would then do. `OperatingMode` ships as
+`Permissive`, and in Permissive a Critical finding is not an alert — it is `ReadOnlyUsb`:
+
+| Mode | Critical | High | Lower |
+|---|---|---|---|
+| Audit | alert only | alert only | alert only |
+| **Permissive (shipped)** | **drive made read-only** | **file quarantined** | alert only |
+| Strict | block and eject | eject | alert only |
+
+So on a hospital workstation as the product ships today, **a nurse plugging in an ordinary USB
+key would find it turned read-only**, with "blocked by policy" as the explanation. That is not a
+ransomware defence; it is a support ticket, and the kind that teaches people to work around the
+agent.
+
+The test was run in **Audit** mode on purpose, after asking the owner, precisely because the
+default would have altered a key that belongs to somebody. That choice is the evidence for the
+point: the first time this was pointed at real hardware, the safe thing to do was to turn the
+product's own default off.
+
+**Recommended before any hospital sees this:** either stop treating a bare boot signature as
+Critical (look for an actual bootloader, or for autorun plus an executable, rather than two bytes
+every key has), or stop shipping `Permissive` as the default. Both would be better.
+
+## Repeating it
 
 ```powershell
 $vb = 'C:\Program Files\Oracle\VirtualBox\VBoxManage.exe'
 
-# 1. Find it. A key appears as a Mass Storage device; note its UUID.
+# The UUID changes every time the device re-enumerates; read it immediately before attaching.
 & $vb list usbhost
 
-# 2. Give it to the workstation. Windows inside the VM sees it arrive.
-& $vb controlvm PC-LAB usbattach <uuid>
-
-# 3. Watch what USB GUARD does, in the console, on the PC-LAB page and in Alerts.
-
-# 4. Give it back to the host.
-& $vb controlvm PC-LAB usbdetach <uuid>
+& $vb controlvm PC-RECEPTION usbattach <uuid>
+# ... watch the console and C:\ProgramData\RansomGuard-CM\logs\agent-<date>.log ...
+& $vb controlvm PC-RECEPTION usbdetach <uuid>
 ```
 
-Eject the key in Windows before step 4, as on any machine: a drive pulled mid-write loses what
-was being written, and the point of the exercise is not to damage somebody's key.
+Two things about this bench, both real limits rather than preferences:
 
-## What to record
+- **There is no Oracle Extension Pack installed**, so USB 2.0 and 3.0 passthrough are not
+  available. The controller enabled here is USB 1.1 (OHCI), which is built in. It is slow and it
+  is enough: the detection happens when the device enumerates, not at reading speed.
+- **A workstation needs a USB controller before any of this works.** Both VMs shipped with
+  `usb="off"`, and adding one needs the machine shut down:
+  `VBoxManage modifyvm PC-RECEPTION --usbohci on`.
 
-Write down what actually happened, not what was hoped for:
+## Before pointing it at a key that matters
 
-- what the console shows on the PC-LAB page for USB GUARD, before and after;
-- any alert raised, with its type, time and what it names;
-- whether the key stayed usable, was blocked, or was quarantined;
-- a screenshot of the console at each stage, into `docs/screenshots/real/`.
-
-If USB GUARD does nothing at all, that is the result and it is written down as the result. The
-module reporting `active` means it is loaded and watching; it has never been shown that it acts.
-
-## What is already known without a key
-
-`system-check.ps1` reports USB GUARD as **NOT TESTABLE HERE** with the reason "needs a USB device
-passed through to the VM; the module itself reports active". That line is not a pass and is not
-meant to read as one, which is why it is a different word from PASS.
+USB GUARD in its shipped mode can make a key read-only or move files off it. Put it in Audit
+first, with `deployment/bench/usb-audit-mode.ps1`, which also reports whether the agent is writing
+its log. Audit raises every alert and acts on nothing.
