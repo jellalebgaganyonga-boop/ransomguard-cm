@@ -99,6 +99,9 @@ powershell -ExecutionPolicy Bypass -File deployment\bench\prepare-vm-media.ps1 -
 2. Open `README.txt` and read it.
 3. Double-click **`RansomGuard-CM-Installer-192.168.56.1.exe`**.
 4. Windows asks for permission ("Publisher: Unknown"). Click **Yes**. *(The installer is not signed yet. This is a known limit.)*
+
+   > The prompt can take **up to half a minute** to appear: the installer is a 94 MB single file and unpacks itself before Windows can ask. Nothing seems to happen in the meantime. Wait — do not double-click a second time, or you will install twice.
+
 5. Wait. A window shows the steps 1/6 to 6/6.
 
 **You should see:** a final line **"Workstation enrolled (agent …). It appears in the console within a minute."**, then "Press any key to close." ☐
@@ -148,7 +151,9 @@ The test script is harmless. It writes into **one decoy file** that the agent pl
 
 **You should see:** a **Critical** alert `SentinelCanaryModified` from PC-RECEPTION, and a `SentinelProcessSuspended` alert. ☐
 
-2. Open the `SentinelCanaryModified` alert.
+> **You will see `SentinelCanaryModified` twice for the same write**, a second apart. This is a known defect, not two attacks: the agent puts the decoy's contents back after the alert, and its periodic integrity check runs while the restore is still in flight and reports the same file again. Only the **earlier** of the two carries the answers below — the later one says attribution "unavailable". Open the earlier one. It is listed in `docs/testing/BENCH_TEST_RESULTS.md` under what is still not right.
+
+2. Open the **earlier** `SentinelCanaryModified` alert.
 
 **You should see:**
 

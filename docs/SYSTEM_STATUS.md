@@ -24,13 +24,13 @@ It runs to the end, prints PASS / FAIL / NOT BUILT / NOT TESTABLE HERE for each 
 | Multi-tenant isolation | **works** | system-check "One customer sees nothing of another": `test-clinic` sees 0 workstations and 0 alerts while the hospital has one. Bench test 6 |
 | Roles (admin / analyst / auditor) | **works** | system-check "The auditor can read but not act". Bench test 5: every write is 403 for the auditor; analyst refused users, resume and decommission |
 | Audit log and user actions | **partial** | Bench test 7: `login`, `user_create`, `agent_decommission`, `user_disable` are all recorded with `actor_email` and a timestamp. **`ip_address` is null on every row** |
-| Console in English only | **works** | `check-no-french.py` over the built bundle, the GRID, the installer, the agent and the bench scripts, in CI. `e2e/english-only.spec.ts` in a French-locale browser. Bench test 9 |
+| Console in English only | **works** | `check-no-french.py` over the built bundle, the GRID, the installer, the agent, the bench scripts and the owner-facing documents, in CI. `e2e/english-only.spec.ts` in a French-locale browser. Bench test 9. The check's word list was dead until 2026-10-26 — it compiled to a backspace byte instead of `\b` — and repairing it found four French error messages in the GRID, now English. It self-tests before every run |
 
 ## Installing and enrolling a workstation
 
 | Feature | Status | Proof |
 |---|---|---|
-| Double-click installer (ADR-027) | **works** | system-check §5: the console hands out a 92.5 MB signed-payload installer with a valid PE header. Installed on PC-LAB on 2026-10-25, output entirely in English |
+| Double-click installer (ADR-027) | **works** | system-check §5: the console hands out a signed-payload installer (94.3 MB on 2026-10-26) with a valid PE header. Installed on PC-LAB on 2026-10-26 from HEAD `0f0db14`, output entirely in English, 1/6 to 6/6, ending "Workstation enrolled". The UAC prompt takes up to 30 s to appear while the single file unpacks |
 | Enrollment | **works** | Bench test 1. The code lasts 15 minutes and is single-use |
 | Fresh install raises no alert | **works** | Bench test 1: 0 alerts, `rejected_alerts = 0`, `pending_alerts = 0`. This took three attempts to get right — see the bug list in BENCH_TEST_RESULTS.md |
 | Re-enrolling a rebuilt workstation | **works** | A decommissioned agent no longer holds its machine's fingerprint; PC-LAB was reinstalled several times on 2026-10-25 |
@@ -41,7 +41,7 @@ It runs to the end, prints PASS / FAIL / NOT BUILT / NOT TESTABLE HERE for each 
 
 | Feature | Status | Proof |
 |---|---|---|
-| SENTINEL (decoy files) | **works** | Bench test 3: writing to a decoy raises a Critical alert within seconds |
+| SENTINEL (decoy files) | **works, with a known defect** | Bench test 3: writing to a decoy raises a Critical alert within seconds. **One write raises the alert twice**, a second apart, and only the first carries attribution and the process tree — see BENCH_TEST_RESULTS, "What is still not right" |
 | Attribution — who wrote the file | **works** | Bench test 3: `attribution: resolved`, powershell PID 7744, with its image path and start time |
 | GENEALOGY — what started it | **works** | `explorer -> cmd -> powershell` on the alert page, PID 7744 matching the trigger output. Screenshot: `docs/screenshots/real/round4-english/alert_genealogy_section.png`. 8 GRID tests, 8 console tests |
 | Suspension (ADR-026) | **works** | Bench test 3: `SentinelProcessSuspended`, the writer frozen |
@@ -86,7 +86,14 @@ It runs to the end, prints PASS / FAIL / NOT BUILT / NOT TESTABLE HERE for each 
    the module is unproven on this bench.
 4. **USB GUARD is unproven.** It reports active; no USB key has been passed through to test it.
 5. **IRONCLAD has never seen real hardware.**
-6. **`ip_address` is not recorded in the user-actions log**, so "who did it" is answered by
+6. **One write on a decoy raises two alerts**, and the second carries neither the writer nor the
+   process tree. A reader who opens the wrong one of the two concludes that attribution and
+   GENEALOGY failed when they did not.
+7. **`ip_address` is not recorded in the user-actions log**, so "who did it" is answered by
    account but not by origin.
-7. **A workstation's name is recorded once, at enrollment.** Rename the machine and the console
-   keeps the old name until it enrolls again — the heartbeat does not carry the hostname.
+8. **A workstation's name is recorded once, at enrollment.** Rename the machine and the console
+   keeps the old name until it enrolls again — the heartbeat does not carry the hostname. This
+   caught the bench itself: PC-RECEPTION's VirtualBox entry had been renamed to English while
+   Windows still called the machine `PC-ACCUEIL`, so it would have enrolled under the French name. <!-- french-ok: the old machine name, recorded here only because it was renamed away -->
+   
+   Renamed and restarted on 2026-10-26.

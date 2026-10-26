@@ -1,8 +1,7 @@
 """Group 3: Alert models (6 models)."""
 
-from typing import Any
-
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import DateTime, Enum, Float, ForeignKey, Index, LargeBinary, String, Text, UniqueConstraint
 from sqlalchemy.dialects.sqlite import JSON

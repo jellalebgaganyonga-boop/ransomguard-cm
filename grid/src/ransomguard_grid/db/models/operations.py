@@ -1,8 +1,7 @@
 """Group 5: Operations models (3 models)."""
 
-from typing import Any
-
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, Text
 from sqlalchemy.dialects.sqlite import JSON

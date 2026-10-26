@@ -25,7 +25,7 @@ from __future__ import annotations
 import json
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
-from typing import Any, TypeAlias, cast
+from typing import Any, cast
 
 import redis.asyncio as redis
 
@@ -35,7 +35,7 @@ from ransomguard_grid.core.logging import get_logger
 logger = get_logger("notification_queue")
 
 # What redis accepts as a stream field key or value.
-FieldT: TypeAlias = bytes | bytearray | memoryview | str | int | float
+type FieldT = bytes | bytearray | memoryview | str | int | float
 
 STREAM_KEY = "grid:notifications"
 CONSUMER_GROUP = "notifiers"

@@ -1,7 +1,6 @@
 """Role and UserRole repositories — system-level shared across tenants."""
 
 from collections.abc import Sequence
-
 from typing import Any, cast
 
 from sqlalchemy import CursorResult, delete, select

@@ -1,10 +1,9 @@
 """Threat intel public endpoints — mTLS required."""
 
 import base64
+from collections.abc import Iterator
 from pathlib import Path
 from uuid import uuid4
-
-from collections.abc import Iterator
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse

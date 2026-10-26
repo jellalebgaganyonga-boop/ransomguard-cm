@@ -1,8 +1,7 @@
 """Group 6: Notification and User Action Log models."""
 
-from typing import Any
-
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
 from sqlalchemy.dialects.sqlite import JSON

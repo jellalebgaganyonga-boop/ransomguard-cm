@@ -144,5 +144,29 @@ in `d7e7c89`.
   learning phase ends. That is honest, but it means `protected` is not reachable on a new
   workstation on day one.
 - **ANTI_TAMPERING is not implemented.** It reports so.
-- **Decommissioned agents stay in the list.** After four reinstalls, PC-LAB appears four times in
-  the console, three of them decommissioned. Nothing hides or groups them.
+- ~~**Decommissioned agents stay in the list.**~~ Fixed: `list_agents` hides them unless
+  `include_decommissioned=true` asks, and they are never deleted. Confirmed on 2026-10-26 — five
+  decommissioned `PC-LABO` rows and one `WIN` row exist and none of them is on the page.
+- **One write on a decoy raises `SentinelCanaryModified` twice.** Found on 2026-10-26 walking the
+  owner guide on PC-LAB. The trigger wrote once, at 00:26:38, and the console shows two Critical
+  alerts one second apart on the same file:
+
+  | | alert | attribution | process tree |
+  |---|---|---|---|
+  | 00:26:38 | `c69f6d43` | resolved, powershell PID 1232 | `explorer -> cmd -> powershell` |
+  | 00:26:39 | `a986de0c` | **unavailable — `no_write_event`** | **none** |
+
+  Two paths raise the alert and neither knows about the other. The file watcher raises the first
+  and can attribute it, because an ETW write event is there to match. `RaiseCanaryAlertAsync` then
+  restores the decoy's contents, and the periodic integrity sweep in `SentinelMonitor` runs while
+  that restore is still in flight, finds the file not matching its stored hash, and raises again —
+  this time with no write event to attribute, so no writer and no genealogy.
+
+  The sweep exists as a safety net for a write the watcher misses, so it cannot simply be removed;
+  it needs the same recently-written grace that `AgentOwnWrites` already gives the watcher. Not
+  fixed here: the agent's 1039 tests cannot run on this machine, and changing detection code that
+  only CI can verify, on the eve of owner testing, is the worse risk. The owner guide now says
+  which of the two alerts to open.
+
+  It is not new. The alert list carries pairs like this from earlier runs too; nothing looked for
+  it because the attributed alert was always the one opened.
