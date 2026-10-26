@@ -44,6 +44,12 @@ public sealed class EnrollmentService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Off the startup path: see the note in GenealogyMonitor. Enrolling is a round trip to the
+        // GRID over TLS, and on a workstation that cannot reach it yet that is the whole of the
+        // Service Control Manager's patience spent before Windows is even told the service runs.
+        // The installer waits for enrolment separately, by watching for enrollment.json.
+        await Task.Yield();
+
         // Step 1: Try to restore previous enrollment
         var savedState = _stateManager.TryLoad();
         if (savedState is not null)

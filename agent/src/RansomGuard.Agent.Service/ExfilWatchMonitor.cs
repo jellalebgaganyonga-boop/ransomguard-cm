@@ -83,6 +83,10 @@ public sealed class ExfilWatchMonitor : BackgroundService
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Off the startup path: see the note in GenealogyMonitor. The packet capture below opens
+        // a network device.
+        await Task.Yield();
+
         bool reachedActive = false;
         bool captureStarted = false;
         Task? consumerTask = null;

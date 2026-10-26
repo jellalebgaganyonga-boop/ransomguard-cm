@@ -59,6 +59,10 @@ public sealed class Worker : BackgroundService
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Off the startup path: see the note in GenealogyMonitor. Resolving the watch paths walks
+        // every user profile on the machine, and the watchers are opened just below it.
+        await Task.Yield();
+
         _logger.LogInformation("RansomGuard-CM Agent v{Version} starting", AgentVersion.Current);
 
         Task persistenceTask = ConsumeEventsAsync(stoppingToken);

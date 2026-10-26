@@ -20,7 +20,7 @@ namespace RansomGuard.Agent.Service;
 /// (both on the DbContext) are resolved in a scope per reconciliation, never captured.
 /// </para>
 /// </summary>
-public sealed class IronCladStateReconciliationService : IHostedService
+public sealed class IronCladStateReconciliationService : BackgroundService
 {
     private readonly IIronCladCommunicator _communicator;
     private readonly IronCladOptions _options;
@@ -41,8 +41,15 @@ public sealed class IronCladStateReconciliationService : IHostedService
     }
 
     /// <inheritdoc />
-    public async Task StartAsync(CancellationToken cancellationToken)
+    protected override async Task ExecuteAsync(CancellationToken cancellationToken)
     {
+        // Off the startup path before anything else. This used to be IHostedService.StartAsync,
+        // which the host awaits before it reports the service started -- so the two-second wait
+        // below, plus a reconciliation that talks to the device, was spent with the Service
+        // Control Manager counting towards its 30 s limit. Reconciling is not something the
+        // workstation has to wait for in order to be protected; it happens just after.
+        await Task.Yield();
+
         if (!_options.Enabled)
         {
             _logger.LogInformation("IronClad disabled, skipping state reconciliation");
@@ -71,9 +78,6 @@ public sealed class IronCladStateReconciliationService : IHostedService
             _logger.LogError(ex, "IronClad state reconciliation failed");
         }
     }
-
-    /// <inheritdoc />
-    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
     private async Task ReconcileAsync(
         IIronCladDeviceStateRepository stateRepo, IIronCladActionEngine actionEngine, CancellationToken ct)

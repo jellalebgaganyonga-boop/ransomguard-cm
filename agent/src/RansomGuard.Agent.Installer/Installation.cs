@@ -128,8 +128,7 @@ public sealed class Installation
             Sc("create", ServiceName, "binPath=", exe, "start=", "auto", "DisplayName=", "RansomGuard-CM Agent", "obj=", "LocalSystem");
             Sc("description", ServiceName, "RansomGuard-CM endpoint detection and response agent");
             Sc("failure", ServiceName, "reset=", "86400", "actions=", "restart/60000/restart/120000/restart/300000");
-            Sc("start", ServiceName);
-            WaitForService(ServiceControllerStatus.Running, TimeSpan.FromSeconds(60));
+            StartServiceWithOneRetry();
             Say("      Service started");
 
             return WaitForEnrollment();
@@ -174,10 +173,72 @@ public sealed class Installation
         Thread.Sleep(1000);
     }
 
-    private void WaitForService(ServiceControllerStatus status, TimeSpan timeout)
+    /// <summary>
+    /// Starts the service, and if the Service Control Manager loses patience, gives it one more go.
+    ///
+    /// <para>
+    /// `sc start` fails with 1053 when the service has not reported itself running inside the
+    /// SCM's limit, which is 30 s and is not ours to set. That is not the same as the service
+    /// having failed: it may be running a moment later. The agent was changed so that nothing slow
+    /// happens before Windows is told it is running, and this is the belt to that braces -- an
+    /// installation must not be lost to one slow start on a busy workstation.
+    /// </para>
+    ///
+    /// <para>
+    /// Both the first attempt and the retry are judged by asking the service what state it is in,
+    /// not by what sc.exe returned, because the service reaching Running is the thing that matters.
+    /// </para>
+    /// </summary>
+    private void StartServiceWithOneRetry()
+    {
+        for (int attempt = 1; attempt <= 2; attempt++)
+        {
+            try
+            {
+                Sc("start", ServiceName);
+            }
+            catch (InvalidOperationException ex)
+            {
+                // Includes 1053. Say it, then let the wait below decide: the service may well be
+                // on its way up.
+                Say($"      Start not confirmed by sc.exe ({ex.Message.Trim()})");
+            }
+
+            if (WaitForRunning(ServiceStartTimeout))
+            {
+                return;
+            }
+
+            if (attempt == 1)
+            {
+                Say($"      Not running after {ServiceStartTimeout.TotalSeconds:N0} s; starting it once more");
+                Thread.Sleep(TimeSpan.FromSeconds(3));
+            }
+        }
+
+        using var service = new ServiceController(ServiceName);
+        service.Refresh();
+        throw new InvalidOperationException(
+            $"the service did not reach Running after two attempts (it is {service.Status}). " +
+            $"See {Path.Combine(DataDir, "logs")}.");
+    }
+
+    /// <summary>How long to let the service take to reach Running, per attempt.</summary>
+    private static readonly TimeSpan ServiceStartTimeout = TimeSpan.FromSeconds(120);
+
+    /// <summary>Whether the service reaches Running within <paramref name="timeout"/>.</summary>
+    private static bool WaitForRunning(TimeSpan timeout)
     {
         using var service = new ServiceController(ServiceName);
-        service.WaitForStatus(status, timeout);
+        try
+        {
+            service.WaitForStatus(ServiceControllerStatus.Running, timeout);
+            return true;
+        }
+        catch (System.ServiceProcess.TimeoutException)
+        {
+            return false;
+        }
     }
 
     // The agent writes enrollment.json beside its database once the GRID accepted it.

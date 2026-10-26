@@ -78,6 +78,14 @@ public sealed class GenealogyMonitor : BackgroundService
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Off the startup path first. A BackgroundService only lets the host finish starting when
+        // its ExecuteAsync reaches an await that does not complete at once, and the host is what
+        // tells Windows the service is running. _ancestry.Start() below opens a capture loop; on a
+        // busy workstation that held the start open long enough for the Service Control Manager to
+        // give up at 30 s and report 1053, which is what the installer then printed. Nothing above
+        // this line may be slow.
+        await Task.Yield();
+
         try
         {
             _ancestry.Start();

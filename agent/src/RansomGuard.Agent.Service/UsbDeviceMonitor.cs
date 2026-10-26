@@ -89,6 +89,10 @@ public sealed class UsbDeviceMonitor : BackgroundService, IUsbDeviceMonitor
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Off the startup path: see the note in GenealogyMonitor. WMI subscriptions are opened
+        // below and the first one on a cold machine is not quick.
+        await Task.Yield();
+
         bool reachedActive = false;
         bool subscribersStarted = false;
         Task? consumerTask = null;

@@ -127,6 +127,9 @@ public sealed class EntropyMonitor : BackgroundService
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Off the startup path: see the note in GenealogyMonitor.
+        await Task.Yield();
+
         bool reachedRunningState = false;
         Task? consumerTask = null;
 

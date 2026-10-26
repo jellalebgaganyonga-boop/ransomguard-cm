@@ -149,6 +149,10 @@ public sealed class SentinelMonitor : BackgroundService
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Off the startup path: see the note in GenealogyMonitor. Opening the ETW kernel session
+        // and the file watchers is the slowest thing the agent does when it starts.
+        await Task.Yield();
+
         bool reachedActive = false;
         Task? consumerTask = null;
         Task? pollingTask = null;

@@ -37,6 +37,10 @@ public sealed class SentinelDeploymentService : BackgroundService
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Off the startup path: see the note in GenealogyMonitor. Planting the decoys writes a
+        // file per decoy per watched folder, and a fresh install does that for the first time.
+        await Task.Yield();
+
         SentinelOptions? sentinel = _config.Sentinel;
 
         if (sentinel is null || !sentinel.Enabled)
