@@ -288,37 +288,4 @@ public sealed class SentinelEtwCorrelationTests : IDisposable
         }
     }
 
-    /// <summary>A kernel trace the test feeds by hand.</summary>
-    private sealed class EmittingTrace : IKernelFileIoTrace
-    {
-        private readonly ManualResetEventSlim _stop = new();
-        private Action<FileIoRecord>? _onFileIo;
-
-        public ManualResetEventSlim Processing { get; } = new();
-
-        public int? EventsLost => 0;
-
-        public void Open(string sessionName, int bufferSizeMb)
-        {
-        }
-
-        public void Process(Action<FileIoRecord> onFileIo, Action<ProcessStartRecord> onProcessStart)
-        {
-            _onFileIo = onFileIo;
-            Processing.Set();
-            _stop.Wait();
-        }
-
-        public void Emit(FileIoRecord record) => _onFileIo!(record);
-
-        public void Flush()
-        {
-        }
-
-        public void Stop() => _stop.Set();
-
-        public void Dispose()
-        {
-        }
-    }
 }

@@ -21,7 +21,7 @@ All passwords are in the file `deployment\bench\credentials.local.md` on your ho
 
 **Signing in to the virtual machine:** the Windows user is **`vboxuser`** and it has **no password**. The sign-in screen shows only a **Sign in** button — press Enter.
 
-**Time needed:** about 45 minutes.
+**Time needed:** about an hour. Much of it is waiting, by design: the five Resume clicks in Step 11 take roughly a minute each, because the agent asks the GRID for commands on a schedule, and Step 16 waits five minutes before a workstation is called disconnected.
 
 # Part A — Start the platform (host PC)
 
@@ -255,4 +255,10 @@ Sign in again as `admin@yde-hospital.cm`. Open **Audit log** and **User actions*
 
 # Repeating the test
 
-To start again from a clean computer, ask Claude Code to run `deployment\bench\reset-agent.ps1` on PC-RECEPTION. That removes the agent, its data and the decoys it planted, and leaves the documents, the `nurse` account and the machine name alone. Then **decommission the old agent in the console** (otherwise the GRID refuses the new enrollment with `409`) and start again from **Step 6**.
+To start again from a clean computer, put the reset script on a disc and run it inside the VM:
+
+```powershell
+pwsh deployment\bench\build-script-iso.ps1 -VmName PC-RECEPTION -ScriptName reset-agent.ps1 -Label RESET
+```
+
+then, in PC-RECEPTION, open PowerShell **as administrator** and run `D:\run.cmd`. That removes the agent, its data and the decoys it planted, and leaves the documents, the `nurse` account and the machine name alone. Then **decommission the old agent in the console** (otherwise the GRID refuses the new enrollment with `409`) and start again from **Step 6**.

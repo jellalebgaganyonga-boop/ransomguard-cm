@@ -57,6 +57,12 @@ public sealed class SentinelMonitor : BackgroundService
     /// raised a burst of Critical "canary modified" alerts for the agent's own work.
     /// </summary>
     private readonly AgentOwnWrites _ownWrites;
+
+    /// <summary>
+    /// Modifications the real-time path has reported and is restoring, so the periodic integrity
+    /// sweep does not raise a second alert for the same write while the decoy is being put back.
+    /// </summary>
+    private readonly ReportedModifications _reported;
     private readonly EtwFileIoSession? _etwSession;
     private readonly EtwCanaryFilter _etwFilter = new();
     private readonly CanaryCorrelator _correlator;
@@ -120,6 +126,7 @@ public sealed class SentinelMonitor : BackgroundService
         _profiles = profiles ?? UserProfileEnumerator.Windows;
         _etwSession = etwSession;
         _time = time ?? TimeProvider.System;
+        _reported = new ReportedModifications(_time);
         _correlator = new CanaryCorrelator(_time);
         _attributor = new CanaryAttributor(_processTimes);
         _logger = logger;
@@ -601,7 +608,43 @@ public sealed class SentinelMonitor : BackgroundService
             bool isIntact = await canaryService.VerifyCanaryIntegrityAsync(canary, cancellationToken);
             if (!isIntact)
             {
-                await RaiseCanaryAlertAsync(canary, CanaryAlertType.CanaryModified, scope.ServiceProvider, cancellationToken);
+                // This sweep is the safety net for a write the watcher and ETW both missed. When
+                // they did see it, they have already raised the alert that names the writer, and
+                // the decoy is mid-restore -- so of course it does not match its hash. Raising
+                // here would be a second Critical alert for one write, and this one could name
+                // nobody: there is no write event left to attribute it to.
+                if (_reported.IsBeingHandled(canary.FilePath))
+                {
+                    continue;
+                }
+
+                // The list this loop walks was read when the sweep began. A restore that finished
+                // since then rewrote the decoy and stored a new hash, which leaves the copy in
+                // hand stale: the file is correct and only looks modified, because it is being
+                // compared against the hash it had before the attack.
+                //
+                // The re-read needs a scope of its own. This one's DbContext is where the stale
+                // copy came from, and Entity Framework answers from what it is already tracking,
+                // so asking it again would hand back the same stale object and prove nothing.
+                using IServiceScope recheck = _scopeFactory.CreateScope();
+                var recheckRepo = recheck.ServiceProvider.GetRequiredService<ISentinelCanaryRepository>();
+                var recheckService = recheck.ServiceProvider.GetRequiredService<ICanaryFileService>();
+
+                SentinelCanary? current = await recheckRepo.GetByIdAsync(canary.Id, cancellationToken);
+                if (current is null || current.Status != CanaryStatus.Active
+                    || await recheckService.VerifyCanaryIntegrityAsync(current, cancellationToken))
+                {
+                    continue;
+                }
+
+                // Asked once more: the real-time path may have raised the alert for this very
+                // write while the re-read was in flight.
+                if (_reported.IsBeingHandled(canary.FilePath))
+                {
+                    continue;
+                }
+
+                await RaiseCanaryAlertAsync(current, CanaryAlertType.CanaryModified, recheck.ServiceProvider, cancellationToken);
                 continue;
             }
 
@@ -730,6 +773,14 @@ public sealed class SentinelMonitor : BackgroundService
             Severity = AlertSeverity.Critical,
         };
 
+        // Claimed before the alert leaves, not after: everything below -- the enqueue, the
+        // database, the audit entry, the restore -- takes time, and a sweep landing anywhere in
+        // there would otherwise report this same modification again.
+        if (alertType == CanaryAlertType.CanaryModified)
+        {
+            _reported.Reported(canary.FilePath);
+        }
+
         // The GRID first (AGT-AUD-002): nothing local — database, audit — may delay or cancel
         // the alert. The forwarding queue persists it itself if the GRID is unreachable.
         AlertIngestRequest request = AlertMapper.FromCanaryAlert(alert, pending ? "pending" : "unavailable", finalReason);
@@ -776,6 +827,15 @@ public sealed class SentinelMonitor : BackgroundService
         if (restorable)
         {
             await TryRestoreCanaryAsync(canary, alertType, services);
+        }
+
+        // Released once the decoy is back and its new hash stored -- or once the restore has
+        // failed and the decoy has left surveillance. Either way this modification is dealt with
+        // and the sweep speaks for this path again, so a write landing from here on is reported
+        // as the separate attack it is. Nothing is forgiven for a fixed stretch of time.
+        if (alertType == CanaryAlertType.CanaryModified)
+        {
+            _reported.Handled(canary.FilePath);
         }
 
         // Genealogy enrichment is NOT started here any more. It used to run on the alert, before

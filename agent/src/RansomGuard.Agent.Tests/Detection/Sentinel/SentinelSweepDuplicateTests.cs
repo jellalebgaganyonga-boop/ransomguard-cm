@@ -1,0 +1,193 @@
+using Microsoft.Extensions.Logging.Abstractions;
+using RansomGuard.Agent.Core.Communication.Models;
+using RansomGuard.Agent.Core.Configuration;
+using RansomGuard.Agent.Core.Detection;
+using RansomGuard.Agent.Core.Detection.Sentinel;
+using RansomGuard.Agent.Core.Detection.Sentinel.Etw;
+using RansomGuard.Agent.Core.Diagnostics;
+using RansomGuard.Agent.Core.Persistence.Entities;
+using RansomGuard.Agent.Service;
+using RansomGuard.Agent.Tests.Diagnostics;
+using Shouldly;
+
+namespace RansomGuard.Agent.Tests.Detection.Sentinel;
+
+/// <summary>
+/// One write on a decoy is one alert, although two things watch the decoy.
+///
+/// <para>
+/// Two paths raise <c>CanaryModified</c>. The real-time path -- the FileSystemWatcher and the ETW
+/// session -- raises it when the write happens, and can name the writer because a write event is
+/// there to match. The periodic integrity sweep raises it when a decoy's contents no longer match
+/// its stored hash, and exists as a safety net for a write the real-time path missed entirely.
+/// </para>
+///
+/// <para>
+/// They used to collide. The real-time alert is followed by a restore, which rewrites the decoy
+/// and stores the new hash; a sweep that ran in that interval found a file that did not match,
+/// knew nothing of the alert a second earlier, and raised a second Critical alert on the same
+/// write -- this one with no write event to attribute, so no writer and no process chain. On the
+/// bench on 2026-10-26 the owner saw two alerts for one write, a second apart, and only the first
+/// answered "who did it" or "what started it".
+/// </para>
+///
+/// <para>
+/// The sweep must stay silent only for the modification already reported and being restored, and
+/// must still report the next one. That is what these two tests pin: one write, one alert, with
+/// its attribution; and a second write afterwards, a second alert.
+/// </para>
+/// </summary>
+public sealed class SentinelSweepDuplicateTests : IDisposable
+{
+    private const int Writer = 4242;
+
+    // The sweep runs far faster than in production, so the window the bug lived in -- between the
+    // alert and the end of the restore -- is hit on every run rather than once in a while.
+    private const int SweepMs = 200;
+
+    private static readonly DateTime WriterStart = DateTime.UtcNow.AddHours(-1);
+
+    private readonly AgentOwnWrites _ownWrites = new();
+    private readonly MonitorHarness _h;
+    private readonly EmittingTrace _trace = new();
+    private readonly ProcessCreationTimes _processes = new(pid => pid == Writer
+        ? new ProcessFacts(WriterStart, "evil", @"C:\Users\x\AppData\Local\Temp\evil.exe")
+        : null);
+
+    public SentinelSweepDuplicateTests() => _h = new MonitorHarness(ownWrites: _ownWrites);
+
+    public void Dispose() => _h.Dispose();
+
+    [Fact(Timeout = 60_000)]
+    public async Task One_write_raises_one_alert_and_it_carries_the_attribution()
+    {
+        SentinelCanary canary = await PlantedCanaryAsync();
+        using SentinelMonitor monitor = await StartedSentinelAsync();
+
+        await WriteAsync(canary);
+
+        await Eventually.HoldsAsync(() => Alerts(canary) == 1, "the alert");
+        AlertIngestRequest alert = Alert(canary);
+        await Eventually.HoldsAsync(() => Complements(alert).Count == 1, "the attribution complement");
+        Complements(alert)[0].State.ShouldBe("resolved");
+        Complements(alert)[0].Pid.ShouldBe(Writer);
+
+        // Several sweeps' worth, so a sweep that was going to duplicate has had its chance. This
+        // is the assertion the defect failed: the count was 2.
+        await Task.Delay(SweepMs * 8);
+        Alerts(canary).ShouldBe(1, "one write on a decoy is one alert");
+    }
+
+    [Fact(Timeout = 60_000)]
+    public async Task A_second_write_after_the_restore_raises_a_second_alert()
+    {
+        SentinelCanary canary = await PlantedCanaryAsync();
+        using SentinelMonitor monitor = await StartedSentinelAsync();
+
+        await WriteAsync(canary);
+        await Eventually.HoldsAsync(() => Alerts(canary) == 1, "the first alert");
+
+        // Wait for the two things that actually have to be true, not for a stretch of time: the
+        // decoy's contents are back (so the restore has run and stored its new hash), and the
+        // watcher's grace on that repair has lapsed (so the next write is read as an attack and
+        // not as the agent's own writing).
+        await Eventually.HoldsAsync(
+            () => Restored(canary) && !_ownWrites.IsOwn(canary.FilePath),
+            "the decoy restored and its restore grace over");
+
+        await WriteAsync(canary);
+
+        await Eventually.HoldsAsync(() => Alerts(canary) == 2, "the second write's own alert");
+    }
+
+    /// <summary>A decoy that has been on disk long enough that a write to it is an attack.</summary>
+    private async Task<SentinelCanary> PlantedCanaryAsync()
+    {
+        SentinelCanary canary = await _h.CreateCanaryAsync(_h.Folder);
+
+        // Planting marks the path for a minute (DeploymentGrace). On a workstation the install is
+        // long over by the time anybody writes to a decoy; here it would forgive the test's write.
+        _ownWrites.Clear(canary.FilePath);
+        return canary;
+    }
+
+    /// <summary>
+    /// Whether the decoy carries its generated contents again rather than the attacker's. Reading
+    /// can land in the middle of the rewrite, which is simply "not yet".
+    /// </summary>
+    private static bool Restored(SentinelCanary canary)
+    {
+        try
+        {
+            return !File.ReadAllText(canary.FilePath).Contains("ENCRYPTED", StringComparison.Ordinal);
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>One write, seen by both the watcher and ETW, exactly as a real one is.</summary>
+    private async Task WriteAsync(SentinelCanary canary)
+    {
+        await File.AppendAllTextAsync(canary.FilePath, "\nENCRYPTED");
+        _trace.Emit(new FileIoRecord(FileIoOperation.Write, canary.FilePath, Writer, DateTime.UtcNow, 0, 0));
+    }
+
+    private async Task<SentinelMonitor> StartedSentinelAsync()
+    {
+        var session = new EtwFileIoSession(() => _trace, NullLogger<EtwFileIoSession>.Instance,
+            activeSessions: () => []);
+        var monitor = new SentinelMonitor(
+            NullLogger<SentinelMonitor>.Instance,
+            MonitorHarness.Config([], sentinel: new SentinelOptions
+            {
+                WatchDirectories = [_h.Folder],
+                CanaryTemplates = ["dossier_patient"],
+                CheckIntervalMs = SweepMs,
+                // The restore is the half of the race the sweep collides with, so it has to be on.
+                EnableRealTimeRegeneration = true,
+                EtwEnabled = true,
+            }),
+            _h.ScopeFactory,
+            new FileEventDeduplicator(50),
+            _h.AlertQueue,
+            _h.Registry,
+            _h.Reporter,
+            startupDelay: TimeSpan.Zero,
+            etwSession: session,
+            processTimes: _processes,
+            ownWrites: _ownWrites);
+        await monitor.StartAsync(CancellationToken.None);
+        await Eventually.HoldsAsync(() => _h.State(ModuleCode.Sentinel).State == ModuleState.Active, "SENTINEL active");
+        _trace.Processing.Wait(TimeSpan.FromSeconds(5)).ShouldBeTrue("the ETW session never started processing");
+        return monitor;
+    }
+
+    private AlertIngestRequest Alert(SentinelCanary canary)
+    {
+        lock (_h.Forwarded)
+        {
+            return _h.Forwarded.First(a => a.AlertType == "SentinelCanaryModified"
+                && Equals(a.RawPayload["canary_path"], canary.FilePath));
+        }
+    }
+
+    private List<AttributionComplementRequest> Complements(AlertIngestRequest alert)
+    {
+        lock (_h.Attributions)
+        {
+            return _h.Attributions.Where(a => a.ClientMessageId == alert.ClientMessageId)
+                .Select(a => a.Complement).ToList();
+        }
+    }
+
+    private int Alerts(SentinelCanary canary)
+    {
+        lock (_h.Forwarded)
+        {
+            return _h.Forwarded.Count(a => a.AlertType == "SentinelCanaryModified"
+                && Equals(a.RawPayload["canary_path"], canary.FilePath));
+        }
+    }
+}

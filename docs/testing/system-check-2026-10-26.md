@@ -1,14 +1,14 @@
-﻿# System check - 2026-10-26
+# System check - 2026-10-26
 
-Run at 2026-10-26 00:07:04 on KELYFA-PC by `scripts/system-check.ps1`.
+Run at 2026-10-26 01:54:17 on KELYFA-PC by `scripts/system-check.ps1`.
 
 A line says PASS only if it was checked and worked. NOT BUILT and NOT TESTABLE HERE are
 the honest state of the system, not failures, and do not change the exit code.
 
 | | Count |
 |---|---|
-| PASS | 26 |
-| FAIL | 1 |
+| PASS | 27 |
+| FAIL | 0 |
 | NOT BUILT | 5 |
 | NOT TESTABLE HERE | 4 |
 
@@ -16,11 +16,11 @@ the honest state of the system, not failures, and do not change the exit code.
 
 | Status | Check | Detail |
 |---|---|---|
-| PASS | Container grid-nginx | Up 28 hours |
-| PASS | Container grid-api | Up 56 minutes (healthy) |
-| PASS | Container grid-mysql | Up 29 hours (healthy) |
-| PASS | Container grid-redis | Up 29 hours (healthy) |
-| PASS | Container grid-notifier | Up 28 hours (healthy) |
+| PASS | Container grid-nginx | Up 30 hours |
+| PASS | Container grid-api | Up 3 hours (healthy) |
+| PASS | Container grid-mysql | Up 30 hours (healthy) |
+| PASS | Container grid-redis | Up 30 hours (healthy) |
+| PASS | Container grid-notifier | Up 30 hours (healthy) |
 
 ## The platform answers
 
@@ -59,7 +59,7 @@ the honest state of the system, not failures, and do not change the exit code.
 | Status | Check | Detail |
 |---|---|---|
 | PASS | An enrollment code is issued | valid 15 minutes, single use |
-| PASS | The console can hand out an installer | RansomGuard-CM-Installer-192.168.56.1.exe, 92.5 MB, valid PE header, sha256 F43B824A584C... |
+| PASS | The console can hand out an installer | RansomGuard-CM-Installer-192.168.56.1.exe, 94.3 MB, valid PE header, sha256 F43B824A584C... |
 
 ## Not built, and not testable on this bench
 
@@ -77,10 +77,10 @@ the honest state of the system, not failures, and do not change the exit code.
 
 | Status | Check | Detail |
 |---|---|---|
-| PASS | GRID suite (pytest) | 429 passed, 1 skipped in 622.18s (0:10:22) |
-| PASS | Console suite (vitest) | [2m      Tests [22m [1m[32m212 passed[39m[22m[90m (212)[39m |
+| PASS | GRID suite (pytest) | 429 passed, 1 skipped in 662.92s (0:11:02) |
+| PASS | Console suite (vitest) | Tests  212 passed (212) |
 | PASS | No French reaches a user | no French reaches a user |
-| PASS | Agent suite (CI, cannot run here) | CI run 40240201486 green on e6ac024 |
-| FAIL | Console end-to-end (Playwright) | 80 passed (3.0m) - **fix:** cd dashboard; npx playwright test --project=chromium |
+| PASS | Agent suite (CI, cannot run here) | CI run 40250441307 green on 2a0d398 |
+| PASS | Console end-to-end (Playwright) | 81 passed (3.0m) |
 
 

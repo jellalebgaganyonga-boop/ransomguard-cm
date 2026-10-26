@@ -31,7 +31,14 @@ internal sealed class MonitorHarness : IDisposable
     /// True: the production audit pipeline (AGT-AUD-002) — record, then the background chain
     /// writer. False: the repository chains before returning, as tools do.
     /// </param>
-    public MonitorHarness(bool chainInBackground = false)
+    /// <param name="ownWrites">
+    /// The set the canary service marks its own writes in, shared with the monitor as production
+    /// shares it. Left null by default on purpose: creating a canary marks it for
+    /// <see cref="AgentOwnWrites.DeploymentGrace"/>, a full minute, so a test that creates a decoy
+    /// and then writes to it would have its own write forgiven as the agent's. A test that wants
+    /// the restore path has to pass one, and clear the deployment mark once the decoy is planted.
+    /// </param>
+    public MonitorHarness(bool chainInBackground = false, AgentOwnWrites? ownWrites = null)
     {
         string db = $"file:monitor_{Guid.NewGuid():N}?mode=memory&cache=shared";
         _keepAlive = new SqliteConnection($"Data Source={db}");
@@ -53,6 +60,10 @@ internal sealed class MonitorHarness : IDisposable
         else
         {
             services.AddScoped<IAuditLogRepository>(sp => new AuditLogRepository(sp.GetRequiredService<AgentDbContext>()));
+        }
+        if (ownWrites is not null)
+        {
+            services.AddSingleton(ownWrites);
         }
         services.AddScoped<CanaryFileService>();
         services.AddSingleton(IntegrityCheck);
