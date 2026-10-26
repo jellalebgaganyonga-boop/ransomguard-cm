@@ -41,9 +41,19 @@ public sealed class SentinelSweepDuplicateTests : IDisposable
 {
     private const int Writer = 4242;
 
-    // The sweep runs far faster than in production, so the window the bug lived in -- between the
-    // alert and the end of the restore -- is hit on every run rather than once in a while.
-    private const int SweepMs = 200;
+    // The production default, which is also what the bench ran when the duplicate was found: the
+    // second alert landed one second after the first, one sweep later.
+    //
+    // Not faster. A 200ms sweep was tried, to hit the window on every run, and made the tests
+    // flaky in the other direction: the sweep started winning the race for the *first* detection
+    // too, before the watcher had turned the write into an alert, and then the alert carried no
+    // attribution because there was no write event to match. The sweep has to be slow enough that
+    // the real-time path reliably reports first -- which is the situation being tested.
+    private const int SweepMs = 1000;
+
+    // Several sweeps after the alert. A duplicate, if the gate were not there, arrives on the
+    // first of them; this waits for four so a failure cannot be explained away as being early.
+    private static readonly TimeSpan SeveralSweeps = TimeSpan.FromMilliseconds(SweepMs * 4);
 
     private static readonly DateTime WriterStart = DateTime.UtcNow.AddHours(-1);
 
@@ -64,7 +74,7 @@ public sealed class SentinelSweepDuplicateTests : IDisposable
         SentinelCanary canary = await PlantedCanaryAsync();
         using SentinelMonitor monitor = await StartedSentinelAsync();
 
-        await WriteAsync(canary);
+        await WriteAfterASweepAsync(canary);
 
         await Eventually.HoldsAsync(() => Alerts(canary) == 1, "the alert");
         AlertIngestRequest alert = Alert(canary);
@@ -72,9 +82,8 @@ public sealed class SentinelSweepDuplicateTests : IDisposable
         Complements(alert)[0].State.ShouldBe("resolved");
         Complements(alert)[0].Pid.ShouldBe(Writer);
 
-        // Several sweeps' worth, so a sweep that was going to duplicate has had its chance. This
-        // is the assertion the defect failed: the count was 2.
-        await Task.Delay(SweepMs * 8);
+        // The assertion the defect failed: the count was 2, a second apart.
+        await Task.Delay(SeveralSweeps);
         Alerts(canary).ShouldBe(1, "one write on a decoy is one alert");
     }
 
@@ -84,7 +93,7 @@ public sealed class SentinelSweepDuplicateTests : IDisposable
         SentinelCanary canary = await PlantedCanaryAsync();
         using SentinelMonitor monitor = await StartedSentinelAsync();
 
-        await WriteAsync(canary);
+        await WriteAfterASweepAsync(canary);
         await Eventually.HoldsAsync(() => Alerts(canary) == 1, "the first alert");
 
         // Wait for the two things that actually have to be true, not for a stretch of time: the
@@ -102,7 +111,7 @@ public sealed class SentinelSweepDuplicateTests : IDisposable
         afterRestore.ShouldNotBeNull();
         afterRestore.Status.ShouldBe(CanaryStatus.Active, "a restored decoy stays watched");
 
-        await WriteAsync(canary);
+        await WriteAfterASweepAsync(canary);
 
         // At least two: the point is that the second write is reported, not that nothing else
         // ever is. Pinning it to exactly 2 would make the test fail for a reason it is not about.
@@ -141,6 +150,24 @@ public sealed class SentinelSweepDuplicateTests : IDisposable
     {
         await File.AppendAllTextAsync(canary.FilePath, "\nENCRYPTED");
         _trace.Emit(new FileIoRecord(FileIoOperation.Write, canary.FilePath, Writer, DateTime.UtcNow, 0, 0));
+    }
+
+    /// <summary>
+    /// Writes just after a sweep has come round, so the next one is a whole interval away.
+    ///
+    /// <para>
+    /// Without this the test is a coin toss on a loaded machine. The watcher reports a write in
+    /// 10 to 16 ms; a sweep landing inside that gap finds the decoy modified first and raises the
+    /// alert itself, with no write event to attribute it to -- and the test then fails for the
+    /// opposite reason to the one it is about. Waiting for a sweep to start is a real condition
+    /// and leaves the whole interval clear.
+    /// </para>
+    /// </summary>
+    private async Task WriteAfterASweepAsync(SentinelCanary canary)
+    {
+        int before = _h.IntegrityCheck.Calls;
+        await Eventually.HoldsAsync(() => _h.IntegrityCheck.Calls > before, "a sweep to come round");
+        await WriteAsync(canary);
     }
 
     private async Task<SentinelMonitor> StartedSentinelAsync()
