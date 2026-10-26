@@ -325,24 +325,34 @@ public sealed class UsbDeviceMonitor : BackgroundService, IUsbDeviceMonitor
                 return;
             }
 
-            // Check bootable signature for mass storage (informational if not blocked)
+            // Can this device actually be booted from?
+            //
+            // Not "does it have a boot signature": the first sector of every FAT32 and NTFS
+            // volume ends 0x55AA, so that question is "is it formatted" and the answer is always
+            // yes. Asking it the old way made USB GUARD call an ordinary Kingston key Critical on
+            // 2026-10-26, and Critical in the shipped mode means the drive is made read-only --
+            // a nurse's key locked, with "blocked by policy" as the reason. The detector now
+            // looks for a bootloader, and the signature is recorded without deciding anything.
             if (device.DeviceClass == UsbDeviceClass.MassStorage && device.DriveLetter is not null && !device.IsBootable)
             {
-                bool bootable = await _bootableDetector.IsBootableAsync(device.DriveLetter, scanCts.Token);
-                if (bootable)
+                BootableVerdict verdict = await _bootableDetector.InspectAsync(device.DriveLetter, scanCts.Token);
+                if (verdict.IsBootable && policy.BlockBootableUsb)
                 {
-                    _logger.LogCritical("USB GUARD: BOOTABLE USB detected on {Drive}", device.DriveLetter);
-                    if (policy.BlockBootableUsb)
-                    {
-                        await PersistAlertAndExecuteActionAsync(
-                            dbContext, actionEngine, connectionLog.Id, device,
-                            ScanSeverity.Critical, operatingMode,
-                            "Boot signature (MBR/GPT) detected — blocked by policy",
-                            findings: [],
-                            scanCts.Token);
-                        return;
-                    }
+                    _logger.LogCritical("USB GUARD: BOOTABLE USB detected on {Drive}: {Evidence}",
+                        device.DriveLetter, verdict.Evidence);
+
+                    await PersistAlertAndExecuteActionAsync(
+                        dbContext, actionEngine, connectionLog.Id, device,
+                        ScanSeverity.Critical, operatingMode,
+                        $"Bootable device: {verdict.Evidence} — blocked by policy",
+                        findings: [],
+                        scanCts.Token);
+                    return;
                 }
+
+                // A signature with no bootloader is an ordinary key. It raises nothing, and --
+                // this is the part that matters -- it does not return: the content scan below
+                // still runs, so a key really carrying something is still caught on its contents.
             }
 
             // Whitelist check — skip deep scan for trusted devices

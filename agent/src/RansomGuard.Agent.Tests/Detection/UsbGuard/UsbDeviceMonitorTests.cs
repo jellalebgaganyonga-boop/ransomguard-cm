@@ -36,8 +36,13 @@ public sealed class UsbDeviceMonitorTests
         (device.DisconnectedAt.Value - device.ConnectedAt).TotalSeconds.ShouldBeGreaterThanOrEqualTo(0);
     }
 
+    // These three say what HasBootSignature reads, and nothing about whether a device is
+    // bootable. They were called *_Sets_IsBootable_*, which was the belief that made USB GUARD
+    // lock an ordinary key on 2026-10-26: the signature is on every formatted volume.
+    // BootableUsbDetectorTests covers what bootable now means.
+
     [Fact]
-    public void MBR_Signature_Detected_Sets_IsBootable_True()
+    public void MBR_signature_is_read_from_the_first_sector()
     {
         var buffer = new byte[520];
         buffer[510] = 0x55;
@@ -47,7 +52,7 @@ public sealed class UsbDeviceMonitorTests
     }
 
     [Fact]
-    public void GPT_Signature_Detected_Sets_IsBootable_True()
+    public void GPT_header_is_read_from_the_second_sector()
     {
         var buffer = new byte[520];
         "EFI PART"u8.CopyTo(buffer.AsSpan(512));
@@ -56,7 +61,7 @@ public sealed class UsbDeviceMonitorTests
     }
 
     [Fact]
-    public void No_Boot_Signature_Sets_IsBootable_False()
+    public void An_unformatted_volume_has_neither()
     {
         var buffer = new byte[520]; // All zeros
         BootableUsbDetector.HasBootSignature(buffer).ShouldBeFalse();
