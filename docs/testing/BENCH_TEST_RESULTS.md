@@ -160,6 +160,28 @@ in `d7e7c89`.
   Proven by the thing itself: the same sequence on the same workstation, reinstalled from HEAD
   `8cd80bb`, printed "Service started" and then "Workstation enrolled (agent 6d4d9512…)" on the
   first attempt, with no 1053 and no retry line.
+- **A first-ever install still trips Windows' 30 s limit.** The startup work was moved off the
+  path that makes Windows wait (see the 1053 entry above) and a warm start on PC-RECEPTION is now
+  **13.0 s**, measured. But the very first start after an install did not reach Running inside
+  120 s: the schema is created then, Entity Framework is JIT-ed for the first time, and the
+  endpoint scanner is reading 94 MB of freshly extracted files. The installer's retry is what
+  carries the installation — it reported the 1053, waited, started the service again, and the
+  workstation enrolled. So an install succeeds, and the owner guide says what that line means, but
+  the first start is not yet inside the limit on its own.
+
+  What is left on the startup path and would be the next thing to move: `EnsureDatabase()` runs
+  `Database.Migrate()` before `host.Run()`, so the schema work happens before Windows is told
+  anything. Moving it would mean the services that read the database have to wait for it, which is
+  a bigger change than belonged in this pass.
+- **The agent's own log file is empty.** `C:\ProgramData\RansomGuard-CM\logs\agent-<date>.log` was
+  0 bytes on PC-RECEPTION while the agent was running and enrolled. Only `install.log` had
+  anything in it. The owner guide and the troubleshooting table both send people to that folder
+  when something goes wrong, so as it stands they would find nothing there.
+- **An idle VM is reported disconnected, and comes back on its own.** PC-LAB read `disconnected`
+  in the console for about an hour while its service was `RUNNING`; the heartbeat stalls while the
+  guest sits idle and resumes when it is used again, at which point the workstation returns to
+  `active` without anyone doing anything. Seen twice on 2026-10-26. It is the virtual machine
+  idling rather than the agent failing, but a demonstration left sitting will show it.
 - **EXFIL WATCH cannot reach `active` on a bench.** It needs a learning period before it has a
   baseline, so a freshly installed agent is `partial` for that reason alone, and will be until the
   learning phase ends. That is honest, but it means `protected` is not reachable on a new

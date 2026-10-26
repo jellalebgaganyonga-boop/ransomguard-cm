@@ -31,7 +31,7 @@ It runs to the end, prints PASS / FAIL / NOT BUILT / NOT TESTABLE HERE for each 
 | Feature | Status | Proof |
 |---|---|---|
 | Double-click installer (ADR-027) | **works** | system-check §5: the console hands out a signed-payload installer (94.3 MB on 2026-10-26) with a valid PE header. Installed on PC-LAB on 2026-10-26 from HEAD `8cd80bb`, output entirely in English, 1/6 to 6/6, ending "Workstation enrolled", first attempt. The UAC prompt takes up to 30 s to appear while the single file unpacks |
-| The service starts inside Windows' limit | **works** | Fixed on 2026-10-26. `sc start` had returned **1053**, "the service did not respond in a timely fashion", leaving the agent installed but unenrolled: the host was opening the ETW session, planting the decoys, walking the user profiles, waiting on the backup device and enrolling with the GRID *before* it told Windows the service was running. All of that now happens after. The installer also waits 120 s rather than 60, judges by the service's own state rather than sc.exe's exit code, and starts it once more before giving up. `AgentStartupTests` |
+| The service starts inside Windows' limit | **partial** | A warm start is **13.0 s**, measured on PC-RECEPTION. The **first** start after an install still took longer than 120 s — the schema is created then, Entity Framework is JIT-ed, and the scanner reads 94 MB of new files — so `sc start` returns 1053 and the installer's retry is what carries the installation through to "Workstation enrolled". `EnsureDatabase()` still runs the migration before `host.Run()`, which is the next thing to move. Fixed on 2026-10-26. `sc start` had returned **1053**, "the service did not respond in a timely fashion", leaving the agent installed but unenrolled: the host was opening the ETW session, planting the decoys, walking the user profiles, waiting on the backup device and enrolling with the GRID *before* it told Windows the service was running. All of that now happens after. The installer also waits 120 s rather than 60, judges by the service's own state rather than sc.exe's exit code, and starts it once more before giving up. `AgentStartupTests` |
 | Enrollment | **works** | Bench test 1. The code lasts 15 minutes and is single-use |
 | Fresh install raises no alert | **works** | Bench test 1: 0 alerts, `rejected_alerts = 0`, `pending_alerts = 0`. This took three attempts to get right — see the bug list in BENCH_TEST_RESULTS.md |
 | Re-enrolling a rebuilt workstation | **works** | A decommissioned agent no longer holds its machine's fingerprint; PC-LAB was reinstalled several times on 2026-10-25 |
@@ -87,9 +87,16 @@ It runs to the end, prints PASS / FAIL / NOT BUILT / NOT TESTABLE HERE for each 
    the module is unproven on this bench.
 4. **USB GUARD is unproven.** It reports active; no USB key has been passed through to test it.
 5. **IRONCLAD has never seen real hardware.**
-6. **`ip_address` is not recorded in the user-actions log**, so "who did it" is answered by
+6. **The agent writes nothing to its own log file.** `agent-<date>.log` was 0 bytes on
+   PC-RECEPTION while the agent was running and enrolled. Both the owner guide and its
+   troubleshooting table send people to that folder when something goes wrong; today they would
+   find an empty file. Whatever else is unfinished, this is the one that makes the rest harder to
+   diagnose.
+7. **The first start after an install exceeds Windows' 30 s limit**, so `sc start` returns 1053
+   and the installer's retry is what completes the installation. A warm start is 13 s.
+8. **`ip_address` is not recorded in the user-actions log**, so "who did it" is answered by
    account but not by origin.
-7. **A workstation's name is recorded once, at enrollment.** Rename the machine and the console
+9. **A workstation's name is recorded once, at enrollment.** Rename the machine and the console
    keeps the old name until it enrolls again — the heartbeat does not carry the hostname. This
    caught the bench itself: PC-RECEPTION's VirtualBox entry had been renamed to English while
    Windows still called the machine `PC-ACCUEIL`, so it would have enrolled under the French name. <!-- french-ok: the old machine name, recorded here only because it was renamed away -->
