@@ -99,9 +99,12 @@ test.describe('Users list — tenant_admin', () => {
     await loginAs(page, 'tenant_admin');
     await navigateTo(page, '/users');
 
-    // The Disable button for own user is not in the DOM —
-    // confirm no API call is made through normal user interaction
-    await page.waitForTimeout(500); // let page settle
+    // Wait on the page being there, not on a stopwatch: your own row is rendered and carries no
+    // Disable button. That is the guard this test is about, and asserting it is stronger than
+    // waiting 500ms and checking that nothing happened to have fired yet.
+    const ownRow = page.locator('tr').filter({ has: page.getByText('you', { exact: true }) });
+    await expect(ownRow).toBeVisible();
+    await expect(ownRow.getByRole('button', { name: /^disable$/i })).toHaveCount(0);
     expect(disableCalled).toBe(false);
   });
 

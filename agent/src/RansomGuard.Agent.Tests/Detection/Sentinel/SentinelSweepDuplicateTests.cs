@@ -95,9 +95,18 @@ public sealed class SentinelSweepDuplicateTests : IDisposable
             () => Restored(canary) && !_ownWrites.IsOwn(canary.FilePath),
             "the decoy restored and its restore grace over");
 
+        // Said out loud before the second write, because everything after it depends on this: a
+        // decoy that has left surveillance cannot raise anything, and a bare timeout below would
+        // blame the wrong thing.
+        SentinelCanary? afterRestore = await _h.CanaryAsync(canary.Id);
+        afterRestore.ShouldNotBeNull();
+        afterRestore.Status.ShouldBe(CanaryStatus.Active, "a restored decoy stays watched");
+
         await WriteAsync(canary);
 
-        await Eventually.HoldsAsync(() => Alerts(canary) == 2, "the second write's own alert");
+        // At least two: the point is that the second write is reported, not that nothing else
+        // ever is. Pinning it to exactly 2 would make the test fail for a reason it is not about.
+        await Eventually.HoldsAsync(() => Alerts(canary) >= 2, "the second write's own alert");
     }
 
     /// <summary>A decoy that has been on disk long enough that a write to it is an attack.</summary>

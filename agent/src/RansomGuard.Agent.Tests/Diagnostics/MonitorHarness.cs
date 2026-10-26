@@ -178,6 +178,13 @@ internal sealed class MonitorHarness : IDisposable
             .CreateCanaryAsync(folder, "dossier_patient", "0001_");
     }
 
+    /// <summary>A decoy as the database holds it now, read in a scope of its own.</summary>
+    public async Task<SentinelCanary?> CanaryAsync(Guid id)
+    {
+        using IServiceScope scope = Provider.CreateScope();
+        return await scope.ServiceProvider.GetRequiredService<ISentinelCanaryRepository>().GetByIdAsync(id);
+    }
+
     public ModuleStateEntry State(string code) => Registry.Snapshot().Single(e => e.Code == code);
 
     public void Dispose()

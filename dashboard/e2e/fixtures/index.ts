@@ -202,10 +202,26 @@ export async function navigateTo(page: Page, path: string): Promise<void> {
     window.history.pushState({}, '', p);
     window.dispatchEvent(new PopStateEvent('popstate', { state: window.history.state }));
   }, path);
-  // Wait for React Router to process the navigation. ProtectedRoute may immediately
-  // redirect to /dashboard for unauthorised roles, so we cannot assert on `path` here.
-  // A short pause is enough — subsequent assertions (toHaveURL, toBeVisible) auto-wait.
-  await page.waitForTimeout(300);
+  // Wait for React Router to have processed the navigation. ProtectedRoute may redirect
+  // straight to /dashboard for an unauthorised role, so the target path cannot be asserted
+  // here — but a rendered frame can be waited for, and that is a fact rather than a guess.
+  //
+  // Two animation frames: the first is scheduled after React has committed the render that
+  // popstate triggered, the second runs after it has been painted. This used to be a flat
+  // 300ms, which is the kind of wait that holds on an idle machine and stops holding when the
+  // machine is busy — and every test in the suite goes through this helper.
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        const bail = setTimeout(resolve, 5000); // a backgrounded tab never paints; do not hang
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => {
+            clearTimeout(bail);
+            resolve();
+          }),
+        );
+      }),
+  );
 }
 
 // ── Route setup helper ───────────────────────────────────────

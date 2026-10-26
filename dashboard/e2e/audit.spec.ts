@@ -33,21 +33,21 @@ test.describe('Audit log — authorized roles', () => {
   test('agent_id filter: filling and applying filter updates query', async ({ page }) => {
     await setupMocks(page, 'tenant_admin');
 
-    let filteredRequest = false;
-    await page.route('**/api/v1/dashboard/audit-logs*', (route) => {
-      const url = route.request().url();
-      if (url.includes('agent_id=agent-e2e-aaa')) filteredRequest = true;
-      return route.fulfill({ status: 200, json: MOCK_AUDIT_LOGS });
-    });
+    await page.route('**/api/v1/dashboard/audit-logs*', (route) =>
+      route.fulfill({ status: 200, json: MOCK_AUDIT_LOGS }));
 
     await loginAs(page, 'tenant_admin');
     await navigateTo(page, '/audit');
 
     await page.getByPlaceholder(/agent uuid/i).fill('agent-e2e-aaa');
-    await page.getByRole('button', { name: /^search$/i }).click();
 
-    await page.waitForTimeout(300);
-    expect(filteredRequest).toBe(true);
+    // Wait for the request itself rather than for 300ms and a hope. The old version asserted a
+    // flag that the handler sets, after a fixed pause: on a loaded machine the request had not
+    // been made yet and the test failed for being early, not for being wrong.
+    const filtered = page.waitForRequest((request) =>
+      request.url().includes('agent_id=agent-e2e-aaa'));
+    await page.getByRole('button', { name: /^search$/i }).click();
+    await filtered;
   });
 
   test('CSV export button triggers download (frontend-only, no backend endpoint)', async ({ page }) => {

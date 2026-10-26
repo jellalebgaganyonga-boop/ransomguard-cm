@@ -122,12 +122,26 @@ test.describe('Two tabs of the same browser (GRID-SEC-005 rotation)', () => {
     await context.addCookies([{ name: cookieName, value: current, domain, path: '/api/v1/auth' }]);
 
     const pages = [await context.newPage(), await context.newPage()];
+
+    // Both tabs have to have their refresh in flight at the same moment, or the collision this
+    // test exists for never happens. A fixed 300ms sleep only made that likely, and on a loaded
+    // machine it stopped being true. Hold each answer until the other request has arrived: the
+    // overlap is then a fact, not a probability. The bound exists only so that a run where just
+    // one tab refreshes cannot hang; it is a backstop, not the mechanism.
+    let arrived = 0;
+    let bothArrived: () => void = () => {};
+    const bothInFlight = new Promise<void>((resolve) => {
+      bothArrived = resolve;
+    });
+
     for (const page of pages) {
       await setupMocks(page, 'tenant_admin');
       await page.route('**/api/v1/auth/refresh', async (route) => {
         const cookies = (await route.request().allHeaders()).cookie ?? '';
         const presented = new RegExp(`${cookieName}=([^;]+)`).exec(cookies)?.[1] ?? '(none)';
-        await new Promise((resolve) => setTimeout(resolve, 300)); // keep both requests in flight
+        arrived += 1;
+        if (arrived >= pages.length) bothArrived();
+        await Promise.race([bothInFlight, new Promise((resolve) => setTimeout(resolve, 5000))]);
         if (presented !== current) {
           revocations.push(presented);
           return route.fulfill({ status: 401, json: { detail: 'Refresh token reuse: session revoked' } });
