@@ -21,6 +21,8 @@ All passwords are in the file `deployment\bench\credentials.local.md` on your ho
 
 **Signing in to the virtual machine:** the Windows user is **`vboxuser`** and it has **no password**. The sign-in screen shows only a **Sign in** button — press Enter.
 
+> If it answers **"The username or password is incorrect"**, a stray keypress has been taken as a password. Click **OK** and press Enter again, once. There is no password to get wrong.
+
 **Time needed:** about an hour. Much of it is waiting, by design: the five Resume clicks in Step 11 take roughly a minute each, because the agent asks the GRID for commands on a schedule, and Step 16 waits five minutes before a workstation is called disconnected.
 
 # Part A — Start the platform (host PC)
@@ -247,6 +249,8 @@ Sign in again as `admin@yde-hospital.cm`. Open **Audit log** and **User actions*
 | The counter goes to 5/5 without stopping | The suspension did not happen | Do not hide it: take a screenshot and give it to Claude Code |
 | Console page shows `502` | The GRID API is still starting | Wait a minute and reload; check Step 2 shows `grid-api` healthy |
 | The VM is frozen or very slow | Not enough CPU | Shut it down, give it 4 CPUs in VirtualBox settings, start again |
+| Installer: "Start not confirmed by sc.exe … starting it once more" | Windows gave up waiting at 30 s, which is its limit and not ours. The installer waits up to 120 s and starts the service a second time | Nothing. Let it finish; it says "Service started" when the service is up |
+| VirtualBox says the VM "aborted", or the window goes black and the VM stops | A VirtualBox failure, not the agent. It happened once on this bench while the host was busy building and testing at the same time | Close the message, start the VM again, sign in. The agent starts by itself; check the console shows the workstation Active |
 
 # Taking screenshots
 

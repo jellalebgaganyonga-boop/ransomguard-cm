@@ -1,6 +1,6 @@
 # System check - 2026-10-26
 
-Run at 2026-10-26 01:54:17 on KELYFA-PC by `scripts/system-check.ps1`.
+Run at 2026-10-26 08:39:15 on KELYFA-PC by `scripts/system-check.ps1`.
 
 A line says PASS only if it was checked and worked. NOT BUILT and NOT TESTABLE HERE are
 the honest state of the system, not failures, and do not change the exit code.
@@ -8,7 +8,7 @@ the honest state of the system, not failures, and do not change the exit code.
 | | Count |
 |---|---|
 | PASS | 27 |
-| FAIL | 0 |
+| FAIL | 1 |
 | NOT BUILT | 5 |
 | NOT TESTABLE HERE | 4 |
 
@@ -16,11 +16,11 @@ the honest state of the system, not failures, and do not change the exit code.
 
 | Status | Check | Detail |
 |---|---|---|
-| PASS | Container grid-nginx | Up 30 hours |
-| PASS | Container grid-api | Up 3 hours (healthy) |
-| PASS | Container grid-mysql | Up 30 hours (healthy) |
-| PASS | Container grid-redis | Up 30 hours (healthy) |
-| PASS | Container grid-notifier | Up 30 hours (healthy) |
+| PASS | Container grid-nginx | Up 37 hours |
+| PASS | Container grid-api | Up 9 hours (healthy) |
+| PASS | Container grid-mysql | Up 37 hours (healthy) |
+| PASS | Container grid-redis | Up 37 hours (healthy) |
+| PASS | Container grid-notifier | Up 37 hours (healthy) |
 
 ## The platform answers
 
@@ -77,10 +77,16 @@ the honest state of the system, not failures, and do not change the exit code.
 
 | Status | Check | Detail |
 |---|---|---|
-| PASS | GRID suite (pytest) | 429 passed, 1 skipped in 662.92s (0:11:02) |
+| PASS | GRID suite (pytest) | 429 passed, 1 skipped in 766.85s (0:12:46) |
 | PASS | Console suite (vitest) | Tests  212 passed (212) |
 | PASS | No French reaches a user | no French reaches a user |
-| PASS | Agent suite (CI, cannot run here) | CI run 40250441307 green on 2a0d398 |
-| PASS | Console end-to-end (Playwright) | 81 passed (3.0m) |
+| PASS | Agent suite (CI, cannot run here) | CI run 40283727509 green on 8cd80bb |
+| PASS | Console end-to-end (Playwright) | 81 passed (4.1m) |
+
+## Live detection
+
+| Status | Check | Detail |
+|---|---|---|
+| FAIL | PC-LAB: the decoy raised an alert | no new SentinelCanaryModified arrived - **fix:** did the trigger run, and is the agent active? see the agent log on the workstation |
 
 
