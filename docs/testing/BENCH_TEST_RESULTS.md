@@ -13,7 +13,7 @@ Every figure below comes from a real run against that stack. Nothing here is see
 |---|---|
 | Workstation 1 | **PC-RECEPTION** (VirtualBox VM `win`), 4 vCPU, 4 GB, NAT + host-only |
 | Workstation 2 | **PC-LAB** (VirtualBox VM `windows  10`), 4 vCPU, 4 GB, NAT + host-only |
-| Each workstation has | a non-administrator account `infirmier`, and 200 invented hospital documents in `C:\Users\Public\Documents\Hospital-FICTIONAL\` (50 each in Patients, Laboratory, Pharmacy, Imaging) |
+| Each workstation has | a non-administrator account `nurse`, and 200 invented hospital documents in `C:\Users\Public\Documents\Hospital-FICTIONAL\` (50 each in Patients, Laboratory, Pharmacy, Imaging) |
 | Agent under test | `1.0.0+69041da` (CI green: CI `40221112773`, Agent full `40221112766`) |
 | Console accounts | `admin@yde-hospital.cm` (tenant_admin), `analyst@yde-hospital.cm` (security_analyst), `auditor@yde-hospital.cm` (read_only_auditor), `admin@test-clinic.cm` (tenant_admin of the other customer) |
 
@@ -137,8 +137,8 @@ in `d7e7c89`.
 
 ## What is still not right
 
-- **The installer speaks French only.** Its output is "Vérification du paquet", "Poste enrôlé", and
-  so on, with no English. The console has both languages; the installer does not.
+- ~~**The installer speaks French only.**~~ Fixed on 2026-10-25: the installer's output is English
+  throughout, and the install on PC-LAB that day was read end to end in English.
 - **EXFIL WATCH cannot reach `active` on a bench.** It needs a learning period before it has a
   baseline, so a freshly installed agent is `partial` for that reason alone, and will be until the
   learning phase ends. That is honest, but it means `protected` is not reachable on a new

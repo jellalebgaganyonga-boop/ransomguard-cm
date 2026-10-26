@@ -7,7 +7,7 @@
 
       1. names the machine (PC-RECEPTION, PC-LAB) -- the console shows the hostname, so the two
          workstations have to be told apart there;
-      2. creates the non-administrator account `infirmier`, the everyday user of such a
+      2. creates the non-administrator account `nurse`, the everyday user of such a
          workstation. The agent runs as a service: what that user can do is not what the agent
          can do, and the bench shows that rather than asserting it;
       3. fills C:\Users\Public\Documents\Hospital-FICTIONAL\ with ordinary-looking hospital
@@ -25,7 +25,7 @@
     The name to give the workstation. The rename needs a restart, which this script does not do.
 
 .PARAMETER NursePassword
-    The password for the `infirmier` account. Required: the bench writes passwords down in
+    The password for the `nurse` account. Required: the bench writes passwords down in
     deployment/bench/credentials.local.md on the host, it never invents one silently.
 
 .PARAMETER DocumentCount
@@ -65,15 +65,26 @@ if ($env:COMPUTERNAME -eq $ComputerName) {
 }
 
 # -- 2. the everyday user ----------------------------------------------------
-Step 2 'non-administrator user `infirmier`'
+Step 2 'non-administrator user `nurse`'
 $secret = ConvertTo-SecureString $NursePassword -AsPlainText -Force
-if (Get-LocalUser -Name 'infirmier' -ErrorAction SilentlyContinue) {
-    Set-LocalUser -Name 'infirmier' -Password $secret
+
+# The bench called this account by a French name until 2026-10-26. Rename it rather than make a
+# second one: the profile, its documents and anything SENTINEL has already planted under it stay
+# put, and a VM provisioned before the rename ends up in the same state as one provisioned after.
+# The old name has to be written out here to be migrated away from; it is shown to nobody.
+$legacyName = 'infirmier'  # french-ok: the old account name, named only so it can be renamed
+if (Get-LocalUser -Name $legacyName -ErrorAction SilentlyContinue) {
+    Rename-LocalUser -Name $legacyName -NewName 'nurse'
+    Write-Host '      renamed from the old account name'
+}
+
+if (Get-LocalUser -Name 'nurse' -ErrorAction SilentlyContinue) {
+    Set-LocalUser -Name 'nurse' -Password $secret
     Write-Host '      already exists, password updated'
 } else {
     # -Description is limited to 48 characters by New-LocalUser; a longer one is not truncated,
     # it fails the whole call. Keep it short.
-    New-LocalUser -Name 'infirmier' -Password $secret -FullName 'Nurse (FICTIONAL bench)' `
+    New-LocalUser -Name 'nurse' -Password $secret -FullName 'Nurse (FICTIONAL bench)' `
         -Description 'Everyday workstation account, no admin rights' `
         -PasswordNeverExpires -AccountNeverExpires | Out-Null
     Write-Host '      created'
@@ -81,11 +92,11 @@ if (Get-LocalUser -Name 'infirmier' -ErrorAction SilentlyContinue) {
 
 # Members of Users only. Explicitly NOT Administrators: the point of the account is that it has
 # no more rights than a nurse on a ward has.
-Add-LocalGroupMember -Group 'Users' -Member 'infirmier' -ErrorAction SilentlyContinue
+Add-LocalGroupMember -Group 'Users' -Member 'nurse' -ErrorAction SilentlyContinue
 $isAdmin = (Get-LocalGroupMember -Group 'Administrators' -ErrorAction SilentlyContinue |
-    Where-Object { $_.Name -like '*\infirmier' })
+    Where-Object { $_.Name -like '*\nurse' })
 if ($isAdmin) {
-    Remove-LocalGroupMember -Group 'Administrators' -Member 'infirmier' -ErrorAction SilentlyContinue
+    Remove-LocalGroupMember -Group 'Administrators' -Member 'nurse' -ErrorAction SilentlyContinue
     Write-Host '      removed from the Administrators group'
 }
 Write-Host ('      administrator : {0}' -f $(if ($isAdmin) { 'NO (removed)' } else { 'NO' }))

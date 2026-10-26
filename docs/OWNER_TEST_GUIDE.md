@@ -153,9 +153,12 @@ The test script is harmless. It writes into **one decoy file** that the agent pl
 **You should see:**
 
 - **Who did it?** → `powershell`, with the **same PID** you wrote down. ☐
+- **What started it?** → the chain that led to the write, newest last: **`explorer -> cmd -> powershell`**. This is GENEALOGY. It answers the question attribution cannot: not only which program wrote to the decoy, but what launched it. ☐
 - **Response**: the process was suspended. ☐
 
-> The **process tree** (GENEALOGY) may be empty on this alert. GENEALOGY reports `active`, but the tree is only attached when the writer was still running at the moment the alert was enriched. Do not treat an empty tree as a failure.
+> The chain is captured while the writer is still alive and sent to the GRID just after the alert, so it can appear a few seconds after the alert itself. Reload the page if the section is not there yet.
+>
+> If you start the trigger by double-clicking it in File Explorer rather than from `cmd.exe`, the middle link differs — you will see `explorer -> powershell`. Both are correct; the chain reports what actually happened.
 
 3. Open the **PC-RECEPTION** agent page.
 
@@ -220,7 +223,7 @@ Sign in again as `admin@yde-hospital.cm`. Open **Audit log** and **User actions*
 | Green "PROTECTED" | Not on a new computer: EXFIL WATCH learns the network first. PARTIAL is the honest state. |
 | USB GUARD | Active, but not tested here: a real USB key must be passed into the VM. |
 | EXFIL WATCH | Cannot raise alerts before the end of its learning period. |
-| GENEALOGY | Reports active, and captures the chain behind a write while the writer is alive. The tree is not attached to every alert. |
+| GENEALOGY | Works: the "What started it" chain is on the alert page (Step 10). It is captured while the writer is still alive, so an alert whose writer vanished instantly carries no chain. |
 | IRONCLAD (backup) | Code exists, tested only with a simulated Arduino. Not connected to real hardware. |
 | Anti-tampering | Not built yet. |
 | Installer | Not signed: Windows says "Publisher: Unknown". |
@@ -247,4 +250,4 @@ Sign in again as `admin@yde-hospital.cm`. Open **Audit log** and **User actions*
 
 # Repeating the test
 
-To start again from a clean computer, ask Claude Code to run `deployment\bench\reset-agent.ps1` on PC-RECEPTION. That removes the agent, its data and the decoys it planted, and leaves the documents, the `infirmier` account and the machine name alone. Then **decommission the old agent in the console** (otherwise the GRID refuses the new enrollment with `409`) and start again from **Step 6**.
+To start again from a clean computer, ask Claude Code to run `deployment\bench\reset-agent.ps1` on PC-RECEPTION. That removes the agent, its data and the decoys it planted, and leaves the documents, the `nurse` account and the machine name alone. Then **decommission the old agent in the console** (otherwise the GRID refuses the new enrollment with `409`) and start again from **Step 6**.

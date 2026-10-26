@@ -17,7 +17,7 @@
          have just been deleted with the database, so nothing would ever clean them up again and
          the next install would plant its own alongside them.
 
-    It touches nothing else: the FICTIONAL hospital documents, the `infirmier` account and the
+    It touches nothing else: the FICTIONAL hospital documents, the `nurse` account and the
     workstation name all stay as they are.
 
 .PARAMETER WatchedRoots
@@ -110,4 +110,4 @@ Write-Host "      $removed canary file(s) removed"
 
 Write-Host ''
 Write-Host 'The workstation is back to before the agent was installed.'
-Write-Host 'The FICTIONAL documents, the `infirmier` account and the machine name are untouched.'
+Write-Host 'The FICTIONAL documents, the `nurse` account and the machine name are untouched.'

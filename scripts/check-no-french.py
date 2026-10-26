@@ -42,13 +42,14 @@ ACCENTS = re.compile(r"[àâäçéèêëîïôöûùüÿœÀÂÄÇÉÈÊËÎÏÔ
 # also occurs in English prose ("plus", "important") or by chance inside minified JavaScript
 # ("est", "sur", "qui"): a list that cries wolf is a list nobody reads.
 FRENCH_WORDS = re.compile(
-    r"("
+    r"\b("
     r"aucun|aucune|veuillez|introuvable|utilisateur|utilisateurs"
     r"|fichier|fichiers|dossier|enregistrement"
     r"|mot de passe|votre|vous|nouveau|nouvelle"
     r"|impossible de|il faut|n'est pas|ne peut pas"
     r"|wotre|poste de travail|en cours|terminé"
-    r")",
+    r"|infirmier|infirmiere|accueil|laboratoire|imagerie|medicale|medicaux"
+    r")\b",
     re.IGNORECASE,
 )
 
@@ -62,6 +63,12 @@ FRENCH_CHUNK = re.compile(r"^fr[-.][A-Za-z0-9_-]+\.js(\.map)?$")
 # would be the odd one out, not the correct one. It is stripped before a line is judged, so a line
 # that also carries real French still fails.
 ENDONYM = re.compile(r"Français")
+
+# A line that has to name a French identifier the system is migrating away from -- an old account
+# name being renamed, say -- marks itself `french-ok: <why>`. The reason is mandatory and is
+# printed by --verbose, so an exemption is an argument somebody made, not a silent hole. It
+# exempts the one line it sits on and nothing else.
+ALLOWED = re.compile(r"french-ok:\s*\S")
 
 
 class Target:
@@ -82,7 +89,15 @@ TARGETS = [
     Target("agent", "agent/src/RansomGuard.Agent.Core", ["**/*.cs"], skip=["/obj/", "/bin/"]),
     Target("agent service", "agent/src/RansomGuard.Agent.Service", ["**/*.cs"], skip=["/obj/", "/bin/"]),
     Target("installer", "agent/src/RansomGuard.Agent.Installer", ["**/*.cs"], skip=["/obj/", "/bin/"]),
-    Target("bench scripts", "deployment/bench", ["**/*.ps1", "**/*.cmd", "**/*.py", "**/*.md"]),
+    # `credentials.local.md` is the one file on the bench that holds passwords. It is gitignored
+    # and never leaves this machine, and a failing line here is printed in full -- in the terminal
+    # and in the CI log. Scanning it would publish the passwords it exists to keep.
+    Target("bench scripts", "deployment/bench", ["**/*.ps1", "**/*.cmd", "**/*.py", "**/*.md"],
+           skip=["credentials.local.md"]),
+    # What the owner and the jury actually read. A French line here is French shown to a user just
+    # as surely as one in the console; the rest of docs/ is design history and is left alone.
+    Target("owner-facing docs", "docs",
+           ["OWNER_TEST_GUIDE.md", "SYSTEM_STATUS.md", "testing/BENCH_TEST_RESULTS.md"]),
 ]
 
 
@@ -94,16 +109,61 @@ def offending_lines(path: Path, check_words: bool) -> list[tuple[int, str]]:
 
     hits: list[tuple[int, str]] = []
     for number, raw in enumerate(text.splitlines(), start=1):
+        if ALLOWED.search(raw):
+            continue
         line = ENDONYM.sub("", raw)
         if ACCENTS.search(line) or (check_words and FRENCH_WORDS.search(line)):
             hits.append((number, raw.strip()[:160]))
     return hits
 
 
+# A check that cannot fail is not a check. From the day it was written until 2026-10-26 the word
+# list compiled to "\x08(...)\x08" -- a literal backspace where \b was meant -- so it matched
+# nothing, and the run reported "no French reaches a user" over four French error messages the
+# GRID was sending to the console. Nothing noticed, because a green gate looks the same whether it
+# is working or dead. These samples run before every scan and cost nothing.
+MUST_MATCH = [
+    ("Utilisateur introuvable", "a GRID error message"),
+    ("detail=\"Mot de passe actuel incorrect\"", "French inside a code line"),
+    ("the `infirmier` account", "an account name in a comment"),
+    ("Vérification du paquet", "an accent"),
+]
+MUST_NOT_MATCH = [
+    ("the application sends a message", "English that resembles French"),
+    ("important action, service instance", "words shared by both languages"),
+    ('["dossier_patient"] = GeneratePatientRecord,', "a compatibility key, not prose"),
+    ("Français", "the language's own name"),
+]
+
+
+def self_test() -> list[str]:
+    """Prove the patterns still match French and still ignore English."""
+    broken = []
+    for sample, why in MUST_MATCH:
+        line = ENDONYM.sub("", sample)
+        if not (ACCENTS.search(line) or FRENCH_WORDS.search(line)):
+            broken.append(f"should have been caught ({why}): {sample!r}")
+    for sample, why in MUST_NOT_MATCH:
+        line = ENDONYM.sub("", sample)
+        if ACCENTS.search(line) or FRENCH_WORDS.search(line):
+            broken.append(f"should have been ignored ({why}): {sample!r}")
+    return broken
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--verbose", action="store_true", help="list every file scanned")
     args = parser.parse_args()
+
+    broken = self_test()
+    if broken:
+        print("the check itself is broken; it would pass over French without seeing it:\n")
+        for line in broken:
+            print(f"  {line}")
+        return 2
+    if args.verbose:
+        print(f"[ok] self-test: {len(MUST_MATCH)} French and "
+              f"{len(MUST_NOT_MATCH)} non-French samples judged correctly")
 
     total_files = 0
     failures: list[str] = []

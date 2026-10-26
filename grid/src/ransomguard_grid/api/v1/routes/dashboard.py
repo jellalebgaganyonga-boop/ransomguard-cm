@@ -107,7 +107,7 @@ async def get_me(
     if user is None:
         raise HTTPException(
             status_code=401,
-            detail="Utilisateur introuvable",
+            detail="User not found",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
@@ -155,7 +155,7 @@ async def _fresh_user(current_user: User, db: AsyncSession) -> User:
         select(User).where(User.id == current_user.id).options(selectinload(User.tenant))
     )).scalar_one_or_none()
     if user is None:
-        raise HTTPException(status_code=401, detail="Utilisateur introuvable", headers={"WWW-Authenticate": "Bearer"})
+        raise HTTPException(status_code=401, detail="User not found", headers={"WWW-Authenticate": "Bearer"})
     if not user.is_active:
         raise HTTPException(status_code=403, detail="User account disabled")
     if user.tenant is None or user.tenant.status != "active":
@@ -208,7 +208,7 @@ async def change_my_password(
     if not verify_password(body.current_password, user.hashed_password):
         await _log_user_action(db, user=user, action_type="password_change_refused", target_type="user", target_id=user.id)
         await db.commit()  # the 403 that follows must not roll the evidence back
-        raise HTTPException(status_code=403, detail="Mot de passe actuel incorrect")
+        raise HTTPException(status_code=403, detail="The current password is incorrect")
     if body.new_password == body.current_password:
         raise HTTPException(status_code=422, detail="The new password must be different from the current one")
     user.hashed_password = hash_password(body.new_password)
@@ -868,7 +868,7 @@ async def enable_user(
     from ransomguard_grid.db.repositories.user_repository import UserRepository
 
     if user_id == admin.id:
-        raise HTTPException(422, "Vous ne pouvez pas modifier votre propre statut d'activation")
+        raise HTTPException(422, "You cannot change your own activation status")
 
     repo = UserRepository(db, tenant_id=admin.tenant_id)
     target = await repo.get_by_id(user_id)
