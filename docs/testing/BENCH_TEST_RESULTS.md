@@ -168,7 +168,13 @@ in `d7e7c89`.
 - ~~**Decommissioned agents stay in the list.**~~ Fixed: `list_agents` hides them unless
   `include_decommissioned=true` asks, and they are never deleted. Confirmed on 2026-10-26 — five
   decommissioned `PC-LABO` rows and one `WIN` row exist and none of them is on the page.
-- **One write on a decoy raises `SentinelCanaryModified` twice.** Found on 2026-10-26 walking the
+- ~~**One write on a decoy raises `SentinelCanaryModified` twice.**~~ Fixed on 2026-10-26, and
+  confirmed on the bench the same day: on agent `1.0.0+8cd80bb`, two writes on PC-LAB (07:46:02
+  and 07:46:39) raised **one alert each**, both `attribution=resolved`, PID 7504, chain
+  `explorer -> cmd -> powershell`. The owner guide no longer tells anyone which of two alerts to
+  open, because there is only one. What follows is the defect as it was found.
+
+  Found on 2026-10-26 walking the
   owner guide on PC-LAB. The trigger wrote once, at 00:26:38, and the console shows two Critical
   alerts one second apart on the same file:
 
@@ -183,11 +189,17 @@ in `d7e7c89`.
   that restore is still in flight, finds the file not matching its stored hash, and raises again —
   this time with no write event to attribute, so no writer and no genealogy.
 
-  The sweep exists as a safety net for a write the watcher misses, so it cannot simply be removed;
-  it needs the same recently-written grace that `AgentOwnWrites` already gives the watcher. Not
-  fixed here: the agent's 1039 tests cannot run on this machine, and changing detection code that
-  only CI can verify, on the eve of owner testing, is the worse risk. The owner guide now says
-  which of the two alerts to open.
+  The sweep exists as a safety net for a write the watcher misses, so it could not simply be
+  removed. Two things were wrong and both had to go. `ReportedModifications` now records a
+  modification from the moment the alert is raised until its restore has stored the new hash, and
+  the sweep stays quiet for exactly that one — not for a stretch of time, so a write landing after
+  the restore is still reported as the separate attack it is. And the sweep no longer judges a
+  decoy from the snapshot it read when the sweep began: it re-reads in a scope of its own, because
+  the stale copy came from that scope's DbContext and Entity Framework would hand the same object
+  back.
+
+  `SentinelSweepDuplicateTests` pins both halves: one write is one alert and it carries the
+  resolved attribution; a second write, after the restore has settled, is its own second alert.
 
   It is not new. The alert list carries pairs like this from earlier runs too; nothing looked for
   it because the attributed alert was always the one opened.

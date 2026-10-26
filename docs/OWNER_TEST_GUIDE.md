@@ -151,11 +151,9 @@ The test script is harmless. It writes into **one decoy file** that the agent pl
 
 1. Go to **Alerts**.
 
-**You should see:** a **Critical** alert `SentinelCanaryModified` from PC-RECEPTION, and a `SentinelProcessSuspended` alert. ☐
+**You should see:** a **Critical** alert `SentinelCanaryModified` from PC-RECEPTION, and a `SentinelProcessSuspended` alert. **One `SentinelCanaryModified` per write**, not two. ☐
 
-> **You will see `SentinelCanaryModified` twice for the same write**, a second apart. This is a known defect, not two attacks: the agent puts the decoy's contents back after the alert, and its periodic integrity check runs while the restore is still in flight and reports the same file again. Only the **earlier** of the two carries the answers below — the later one says attribution "unavailable". Open the earlier one. It is listed in `docs/testing/BENCH_TEST_RESULTS.md` under what is still not right.
-
-2. Open the **earlier** `SentinelCanaryModified` alert.
+2. Open the `SentinelCanaryModified` alert.
 
 **You should see:**
 

@@ -42,7 +42,7 @@ It runs to the end, prints PASS / FAIL / NOT BUILT / NOT TESTABLE HERE for each 
 
 | Feature | Status | Proof |
 |---|---|---|
-| SENTINEL (decoy files) | **works, with a known defect** | Bench test 3: writing to a decoy raises a Critical alert within seconds. **One write raises the alert twice**, a second apart, and only the first carries attribution and the process tree — see BENCH_TEST_RESULTS, "What is still not right" |
+| SENTINEL (decoy files) | **works** | Bench test 3: writing to a decoy raises a Critical alert within seconds. One write raises **one** alert: the duplicate found on 2026-10-26 was fixed the same day and confirmed on the bench — two writes, one alert each, both with the writer and the chain |
 | Attribution — who wrote the file | **works** | Bench test 3: `attribution: resolved`, powershell PID 7744, with its image path and start time |
 | GENEALOGY — what started it | **works** | `explorer -> cmd -> powershell` on the alert page, PID 7744 matching the trigger output. Screenshot: `docs/screenshots/real/round4-english/alert_genealogy_section.png`. 8 GRID tests, 8 console tests |
 | Suspension (ADR-026) | **works** | Bench test 3: `SentinelProcessSuspended`, the writer frozen |
@@ -87,12 +87,9 @@ It runs to the end, prints PASS / FAIL / NOT BUILT / NOT TESTABLE HERE for each 
    the module is unproven on this bench.
 4. **USB GUARD is unproven.** It reports active; no USB key has been passed through to test it.
 5. **IRONCLAD has never seen real hardware.**
-6. **One write on a decoy raises two alerts**, and the second carries neither the writer nor the
-   process tree. A reader who opens the wrong one of the two concludes that attribution and
-   GENEALOGY failed when they did not.
-7. **`ip_address` is not recorded in the user-actions log**, so "who did it" is answered by
+6. **`ip_address` is not recorded in the user-actions log**, so "who did it" is answered by
    account but not by origin.
-8. **A workstation's name is recorded once, at enrollment.** Rename the machine and the console
+7. **A workstation's name is recorded once, at enrollment.** Rename the machine and the console
    keeps the old name until it enrolls again — the heartbeat does not carry the hostname. This
    caught the bench itself: PC-RECEPTION's VirtualBox entry had been renamed to English while
    Windows still called the machine `PC-ACCUEIL`, so it would have enrolled under the French name. <!-- french-ok: the old machine name, recorded here only because it was renamed away -->
