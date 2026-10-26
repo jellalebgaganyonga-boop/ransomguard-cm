@@ -53,6 +53,11 @@ public static class ServiceRegistration
     /// </summary>
     public static void AddMonitors(IServiceCollection services)
     {
+        // First: the database, which every monitor below waits for. Registered first so it is the
+        // first ExecuteAsync to run, and done here rather than before host.Run() so that Windows
+        // is told the service is running without waiting for a schema to be created.
+        services.AddHostedService<DatabaseStartupService>();
+
         // SENTINEL deployment runs before Worker to ensure canaries exist
         services.AddHostedService<SentinelDeploymentService>();
         services.AddHostedService<SentinelMonitor>();
@@ -145,6 +150,8 @@ public static class ServiceRegistration
         // Repositories
         services.AddScoped<IDetectionEventRepository, DetectionEventRepository>();
         services.AddScoped<IAlertRepository, AlertRepository>();
+        // Announced by DatabaseStartupService, awaited by everything that reads the database.
+        services.AddSingleton<DatabaseReady>();
         // Audit (AGT-AUD-002): recording is one INSERT, chaining happens in the background.
         services.AddSingleton<AuditHealth>();
         services.AddSingleton<AuditChainWriter>();

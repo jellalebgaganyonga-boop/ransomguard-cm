@@ -126,13 +126,18 @@ describe('product names', () => {
     expect(productName(code)).toBe(name);
   });
 
-  it('orders the six entries, unknown codes last', () => {
+  it('orders the entries, unknown codes last, and drops ANTI_TAMPERING', () => {
     const codes = orderedModules(
       ['MOON_LASER', 'ANTI_TAMPERING', 'EXFIL_WATCH', 'SENTINEL', 'GENEALOGY', 'USB_GUARD', 'ENTROPY'].map((code) => ({
         code, state: 'active', reason_code: null, changed_at: '2026-10-11T10:00:00Z',
       })),
     ).map((m) => m.code);
-    expect(codes).toEqual(['SENTINEL', 'ENTROPY', 'GENEALOGY', 'USB_GUARD', 'EXFIL_WATCH', 'ANTI_TAMPERING', 'MOON_LASER']);
+
+    // ANTI_TAMPERING is not shown: it was a row on every workstation that always read
+    // "not implemented". An agent older than 2026-10-26 still sends it, which is why this is
+    // filtered here and not only at the agent. MOON_LASER stays: a code the console does not
+    // know is still something happening on somebody's machine, and is shown as reported.
+    expect(codes).toEqual(['SENTINEL', 'ENTROPY', 'GENEALOGY', 'USB_GUARD', 'EXFIL_WATCH', 'MOON_LASER']);
   });
 });
 

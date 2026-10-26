@@ -75,8 +75,17 @@ describe('AgentPostureSection', () => {
     render(<AgentPostureSection agent={makeAgent()} />);
 
     expect(screen.getByRole('cell', { name: 'EXFIL WATCH' })).toBeInTheDocument();
-    expect(screen.getByRole('cell', { name: 'ANTI-TAMPERING' })).toBeInTheDocument();
     expect(screen.queryByText('EXFIL_WATCH')).not.toBeInTheDocument();
+  });
+
+  it('does not show ANTI-TAMPERING, even when an older agent still reports it', () => {
+    // The fixture above carries the row, as an agent installed before 2026-10-26 does. It was a
+    // line on every workstation that always read "inactive — not implemented": true, and nothing
+    // a person can act on. It is planned work in SYSTEM_STATUS, not a module state.
+    render(<AgentPostureSection agent={makeAgent()} />);
+
+    expect(screen.queryByText('ANTI-TAMPERING')).not.toBeInTheDocument();
+    expect(screen.queryByText('ANTI_TAMPERING')).not.toBeInTheDocument();
   });
 
   it('shows an unrecognised module code verbatim, never blank', () => {

@@ -40,12 +40,28 @@ public static class ModuleCode
     /// <summary>Network exfiltration watch (kernel ETW).</summary>
     public const string ExfilWatch = "EXFIL_WATCH";
 
-    /// <summary>Agent self-protection (not yet implemented).</summary>
+    /// <summary>
+    /// Agent self-protection. Not built, and no longer reported.
+    ///
+    /// <para>
+    /// It was reported as inactive / not_implemented, which was honest but useless: a row in the
+    /// module table of every workstation, always grey, saying a thing does not exist. The console
+    /// is for telling somebody what is happening on their machines, and a permanent "no" is noise
+    /// in the middle of that. It is in SYSTEM_STATUS as planned work, which is where a thing that
+    /// does not exist belongs.
+    /// </para>
+    ///
+    /// <para>
+    /// The constant stays because the GRID still accepts it: an agent installed before this
+    /// change goes on sending the row until it is upgraded, and refusing its heartbeat over a
+    /// module name would be a far worse bargain than ignoring one entry.
+    /// </para>
+    /// </summary>
     public const string AntiTampering = "ANTI_TAMPERING";
 
-    /// <summary>The six entries the agent always reports, in display order.</summary>
+    /// <summary>The entries the agent reports, in display order.</summary>
     public static readonly IReadOnlyList<string> All =
-        [Sentinel, Entropy, Genealogy, UsbGuard, ExfilWatch, AntiTampering];
+        [Sentinel, Entropy, Genealogy, UsbGuard, ExfilWatch];
 }
 
 /// <summary>
@@ -140,8 +156,11 @@ public interface IModuleStateRegistry
 ///   construction. It has a source now (ProcessAncestryStore on the kernel
 ///   FileIO session), so GenealogyMonitor owns its state and publishes what the
 ///   module can actually do, re-checked while the agent runs;</item>
-/// <item>ANTI_TAMPERING is Inactive/not_implemented: its services are registered
-///   but never started (dead code). It joins the posture when the Watchdog ships.</item>
+/// <item>ANTI_TAMPERING is not reported at all. It used to be seeded
+///   Inactive/not_implemented, which put a permanently grey row saying "this does
+///   not exist" into the module table of every workstation. A console is for
+///   saying what is happening; it joins the posture when the Watchdog ships, and
+///   until then it is planned work in SYSTEM_STATUS.</item>
 /// </list>
 /// </remarks>
 public sealed class InMemoryModuleStateRegistry : IModuleStateRegistry
@@ -160,7 +179,6 @@ public sealed class InMemoryModuleStateRegistry : IModuleStateRegistry
         _entries[ModuleCode.UsbGuard] = new(ModuleCode.UsbGuard, ModuleState.Inactive, ModuleReasonCode.Starting, now);
         _entries[ModuleCode.ExfilWatch] = new(ModuleCode.ExfilWatch, ModuleState.Inactive, ModuleReasonCode.Starting, now);
         _entries[ModuleCode.Genealogy] = new(ModuleCode.Genealogy, ModuleState.Inactive, ModuleReasonCode.Starting, now);
-        _entries[ModuleCode.AntiTampering] = new(ModuleCode.AntiTampering, ModuleState.Inactive, ModuleReasonCode.NotImplemented, now);
     }
 
     /// <inheritdoc />

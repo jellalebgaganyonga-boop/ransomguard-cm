@@ -49,11 +49,11 @@ public sealed class ModuleStateRegistryTests
         genealogy.State.ShouldBe(ModuleState.Inactive);
         genealogy.ReasonCode.ShouldBe(ModuleReasonCode.Starting);
 
-        // ANTI_TAMPERING stays hard-coded, and honestly so: its services are registered but never
-        // started, so there is nothing at runtime that could report on it.
-        ModuleStateEntry antiTampering = registry.Snapshot().Single(e => e.Code == ModuleCode.AntiTampering);
-        antiTampering.State.ShouldBe(ModuleState.Inactive);
-        antiTampering.ReasonCode.ShouldBe(ModuleReasonCode.NotImplemented);
+        // ANTI_TAMPERING is not reported at all. It used to be seeded inactive / not_implemented,
+        // which put a row on every workstation's module table saying a thing does not exist --
+        // true, and nothing anybody can act on. It is planned work in SYSTEM_STATUS instead.
+        registry.Snapshot().ShouldNotContain(e => e.Code == ModuleCode.AntiTampering);
+        ModuleCode.All.ShouldNotContain(ModuleCode.AntiTampering);
     }
 
     [Fact]

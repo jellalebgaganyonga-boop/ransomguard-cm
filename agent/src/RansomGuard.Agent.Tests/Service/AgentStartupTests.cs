@@ -6,6 +6,7 @@ using Microsoft.Extensions.Options;
 using RansomGuard.Agent.Core.Detection.IronClad;
 using RansomGuard.Agent.Core.Detection.IronClad.Communication;
 using RansomGuard.Agent.Core.Detection.IronClad.Models;
+using RansomGuard.Agent.Core.Persistence;
 using RansomGuard.Agent.Service;
 using Shouldly;
 
@@ -82,6 +83,41 @@ public sealed class AgentStartupTests
             .ShouldBe(started.Task, "the deferred work never ran");
 
         await service.StopAsync(CancellationToken.None);
+    }
+
+    [Fact(Timeout = 30_000)]
+    public async Task Nothing_reads_the_database_before_it_exists()
+    {
+        var ready = new DatabaseReady();
+        ready.IsReady.ShouldBeFalse("the schema has not been created yet");
+
+        var waiting = Task.Run(() => ready.WaitAsync(CancellationToken.None));
+        await Task.Delay(200);
+        waiting.IsCompleted.ShouldBeFalse("a monitor must not proceed before the schema exists");
+
+        ready.Signal();
+
+        await waiting.WaitAsync(TimeSpan.FromSeconds(5));
+        ready.IsReady.ShouldBeTrue();
+
+        // And afterwards it costs nothing: a monitor started later does not wait at all.
+        await ready.WaitAsync(CancellationToken.None);
+    }
+
+    [Fact(Timeout = 30_000)]
+    public async Task A_database_that_cannot_be_prepared_stops_the_monitors_rather_than_hanging_them()
+    {
+        var ready = new DatabaseReady();
+        var waiting = Task.Run(() => ready.WaitAsync(CancellationToken.None));
+
+        ready.Fail(new InvalidOperationException("the schema is broken"));
+
+        // The alternative is a detector that waits for ever, which from the outside looks exactly
+        // like one that is watching. It has to fail loudly instead.
+        InvalidOperationException thrown =
+            await Should.ThrowAsync<InvalidOperationException>(async () => await waiting);
+        thrown.Message.ShouldBe("the schema is broken");
+        ready.IsReady.ShouldBeFalse();
     }
 
     /// <summary>A BackgroundService written the way the agent's are: yield, then the slow part.</summary>

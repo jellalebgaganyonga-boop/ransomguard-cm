@@ -132,7 +132,14 @@ try
             loggerConfig.WriteTo.Console();
         }
 
-        // File sink: daily rotation, size limit, retained count
+        // File sink: daily rotation, size limit, retained count.
+        //
+        // `shared: false` and an explicit flush interval, both deliberate. On PC-RECEPTION on
+        // 2026-10-26 the agent ran, enrolled and detected for twenty minutes while
+        // agent-20261026.log stayed 0 bytes -- and the owner guide sends people to that file when
+        // something goes wrong, so there was nothing to find. Only this process writes the log,
+        // so the shared-writer path buys nothing and is the part that was not reaching the disc;
+        // one second of buffering is the most that can now be lost if the agent is killed.
         if (isProduction)
         {
             loggerConfig.WriteTo.File(
@@ -141,7 +148,8 @@ try
                 rollingInterval: RollingInterval.Day,
                 fileSizeLimitBytes: maxFileSizeMb * 1024L * 1024L,
                 retainedFileCountLimit: retainedFiles,
-                shared: true);
+                shared: false,
+                flushToDiskInterval: TimeSpan.FromSeconds(1));
         }
         else
         {
@@ -150,7 +158,8 @@ try
                 rollingInterval: RollingInterval.Day,
                 fileSizeLimitBytes: maxFileSizeMb * 1024L * 1024L,
                 retainedFileCountLimit: retainedFiles,
-                shared: true,
+                shared: false,
+                flushToDiskInterval: TimeSpan.FromSeconds(1),
                 outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] [{SourceContext}] {Message:lj}{NewLine}{Exception}");
         }
 
@@ -177,13 +186,13 @@ try
 
     var host = builder.Build();
 
-    // Ensure database directory exists and apply migrations
-    EnsureDatabase(host.Services);
-
-    // Audit entries recorded before the last stop (a crash between recording and chaining)
-    // are chained first, in their order, before any service records new ones (AGT-AUD-002).
-    ChainWaitingAuditEntries(host.Services);
-
+    // Nothing slow between Build() and Run(). Creating the database, applying its migrations and
+    // chaining the audit entries a previous stop left waiting all used to happen here -- before
+    // Windows was told the service was running. On a first-ever install that is where the schema
+    // is created and Entity Framework is compiled for the first time, and it took over two
+    // minutes on PC-RECEPTION: `sc start` returned 1053 and only the installer's retry saved the
+    // installation. DatabaseStartupService does that work now, as the first hosted service, and
+    // everything that reads the database waits on DatabaseReady.
     host.Run();
 }
 catch (Exception ex)
@@ -200,65 +209,9 @@ finally
     Log.CloseAndFlush();
 }
 
-/// <summary>
-/// Chains the audit entries left waiting by the previous run. A failure does not stop the
-/// agent: the entries stay waiting and the chain writer retries (Critical log, heartbeat count).
-/// </summary>
-static void ChainWaitingAuditEntries(IServiceProvider services)
-{
-    try
-    {
-        int chained = services.GetRequiredService<AuditChainWriter>()
-            .ChainAllAsync(CancellationToken.None).GetAwaiter().GetResult();
-        if (chained > 0)
-        {
-            Log.Information("{Count} audit entries recorded before the last stop were chained first", chained);
-        }
-    }
-    catch (Exception ex)
-    {
-        services.GetRequiredService<AuditHealth>().RecordFailure();
-        Log.Fatal(ex, "Audit entries left waiting could not be chained at startup; the chain writer will retry");
-    }
-}
-
-/// <summary>
-/// Ensures the database directory exists and applies pending EF Core migrations.
-/// Fails fast if migrations cannot be applied (critical startup error).
-/// </summary>
-static void EnsureDatabase(IServiceProvider services)
-{
-    using IServiceScope scope = services.CreateScope();
-    var context = scope.ServiceProvider.GetRequiredService<AgentDbContext>();
-
-    string? connectionString = context.Database.GetConnectionString();
-    if (connectionString is not null)
-    {
-        const string dataSourcePrefix = "Data Source=";
-        int idx = connectionString.IndexOf(dataSourcePrefix, StringComparison.OrdinalIgnoreCase);
-        if (idx >= 0)
-        {
-            string dbPath = connectionString[(idx + dataSourcePrefix.Length)..].Trim();
-            string? dbDir = Path.GetDirectoryName(dbPath);
-            if (!string.IsNullOrEmpty(dbDir) && !Directory.Exists(dbDir))
-            {
-                Directory.CreateDirectory(dbDir);
-                Log.Information("Created database directory: {Directory}", dbDir);
-            }
-        }
-    }
-
-    try
-    {
-        context.Database.Migrate();
-        Log.Information("Database migrations applied successfully");
-    }
-    catch (Exception ex)
-    {
-        Log.Fatal(ex, "Failed to apply database migrations. The agent cannot start with a broken schema");
-        throw;
-    }
-}
+// The database is created, migrated and announced by DatabaseStartupService, and the audit
+// entries a previous stop left waiting are chained there too. Both used to happen here, between
+// Build() and Run(), where Windows was still waiting to be told the service had started.
 
 /// <summary>
 /// Reports a startup refusal where it is always seen: the console, always; the Windows Event

@@ -21,8 +21,24 @@ const PRODUCT_NAMES: Record<string, string> = {
   ANTI_TAMPERING: 'ANTI-TAMPERING',
 };
 
-/** Display order of the six entries (the agent's ModuleCode.All). */
-export const MODULE_DISPLAY_ORDER = Object.keys(PRODUCT_NAMES);
+/**
+ * Modules that are stored but never shown.
+ *
+ * ANTI-TAMPERING was a row on every workstation that always read "inactive — not implemented".
+ * True, and useless: a console is for saying what is happening, and a permanent "this does not
+ * exist" is noise in the middle of it. The agent stopped sending it on 2026-10-26 and the GRID
+ * drops it; this is the third guard, for an older agent whose heartbeat still carries it. Its
+ * product name stays above so that anything that does surface it is still readable.
+ */
+const NOT_SHOWN = new Set(['ANTI_TAMPERING']);
+
+/** Display order (the agent's ModuleCode.All). */
+export const MODULE_DISPLAY_ORDER = Object.keys(PRODUCT_NAMES).filter((c) => !NOT_SHOWN.has(c));
+
+/** Whether this module is one the console shows at all. */
+export function isShownModule(code: string): boolean {
+  return !NOT_SHOWN.has(code);
+}
 
 /** The product name ("EXFIL WATCH"), never the wire code; an unknown code verbatim, never blank. */
 export function productName(code: string): string {
@@ -35,7 +51,7 @@ export function orderedModules(modules: ModuleStatus[]): ModuleStatus[] {
     const i = MODULE_DISPLAY_ORDER.indexOf(code);
     return i === -1 ? MODULE_DISPLAY_ORDER.length : i;
   };
-  return [...modules].sort((a, b) => rank(a.code) - rank(b.code));
+  return modules.filter((m) => isShownModule(m.code)).sort((a, b) => rank(a.code) - rank(b.code));
 }
 
 // ── Reason codes ──

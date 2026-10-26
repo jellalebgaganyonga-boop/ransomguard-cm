@@ -31,6 +31,11 @@ CONSOLE = "http://localhost:5175"
 
 PASS, FAIL, SKIP = "PASS", "FAIL", "NOT TESTABLE HERE"
 
+# Modules the agent no longer reports and the console no longer shows. An agent older than
+# 2026-10-26 still sends ANTI_TAMPERING; there is nothing to say about a thing that does not
+# exist, so this check says nothing about it either. It is planned work in SYSTEM_STATUS.
+MODULES_NOT_REPORTED = frozenset({"ANTI_TAMPERING"})
+
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
@@ -188,11 +193,11 @@ def check_agents(token: str | None) -> list[dict]:
                 code, mstate = module.get("code"), module.get("state")
                 reason = module.get("reason_code")
                 label = f"    {host} / {code}: {mstate}" + (f" ({reason})" if reason else "")
+                if code in MODULES_NOT_REPORTED:
+                    # The GRID drops it from what it shows; an old agent may still send it.
+                    continue
                 if mstate == "active":
                     emit(f"module.{host}.{code}", label, PASS)
-                elif code == "ANTI_TAMPERING" and reason == "not_implemented":
-                    emit(f"module.{host}.{code}", label, "NOT BUILT",
-                         "the watchdog has not been written")
                 elif code == "EXFIL_WATCH" and reason == "learning_phase":
                     emit(f"module.{host}.{code}", label, SKIP,
                          "it learns the normal traffic before it can judge any")
@@ -329,7 +334,9 @@ def check_roles(token: str | None) -> None:
 def not_built() -> None:
     for check_id, name, why in [
         ("missing.anti_tampering", "Anti-tampering (watchdog)",
-         "the services are registered but never started; the agent reports it as not implemented"),
+         "the services are registered but never started. The agent stopped reporting it as a "
+         "module on 2026-10-26: a permanently grey row saying a thing does not exist is noise in "
+         "a console. It is listed here, and as planned work in SYSTEM_STATUS"),
         ("missing.mtls_per_agent", "A client certificate per agent",
          "agents authenticate with an enrollment token, not a per-agent certificate"),
         ("missing.installer_signing", "A signed installer",

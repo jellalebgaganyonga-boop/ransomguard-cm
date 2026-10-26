@@ -55,11 +55,17 @@ public sealed class SuspensionWatchService : BackgroundService
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Off the startup path, then wait for the schema: the sweep below reads the suspensions a
+        // previous run left behind, and the database is created after the host starts now.
+        await Task.Yield();
+
         if (_options is null)
         {
             _logger.LogInformation("Suspension watch idle: no Sentinel:Response section");
             return;
         }
+
+        await _scopes.WaitForDatabaseAsync(stoppingToken);
 
         try
         {

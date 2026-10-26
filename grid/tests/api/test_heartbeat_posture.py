@@ -299,7 +299,13 @@ async def test_agent_page_carries_verdict_reasons_and_posture_in_display_order(
     assert detail["protection_state"] == "partial"
     assert detail["reason_codes"] == ["EXFIL_WATCH:inactive:admin_rights_missing"]
     assert detail["signal_age_seconds"] < 60
-    assert [m["code"] for m in detail["posture"]["modules"]] == list(MODULES)
+    # The heartbeat carried every module, ANTI_TAMPERING among them, and was accepted in full --
+    # an agent older than 2026-10-26 still sends it and must not have its whole heartbeat
+    # refused over one row. The console simply never shows it: a line on every workstation
+    # reading "inactive, not implemented" is true and useless.
+    shown = [m["code"] for m in detail["posture"]["modules"]]
+    assert shown == [code for code in MODULES if code != "ANTI_TAMPERING"]
+    assert "ANTI_TAMPERING" not in shown
     assert detail["posture"]["pending_alerts"] == 0
     assert detail["posture"]["rejected_alerts"] is None
     assert 0 <= detail["posture"]["last_upload_age_seconds"] < 60

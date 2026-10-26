@@ -40,6 +40,11 @@ public sealed class SentinelDeploymentService : BackgroundService
         // Off the startup path: see the note in GenealogyMonitor. Planting the decoys writes a
         // file per decoy per watched folder, and a fresh install does that for the first time.
         await Task.Yield();
+        // ... and nothing below may touch the database before it exists. Creating it is no
+        // longer done before the host starts -- that is what made Windows wait and return
+        // 1053 -- so the waiting happens here, with the service already reported running.
+        await _scopeFactory.WaitForDatabaseAsync(stoppingToken);
+
 
         SentinelOptions? sentinel = _config.Sentinel;
 

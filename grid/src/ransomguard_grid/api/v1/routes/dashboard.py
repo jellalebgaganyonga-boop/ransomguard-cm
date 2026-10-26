@@ -501,8 +501,13 @@ async def update_alert_status(
 
 # --- AGENTS ---
 
-# Display order of the six entries (the agent's ModuleCode.All).
-_MODULE_ORDER = ("SENTINEL", "ENTROPY", "GENEALOGY", "USB_GUARD", "EXFIL_WATCH", "ANTI_TAMPERING")
+# Display order (the agent's ModuleCode.All).
+_MODULE_ORDER = ("SENTINEL", "ENTROPY", "GENEALOGY", "USB_GUARD", "EXFIL_WATCH")
+
+# Stored, never shown. An agent older than 2026-10-26 still reports ANTI_TAMPERING as
+# inactive / not_implemented; its heartbeat is accepted in full, and the row is dropped here so
+# that no console shows a permanently grey line saying a thing does not exist.
+_MODULES_NOT_SHOWN = frozenset({"ANTI_TAMPERING"})
 
 
 async def _agent_items(db: AsyncSession, tenant_id: str, agents: list[Agent]) -> list[AgentDetailItem]:
@@ -517,8 +522,9 @@ async def _agent_items(db: AsyncSession, tenant_id: str, agents: list[Agent]) ->
         verdict = compute_protection_state(agent.last_heartbeat_at, state, now, restarts.get(agent.id, 0))
         posture_item = None
         if posture is not None:
+            shown = [m for m in modules if m.module_code not in _MODULES_NOT_SHOWN]
             ordered = sorted(
-                modules,
+                shown,
                 key=lambda m: _MODULE_ORDER.index(m.module_code) if m.module_code in _MODULE_ORDER else len(_MODULE_ORDER),
             )
             posture_item = AgentPostureItem(

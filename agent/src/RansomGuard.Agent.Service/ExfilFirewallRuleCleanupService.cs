@@ -37,8 +37,15 @@ public sealed class ExfilFirewallRuleCleanupService : BackgroundService
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Off the startup path, then wait for the schema. This one sleeps until 02:00 before it
+        // reads anything, so the wait costs nothing; it is here so that every service that
+        // touches the database does the same thing in the same place.
+        await Task.Yield();
+
         if (_config.ExfilWatch is null || !_config.ExfilWatch.Enabled)
             return;
+
+        await _scopeFactory.WaitForDatabaseAsync(stoppingToken);
 
         _logger.LogInformation("Firewall rule cleanup service started (runs daily at 02:00)");
 

@@ -86,6 +86,11 @@ public sealed class ExfilWatchMonitor : BackgroundService
         // Off the startup path: see the note in GenealogyMonitor. The packet capture below opens
         // a network device.
         await Task.Yield();
+        // ... and nothing below may touch the database before it exists. Creating it is no
+        // longer done before the host starts -- that is what made Windows wait and return
+        // 1053 -- so the waiting happens here, with the service already reported running.
+        await _scopeFactory.WaitForDatabaseAsync(stoppingToken);
+
 
         bool reachedActive = false;
         bool captureStarted = false;

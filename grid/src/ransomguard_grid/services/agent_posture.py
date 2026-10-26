@@ -38,6 +38,10 @@ from datetime import UTC, datetime, timedelta
 
 # ── Closed vocabulary (the agent's ModuleCode / ModuleState / ModuleReasonCode) ──
 
+# ANTI_TAMPERING is still accepted although the agent stopped sending it on 2026-10-26. An agent
+# installed before that goes on reporting it until somebody upgrades it, and refusing a whole
+# heartbeat -- losing every module's state, and the workstation's signal with it -- over one row
+# naming a thing that does not exist would be a bad bargain. It is stored and simply not shown.
 MODULE_CODES: frozenset[str] = frozenset(
     {"SENTINEL", "ENTROPY", "GENEALOGY", "USB_GUARD", "EXFIL_WATCH", "ANTI_TAMPERING"}
 )
