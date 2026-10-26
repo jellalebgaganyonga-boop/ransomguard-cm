@@ -108,6 +108,29 @@ foreach ($root in ($WatchedRoots | Select-Object -Unique)) {
 }
 Write-Host "      $removed canary file(s) removed"
 
+# -- 5. the test zone the agent watches ---------------------------------------
+# %USERPROFILE%\Desktop\RansomGuard-TestZone is one of the shipped watch paths, so the agent
+# creates it and plants decoys in it. With the decoys gone it is an empty folder on somebody's
+# desktop that nothing will ever clean up. Removed only when it is empty: anything a person put
+# there is theirs, and this script does not delete other people's files.
+Step 5 'the watched test zone, if the decoys left it empty'
+$zonesRemoved = 0
+foreach ($root in ($WatchedRoots | Select-Object -Unique)) {
+    $zone = Join-Path $root 'RansomGuard-TestZone'
+    if (-not (Test-Path $zone)) { continue }
+
+    if (@(Get-ChildItem -Force -Path $zone -ErrorAction SilentlyContinue).Count -eq 0) {
+        Remove-Item -Force -Recurse $zone -ErrorAction SilentlyContinue
+        if (-not (Test-Path $zone)) {
+            Write-Host "      removed $zone"
+            $zonesRemoved++
+        }
+    } else {
+        Write-Host "      $zone still has files in it; left alone"
+    }
+}
+Write-Host "      $zonesRemoved test zone(s) removed"
+
 Write-Host ''
 Write-Host 'The workstation is back to before the agent was installed.'
 Write-Host 'The FICTIONAL documents, the `nurse` account and the machine name are untouched.'

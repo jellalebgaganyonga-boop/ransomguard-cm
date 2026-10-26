@@ -163,7 +163,7 @@ The test script is harmless. It writes into **one decoy file** that the agent pl
 
 > The chain is captured while the writer is still alive and sent to the GRID just after the alert, so it can appear a few seconds after the alert itself. Reload the page if the section is not there yet.
 >
-> If you start the trigger by double-clicking it in File Explorer rather than from `cmd.exe`, the middle link differs — you will see `explorer -> powershell`. Both are correct; the chain reports what actually happened.
+> The middle link is `cmd` because Windows runs a `.cmd` file through `cmd.exe`, whether you double-click it or type it. Rehearsed both ways on PC-RECEPTION on 2026-10-26: the chain is the same.
 
 3. Open the **PC-RECEPTION** agent page.
 

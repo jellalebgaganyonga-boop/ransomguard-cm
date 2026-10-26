@@ -50,7 +50,26 @@ Write-Host ''
 
 if (-not (Test-Path $Ca)) { throw "no GRID CA at ${Ca}: run deployment/grid/pki/init-pki.sh first" }
 
-# Eject first: VirtualBox holds the ISO open while it is inserted, and it is about to be rewritten.
+# Eject first, from EVERY workstation that has this disc and not only the one being prepared:
+# VirtualBox holds the ISO file open while it is inserted anywhere, and it is about to be
+# rewritten. Preparing a disc for PC-RECEPTION while PC-LAB still had the previous one in its
+# drive failed with "the process cannot access the file", which reads like a broken script rather
+# than a disc that is simply still in the other machine.
+foreach ($vm in (& $VBoxManage list vms 2>$null | ForEach-Object {
+            if ($_ -match '^"(.+)"\s') { $Matches[1] } })) {
+    # --machinereadable doubles every backslash, so the value is compared by file name rather
+    # than by path: the first attempt compared full paths, never matched, and the eject silently
+    # did nothing.
+    $attached = & $VBoxManage showvminfo $vm --machinereadable 2>$null |
+        Select-String -Pattern '^"SATA-1-0"="(.+)"$'
+    if (-not $attached) { continue }
+    $leaf = Split-Path ($attached.Matches[0].Groups[1].Value -replace '\\\\', '\') -Leaf
+    if ($leaf -ne (Split-Path $Iso -Leaf)) { continue }
+
+    & $VBoxManage storageattach $vm --storagectl SATA --port 1 --device 0 --type dvddrive --medium emptydrive --forceunmount 2>$null | Out-Null
+    Write-Host "              ejected the previous disc from $vm"
+}
+
 & $VBoxManage storageattach $VmName --storagectl SATA --port 1 --device 0 --type dvddrive --medium emptydrive --forceunmount 2>$null | Out-Null
 
 if (Test-Path $Stage) { Remove-Item -Recurse -Force $Stage }
