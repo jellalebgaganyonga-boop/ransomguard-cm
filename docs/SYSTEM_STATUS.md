@@ -30,7 +30,8 @@ It runs to the end, prints PASS / FAIL / NOT BUILT / NOT TESTABLE HERE for each 
 
 | Feature | Status | Proof |
 |---|---|---|
-| Double-click installer (ADR-027) | **works** | system-check §5: the console hands out a signed-payload installer (94.3 MB on 2026-10-26) with a valid PE header. Installed on PC-LAB on 2026-10-26 from HEAD `0f0db14`, output entirely in English, 1/6 to 6/6, ending "Workstation enrolled". The UAC prompt takes up to 30 s to appear while the single file unpacks |
+| Double-click installer (ADR-027) | **works** | system-check §5: the console hands out a signed-payload installer (94.3 MB on 2026-10-26) with a valid PE header. Installed on PC-LAB on 2026-10-26 from HEAD `8cd80bb`, output entirely in English, 1/6 to 6/6, ending "Workstation enrolled", first attempt. The UAC prompt takes up to 30 s to appear while the single file unpacks |
+| The service starts inside Windows' limit | **works** | Fixed on 2026-10-26. `sc start` had returned **1053**, "the service did not respond in a timely fashion", leaving the agent installed but unenrolled: the host was opening the ETW session, planting the decoys, walking the user profiles, waiting on the backup device and enrolling with the GRID *before* it told Windows the service was running. All of that now happens after. The installer also waits 120 s rather than 60, judges by the service's own state rather than sc.exe's exit code, and starts it once more before giving up. `AgentStartupTests` |
 | Enrollment | **works** | Bench test 1. The code lasts 15 minutes and is single-use |
 | Fresh install raises no alert | **works** | Bench test 1: 0 alerts, `rejected_alerts = 0`, `pending_alerts = 0`. This took three attempts to get right — see the bug list in BENCH_TEST_RESULTS.md |
 | Re-enrolling a rebuilt workstation | **works** | A decommissioned agent no longer holds its machine's fingerprint; PC-LAB was reinstalled several times on 2026-10-25 |

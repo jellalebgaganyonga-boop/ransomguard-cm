@@ -139,6 +139,27 @@ in `d7e7c89`.
 
 - ~~**The installer speaks French only.**~~ Fixed on 2026-10-25: the installer's output is English
   throughout, and the install on PC-LAB that day was read end to end in English.
+- ~~**The install ends in 1053, "the service did not respond to the start or control request in a
+  timely fashion".**~~ Seen on PC-LAB on 2026-10-26: the agent was installed, the service created,
+  and then `sc start` gave up and the workstation was left unenrolled. I first wrote this off as
+  the host being busy. That was a guess and it was wrong.
+
+  A Windows service has to report itself running inside the Service Control Manager's limit, 30 s,
+  which is not ours to set. The .NET host reports that only once every hosted service has returned
+  from `StartAsync` — and for a `BackgroundService` that is its first real await. The agent was
+  doing nearly all of its startup before that point: the ETW kernel session and the file watchers,
+  writing every decoy, resolving the watch paths across every user profile, a two-second wait for
+  the IronClad device followed by a reconciliation over the wire, and the TLS enrolment round trip
+  to the GRID. Each of those now yields first, and the IronClad reconciliation is a
+  `BackgroundService` rather than a blocking `StartAsync`.
+
+  The installer no longer loses an installation to one slow start either: 120 s instead of 60, it
+  asks the service what state it is actually in rather than trusting sc.exe's exit code, and it
+  starts it a second time before giving up.
+
+  Proven by the thing itself: the same sequence on the same workstation, reinstalled from HEAD
+  `8cd80bb`, printed "Service started" and then "Workstation enrolled (agent 6d4d9512…)" on the
+  first attempt, with no 1053 and no retry line.
 - **EXFIL WATCH cannot reach `active` on a bench.** It needs a learning period before it has a
   baseline, so a freshly installed agent is `partial` for that reason alone, and will be until the
   learning phase ends. That is honest, but it means `protected` is not reachable on a new
