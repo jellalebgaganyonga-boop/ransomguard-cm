@@ -148,8 +148,35 @@ public sealed class SentinelSweepDuplicateTests : IDisposable
     /// <summary>One write, seen by both the watcher and ETW, exactly as a real one is.</summary>
     private async Task WriteAsync(SentinelCanary canary)
     {
-        await File.AppendAllTextAsync(canary.FilePath, "\nENCRYPTED");
+        await AppendAsync(canary.FilePath, "\nENCRYPTED");
         _trace.Emit(new FileIoRecord(FileIoOperation.Write, canary.FilePath, Writer, DateTime.UtcNow, 0, 0));
+    }
+
+    /// <summary>
+    /// Appends, waiting the file out if the agent has it open.
+    ///
+    /// <para>
+    /// Checking a decoy means reading it, and a read holds the file against writers for that
+    /// instant: writing just as a sweep comes round got "the process cannot access the file
+    /// because it is being used by another process" on CI. That is not the test finding anything
+    /// -- a real attacker meets the same lock and comes back a moment later, which is all this
+    /// does. It waits for the file to be writable instead of assuming it already is.
+    /// </para>
+    /// </summary>
+    private static async Task AppendAsync(string path, string text)
+    {
+        for (int attempt = 0; ; attempt++)
+        {
+            try
+            {
+                await File.AppendAllTextAsync(path, text);
+                return;
+            }
+            catch (IOException) when (attempt < 150)
+            {
+                await Task.Delay(20);
+            }
+        }
     }
 
     /// <summary>
