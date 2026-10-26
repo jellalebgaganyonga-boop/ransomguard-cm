@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using RansomGuard.Agent.Core.Configuration;
@@ -94,8 +95,39 @@ public static class ServiceRegistration
         return true;
     }
 
+    /// <summary>
+    /// One service failing does not take the protection off the workstation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// .NET's default is <see cref="BackgroundServiceExceptionBehavior.StopHost"/>: an unhandled
+    /// exception in any one <see cref="BackgroundService"/> stops the host, and therefore every
+    /// other service in it. For a web application that is right. For this agent it is not: the
+    /// process exits with code 0, so nothing reads it as a crash and Windows does not restart it,
+    /// and the workstation is left unwatched until somebody notices the console says disconnected.
+    /// </para>
+    /// <para>
+    /// On PC-LAB on 2026-10-26 the GRID took longer than the client's 10 s to answer a poll for
+    /// commands. The timeout escaped GridCommandService -- fixed there too -- and SENTINEL,
+    /// ENTROPY, GENEALOGY and USB GUARD all stopped with it, fifty minutes before anybody looked.
+    /// </para>
+    /// <para>
+    /// The failure is not hidden: the host logs it at Error with the service that threw, which
+    /// the Event Log sink carries, and a detection module that dies publishes its own module
+    /// state so the console shows it as failed rather than active. What changes is that the rest
+    /// of the agent keeps watching.
+    /// </para>
+    /// </remarks>
+    public static void KeepTheAgentRunningWhenOneServiceFails(IServiceCollection services)
+    {
+        services.Configure<HostOptions>(options =>
+            options.BackgroundServiceExceptionBehavior = BackgroundServiceExceptionBehavior.Ignore);
+    }
+
     public static void ConfigureServices(IServiceCollection services, IConfiguration configuration)
     {
+        KeepTheAgentRunningWhenOneServiceFails(services);
+
         // Bind configuration
         services.Configure<AgentConfiguration>(
             configuration.GetSection(AgentConfiguration.SectionName));

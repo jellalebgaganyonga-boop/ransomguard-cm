@@ -74,7 +74,18 @@ public sealed class GridCommandService : BackgroundService
                 }
 
                 lastFetch = _time.GetTimestamp();
-                await ProcessOnceAsync(stoppingToken);
+
+                try
+                {
+                    await ProcessOnceAsync(stoppingToken);
+                }
+                catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
+                {
+                    // Belt as well as braces. ProcessOnceAsync answers for itself, but nothing a
+                    // single poll can run into is worth ending the loop for: the next tick is five
+                    // seconds away and the commands are still queued at the GRID.
+                    _logger.LogError(ex, "A poll for commands failed; the next one is in {Interval}", PollInterval);
+                }
             }
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -91,9 +102,16 @@ public sealed class GridCommandService : BackgroundService
         {
             commands = await _grid.FetchCommandsAsync(ct).ConfigureAwait(false);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (!ct.IsCancellationRequested)
         {
-            // Not enrolled yet, or the GRID unreachable: the commands wait there.
+            // Not enrolled yet, or the GRID unreachable, or too slow: the commands wait there.
+            //
+            // The question is whether *we* were stopped, not whether the exception happens to be
+            // an OperationCanceledException. An HttpClient that hits its timeout cancels its own
+            // request and hands back a TaskCanceledException, which is one; asking the type let
+            // it through every catch, out of ExecuteAsync, and into the host, whose default is to
+            // stop everything. That is how a slow answer from the GRID took the whole agent off
+            // PC-LAB on 2026-10-26.
             _logger.LogDebug(ex, "Commands not fetched");
             return 0;
         }
@@ -111,10 +129,11 @@ public sealed class GridCommandService : BackgroundService
             {
                 await _grid.SendCommandResultAsync(command.Id, result, ct).ConfigureAwait(false);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex) when (!ct.IsCancellationRequested)
             {
-                // The result could not be reported: the GRID will hand the command out again, and the
-                // engine is idempotent (a suspended process is not suspended twice).
+                // The result could not be reported -- unreachable, or slower than the client's
+                // timeout: the GRID will hand the command out again, and the engine is idempotent
+                // (a suspended process is not suspended twice).
                 _logger.LogWarning(ex, "Result of command {Id} not reported; it will be fetched again", command.Id);
                 continue;
             }

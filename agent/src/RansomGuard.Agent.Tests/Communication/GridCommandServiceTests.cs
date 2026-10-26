@@ -175,4 +175,65 @@ public sealed class GridCommandServiceTests : IDisposable
             .Returns(Task.CompletedTask);
         (await service.ProcessOnceAsync(CancellationToken.None)).ShouldBe(1);
     }
+
+    /// <summary>
+    /// An <see cref="HttpClient"/> that times out does not throw a network exception: it cancels
+    /// its own request, and what comes back is a <see cref="TaskCanceledException"/> whose
+    /// cancellation has nothing to do with the caller's token.
+    /// </summary>
+    private static TaskCanceledException HttpClientTimeout() => new(
+        "The request was canceled due to the configured HttpClient.Timeout of 10 seconds elapsing.",
+        new TimeoutException("A task was canceled."));
+
+    [Fact]
+    public async Task A_GRID_that_answers_too_slowly_does_not_stop_the_agent()
+    {
+        // On PC-LAB on 2026-10-26 this killed the agent. The GRID took longer than the client's
+        // 10 s to answer, the TaskCanceledException was not caught -- the filter asked whether it
+        // was an OperationCanceledException, which a timeout is -- and it left ExecuteAsync. The
+        // host's default is StopHost, so the whole agent exited, with code 0, on a workstation
+        // that was still running. The console showed it disconnected and nothing was protecting
+        // the machine for fifty minutes.
+        _grid.Setup(g => g.FetchCommandsAsync(It.IsAny<CancellationToken>())).ThrowsAsync(HttpClientTimeout());
+
+        GridCommandService service = Service(Engine());
+
+        (await service.ProcessOnceAsync(CancellationToken.None)).ShouldBe(0);
+
+        // And the next poll works: a slow answer is a moment, not a state.
+        _grid.Setup(g => g.FetchCommandsAsync(It.IsAny<CancellationToken>())).ReturnsAsync(() => _queued.ToList());
+        _queued.Add(Command("iso", "isolate", new { reason = "x" }));
+        (await service.ProcessOnceAsync(CancellationToken.None)).ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task A_result_the_GRID_was_too_slow_to_take_does_not_stop_the_agent_either()
+    {
+        _queued.Add(Command("iso", "isolate", new { reason = "x" }));
+        _grid.Setup(g => g.SendCommandResultAsync("iso", It.IsAny<CommandResultRequest>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(HttpClientTimeout());
+        GridCommandService service = Service(Engine());
+
+        (await service.ProcessOnceAsync(CancellationToken.None)).ShouldBe(0);
+
+        // Not marked done, so it is answered again once the GRID is keeping up.
+        _grid.Setup(g => g.SendCommandResultAsync("iso", It.IsAny<CommandResultRequest>(), It.IsAny<CancellationToken>()))
+            .Callback((string id, CommandResultRequest r, CancellationToken _) => _results.Add((id, r)))
+            .Returns(Task.CompletedTask);
+        (await service.ProcessOnceAsync(CancellationToken.None)).ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Stopping_the_agent_still_stops_the_command_loop()
+    {
+        // The flip side: the filter must not become "catch everything". When the stop really is
+        // ours, the loop ends rather than swallowing it and polling a GRID nobody is listening to.
+        using var stopping = new CancellationTokenSource();
+        await stopping.CancelAsync();
+        _grid.Setup(g => g.FetchCommandsAsync(It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new OperationCanceledException(stopping.Token));
+
+        await Should.ThrowAsync<OperationCanceledException>(
+            async () => await Service(Engine()).ProcessOnceAsync(stopping.Token));
+    }
 }
