@@ -176,6 +176,12 @@ public sealed class ExfilWatchProductionWiringTests : IDisposable
         ServiceProvider provider = services.BuildServiceProvider();
         using IServiceScope scope = provider.CreateScope();
         scope.ServiceProvider.GetRequiredService<AgentDbContext>().Database.Migrate();
+
+        // This test migrates the database itself and then starts one monitor by hand, without the
+        // host that would normally run DatabaseStartupService. Saying so is the point: every
+        // monitor waits for the schema before it reads anything, and a test that prepared the
+        // schema is the one that has to say it is there.
+        provider.GetRequiredService<DatabaseReady>().Signal();
         return provider;
     }
 

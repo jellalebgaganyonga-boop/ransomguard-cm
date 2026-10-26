@@ -115,6 +115,11 @@ public sealed class FileEventDeduplicationPerConsumerTests : IDisposable
         ServiceProvider provider = services.BuildServiceProvider();
         using IServiceScope scope = provider.CreateScope();
         scope.ServiceProvider.GetRequiredService<AgentDbContext>().Database.Migrate();
+
+        // Migrated here rather than by DatabaseStartupService, because this test starts the
+        // monitors by hand rather than running the host. The monitors wait for the schema before
+        // they read anything, so whoever created it says it is there.
+        provider.GetRequiredService<DatabaseReady>().Signal();
         return provider;
     }
 
