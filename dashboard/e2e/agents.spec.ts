@@ -67,7 +67,7 @@ test.describe('Agent detail — no isolate command (ADR-026)', () => {
 });
 
 test.describe('Agent detail — posture (R8)', () => {
-  test('the banner composes the whole sentence; product names, six entries', async ({ page }) => {
+  test('the banner composes the whole sentence; product names, the modules shown', async ({ page }) => {
     await setupMocks(page, 'security_analyst');
     await loginAs(page, 'security_analyst');
     await navigateTo(page, '/agents/agent-e2e-aaa');
@@ -77,9 +77,15 @@ test.describe('Agent detail — posture (R8)', () => {
         name: 'Partial protection — EXFIL WATCH inactive: administrator rights missing',
       }),
     ).toBeVisible();
-    for (const name of ['SENTINEL', 'ENTROPY', 'GENEALOGY', 'USB GUARD', 'EXFIL WATCH', 'ANTI-TAMPERING']) {
+    for (const name of ['SENTINEL', 'ENTROPY', 'GENEALOGY', 'USB GUARD', 'EXFIL WATCH']) {
       await expect(page.getByRole('cell', { name, exact: true })).toBeVisible();
     }
+
+    // ANTI-TAMPERING is not one of them, even though the mocked heartbeat still carries it as an
+    // agent older than 2026-10-26 does. It was a row on every workstation reading "inactive —
+    // not implemented": true, and nothing anybody can act on.
+    await expect(page.getByRole('cell', { name: 'ANTI-TAMPERING', exact: true })).toHaveCount(0);
+
     await expect(page.getByText('Alerts not transmitted')).toBeVisible();
   });
 
