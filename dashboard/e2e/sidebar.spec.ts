@@ -20,9 +20,16 @@ for (const [path, expected, notExpected] of [
     await navigateTo(page, path);
 
     const nav = page.getByRole('navigation').first();
-    const active = (await nav.locator('a[aria-current="page"]').allInnerTexts()).map((s) => s.trim());
-    expect(active).toHaveLength(1);
-    expect(active[0]).toContain(expected);
-    expect(active[0]).not.toContain(notExpected);
+    const active = nav.locator('a[aria-current="page"]');
+
+    // These retry; the previous version did not. It read the sidebar once, the instant after
+    // navigating, with `allInnerTexts()` — so on a loaded machine it sampled the page before
+    // React Router had rendered the new route and asserted on whatever was still lit, which is
+    // Dashboard. That made these four the flakiest tests in the suite: they passed on an idle
+    // run and failed on a busy one, which is the signature of a test waiting on a stopwatch
+    // instead of on the thing it is about.
+    await expect(active).toHaveCount(1);
+    await expect(active).toContainText(expected);
+    await expect(active).not.toContainText(notExpected);
   });
 }
