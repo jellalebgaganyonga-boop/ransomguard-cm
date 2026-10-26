@@ -27,6 +27,27 @@ All passwords are in the file `deployment\bench\credentials.local.md` on your ho
 
 # Part A — Start the platform (host PC)
 
+## Step 0 — One command that does Part A for you
+
+If you would rather not do steps 1 to 5 by hand, this does them and then checks the result:
+
+```powershell
+cd C:\Users\Fabiola\source\repos\ransomguard-cm
+pwsh scripts\demo-ready.ps1
+```
+
+It starts whatever is not already running — Docker, the GRID, the console, and **PC-RECEPTION** — waits for each to answer, runs the full health check, and ends with one of two words.
+
+**You should see:** a green **DEMO READY**, then the console address, the organization codes and the account emails. ☐
+
+> If it says **NOT READY** it lists each problem and the command that fixes it. Do those, run it again, and carry on only once it says DEMO READY.
+>
+> It never prints a password. It tells you the file the passwords are in.
+>
+> It writes what it did to `docs\testing\demo-ready-<date>.md`, so there is a record of the state the machine was in before the demonstration.
+
+Then go to **Step 5** to sign in to the workstation, or read steps 1 to 4 to see what it did.
+
 ## Step 1 — Start Docker Desktop
 
 1. Open **Docker Desktop** and wait until it says **Engine running**.

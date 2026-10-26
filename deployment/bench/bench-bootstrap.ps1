@@ -101,6 +101,31 @@ if ($isAdmin) {
 }
 Write-Host ('      administrator : {0}' -f $(if ($isAdmin) { 'NO (removed)' } else { 'NO' }))
 
+# -- 2b. the workstation must not fall asleep --------------------------------
+# A sleeping workstation is an unprotected one. Windows suspended PC-LAB after about an hour
+# idle: VirtualBox still reported the VM "running", the service still read RUNNING when it woke,
+# but nothing ran in between -- the heartbeat stopped, the GRID marked the workstation
+# disconnected after its five minutes, and it came back by itself when somebody touched the
+# keyboard. The console was right and the agent was not at fault; the machine really was off.
+#
+# A reception computer that protects a hospital does not sleep, so this is the setting a real
+# deployment wants too, not a bench trick. The screen may still go dark -- that costs nothing and
+# nobody is watching it overnight.
+Step '2b' 'never sleep (a sleeping workstation is unprotected)'
+foreach ($setting in @(
+        @{ Flag = 'standby-timeout-ac'; What = 'sleep on mains' },
+        @{ Flag = 'standby-timeout-dc'; What = 'sleep on battery' },
+        @{ Flag = 'hibernate-timeout-ac'; What = 'hibernate on mains' },
+        @{ Flag = 'hibernate-timeout-dc'; What = 'hibernate on battery' })) {
+    & powercfg.exe /change $setting.Flag 0 2>&1 | Out-Null
+    Write-Host "      $($setting.What): never"
+}
+
+# Hibernation off as well: with it enabled Windows can still write the machine out from under the
+# agent, and it costs a disk file the size of the memory for nothing on a workstation.
+& powercfg.exe /hibernate off 2>&1 | Out-Null
+Write-Host '      hibernation: off'
+
 # -- 3. the hospital's ordinary documents ------------------------------------
 Step 3 "FICTIONAL documents -> $DocumentRoot"
 
