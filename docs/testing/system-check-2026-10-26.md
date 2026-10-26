@@ -1,13 +1,13 @@
 # System check - 2026-10-26
 
-Run at 2026-10-26 08:58:00 on KELYFA-PC by `scripts/system-check.ps1`.
+Run at 2026-10-26 09:57:13 on KELYFA-PC by `scripts/system-check.ps1`.
 
 A line says PASS only if it was checked and worked. NOT BUILT and NOT TESTABLE HERE are
 the honest state of the system, not failures, and do not change the exit code.
 
 | | Count |
 |---|---|
-| PASS | 33 |
+| PASS | 27 |
 | FAIL | 0 |
 | NOT BUILT | 5 |
 | NOT TESTABLE HERE | 4 |
@@ -16,11 +16,11 @@ the honest state of the system, not failures, and do not change the exit code.
 
 | Status | Check | Detail |
 |---|---|---|
-| PASS | Container grid-nginx | Up 37 hours |
-| PASS | Container grid-api | Up 10 hours (healthy) |
-| PASS | Container grid-mysql | Up 37 hours (healthy) |
-| PASS | Container grid-redis | Up 37 hours (healthy) |
-| PASS | Container grid-notifier | Up 37 hours (healthy) |
+| PASS | Container grid-nginx | Up 38 hours |
+| PASS | Container grid-api | Up 11 hours (healthy) |
+| PASS | Container grid-mysql | Up 38 hours (healthy) |
+| PASS | Container grid-redis | Up 38 hours (healthy) |
+| PASS | Container grid-notifier | Up 38 hours (healthy) |
 
 ## The platform answers
 
@@ -77,21 +77,10 @@ the honest state of the system, not failures, and do not change the exit code.
 
 | Status | Check | Detail |
 |---|---|---|
-| PASS | GRID suite (pytest) | 429 passed, 1 skipped in 754.65s (0:12:34) |
+| PASS | GRID suite (pytest) | 429 passed, 1 skipped in 865.27s (0:14:25) |
 | PASS | Console suite (vitest) | Tests  212 passed (212) |
 | PASS | No French reaches a user | no French reaches a user |
-| PASS | Agent suite (CI, cannot run here) | CI run 40287634962 green on fbbecda |
-| PASS | Console end-to-end (Playwright) | 81 passed (2.6m) |
-
-## Live detection
-
-| Status | Check | Detail |
-|---|---|---|
-| PASS | PC-LAB: the decoy raised an alert | SentinelCanaryModified, Critical, at 07:46:02 |
-| PASS | PC-LAB: the writer is named | powershell (PID 7504) |
-| PASS | PC-LAB: the chain behind the write | explorer -> cmd -> powershell |
-| PASS | PC-LAB: the writer is suspended | powershell (PID 7504) is frozen |
-| PASS | PC-LAB: Resume is accepted | command edadbbe9 queued |
-| PASS | PC-LAB: the workstation confirms the resume | SentinelProcessResumed reached the GRID, so the console can stop showing it as frozen |
+| PASS | Agent suite (CI, cannot run here) | CI run 40293815606 green on d0e4b8e |
+| PASS | Console end-to-end (Playwright) | 81 passed (4.0m) |
 
 
