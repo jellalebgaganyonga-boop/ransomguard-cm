@@ -50,6 +50,10 @@ export default defineConfig({
           'form-vendor': ['react-hook-form', '@hookform/resolvers', 'zod'],
           'i18n-vendor': ['react-i18next', 'i18next', 'i18next-icu'],
           'chart-vendor': ['recharts'],
+          // The French translations, in a chunk of their own and under a name that says what
+          // it is. It is fetched only when somebody switches to French, and check-no-french
+          // skips it by name: it is the one file in the build that is French on purpose.
+          'french-translations': ['./src/i18n/locales/fr.json'],
         },
       },
     },

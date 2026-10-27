@@ -30,6 +30,7 @@ import { useUIStore } from '@/stores/ui.store';
 import { useLogout } from '@/hooks/use-auth';
 import { useLanguage } from '@/hooks/use-language';
 import { FRENCH_ENABLED } from '@/i18n';
+import { LanguageSwitch } from '@/components/layout/language-switch';
 import { useTheme } from '@/hooks/use-theme';
 import { formatDistanceToNow } from '@/lib/format-date';
 import type { MeResponse } from '@/api/me';
@@ -92,6 +93,11 @@ export function Header({ me }: HeaderProps) {
 
       {/* Right cluster */}
       <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+        {/* The console is bilingual and English by default. Visible in the bar rather than
+            buried in the account menu: a user who needs French needs to find it without
+            reading English first. */}
+        {FRENCH_ENABLED && <LanguageSwitch className="hidden sm:flex" />}
+
         {/* Light/dark toggle. The resolved theme (not the choice) drives the icon so a user on
             'system' sees whichever theme is currently in effect. One click flips to the opposite
             explicit choice, overriding 'system'. */}

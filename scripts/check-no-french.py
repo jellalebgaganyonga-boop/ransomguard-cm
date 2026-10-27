@@ -84,7 +84,12 @@ class Target:
 
 
 TARGETS = [
-    Target("console bundle", "dashboard/dist", ["**/*.js", "**/*.html"], words=False),
+    # The French translations ship as their own chunk, fetched only when a user switches to
+    # French. It is French on purpose and is the one thing here that is allowed to be: what this
+    # target protects is the interface an English user is served, not the dictionary behind the
+    # switch. Everything else in dist is still judged.
+    Target("console bundle", "dashboard/dist", ["**/*.js", "**/*.html"],
+           skip=["french-translations"], words=False),
     Target("GRID sources", "grid/src", ["**/*.py"]),
     Target("agent", "agent/src/RansomGuard.Agent.Core", ["**/*.cs"], skip=["/obj/", "/bin/"]),
     Target("agent service", "agent/src/RansomGuard.Agent.Service", ["**/*.cs"], skip=["/obj/", "/bin/"]),

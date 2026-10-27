@@ -1,14 +1,6 @@
 import { Outlet } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { FRENCH_ENABLED, setLanguage } from '@/i18n';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { Button } from '@/components/ui/button';
-import { Globe } from 'lucide-react';
+import { LanguageSwitch } from '@/components/layout/language-switch';
 
 /**
  * AuthLayout — Template #47 (Atomic Design inventory, Design Phase
@@ -23,7 +15,7 @@ import { Globe } from 'lucide-react';
  */
 
 export function AuthLayout() {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-surface-subtle px-4">
@@ -40,25 +32,10 @@ export function AuthLayout() {
 
         <div className="mt-6 flex items-center justify-between border-t border-border-subtle pt-4 text-xs text-text-secondary">
           <span>Version {import.meta.env.VITE_APP_VERSION}</span>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" aria-label={t('header.language')}>
-                <Globe className="size-4" aria-hidden="true" />
-                {i18n.language?.toUpperCase().slice(0, 2) ?? 'EN'}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              {/* French is only offered when the build enables it; the console is English. */}
-              {FRENCH_ENABLED && (
-                <DropdownMenuItem onSelect={() => void setLanguage('fr')}>
-                  Français
-                </DropdownMenuItem>
-              )}
-              <DropdownMenuItem onSelect={() => void setLanguage('en')}>
-                English
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {/* Visible, not inside a menu: somebody who needs French should not have to read
+              English to find the way to French. The choice is this browser's until there is an
+              account to attach it to. */}
+          <LanguageSwitch localOnly />
         </div>
       </div>
     </div>

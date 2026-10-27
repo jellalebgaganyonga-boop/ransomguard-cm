@@ -1,19 +1,19 @@
 /**
  * i18n configuration — ADR-FE-006 (react-i18next + ICU MessageFormat).
  *
- * The console is English. The owner's decision (2026-10-25) replaced the earlier rule that
- * French and English were kept in step: the presentation is in English, so nothing French may
- * appear in the running system unless a user deliberately asks for it.
+ * The console is bilingual, English by default (owner's decision, 2026-10-28). This replaces
+ * the 2026-10-25 rule that hid French entirely: the dissertation and the slides say the console
+ * is bilingual, so it has to be, with a switch a user can find.
  *
- * Two things follow, and both are deliberate:
+ * Two things stay from the stricter rule, and both are deliberate:
  *
- *  - the browser's own language is no longer consulted. A French Windows or a French browser
- *    used to switch the whole console to French on its own, which is exactly what must not
- *    happen in front of a jury. Only a choice made in Settings, or one already stored in this
- *    browser, changes the language;
- *  - the French option is hidden behind VITE_ENABLE_FRENCH, which is false in every env file.
- *    fr.json stays where it is and stays loaded: the translations are not deleted, they are
- *    simply not offered.
+ *  - the browser's own language is still not consulted. A French Windows used to switch the
+ *    whole console to French on its own, which is exactly what must not happen in front of a
+ *    jury that was told English is the default. Only a deliberate choice changes the language;
+ *  - French is still a separate chunk, fetched when it is first asked for. A static import
+ *    inlines every French string into the main bundle, where check-no-french cannot tell a
+ *    translation from a string that leaked. Kept apart, the bundle the console serves on first
+ *    load has no French in it, and the check stays meaningful.
  *
  * ICU MessageFormat (i18next-icu) stays for correct pluralization, and for languages with more
  * plural categories if the product ever adds one.
@@ -27,10 +27,11 @@ import LanguageDetector from 'i18next-browser-languagedetector';
 import en from './locales/en.json';
 
 /**
- * Whether French is offered at all. False in every env file: the console is English, and the
- * switcher is not shown. Setting it to true is the only way back to a two-language console.
+ * Whether French is offered. Always, now: the console is bilingual. Kept as a named constant
+ * rather than deleted so the places that ask the question still read as a question, and so a
+ * build can still turn it off by setting VITE_ENABLE_FRENCH to "false" explicitly.
  */
-export const FRENCH_ENABLED = import.meta.env.VITE_ENABLE_FRENCH === 'true';
+export const FRENCH_ENABLED = import.meta.env.VITE_ENABLE_FRENCH !== 'false';
 
 let frenchLoaded = false;
 
