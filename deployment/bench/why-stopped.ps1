@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Why did the agent service stop? Reads it off the workstation itself.
+    What is wrong with the agent on this workstation? Reads it off the workstation itself.
 
 .DESCRIPTION
     The bench VMs have no Guest Additions, so the only way to see anything inside one is to put
@@ -12,11 +12,18 @@
     A .NET host stops with exit code 0 when a BackgroundService throws: that is the default
     BackgroundServiceExceptionBehavior. So "stopped, exit 0" is not evidence of a clean
     shutdown, and the line that says which service threw is the one worth finding.
+
+    It also says whether the GRID can be reached from here, because the other half of what goes
+    wrong on a bench workstation is a machine that is running perfectly and talking to nobody.
 #>
 [CmdletBinding()]
 param(
     [int] $Events = 6,
-    [string] $ServiceName = 'RansomGuardAgent'
+    [string] $ServiceName = 'RansomGuardAgent',
+    [string] $GridHost = '192.168.56.1',
+    [int] $GridPort = 443,
+    [string] $Match = 'enroll',
+    [int] $Width = 170
 )
 
 $ErrorActionPreference = 'Continue'
@@ -79,4 +86,42 @@ if ($null -eq $log) {
     Write-Host ("{0}  {1} bytes  last written {2:HH:mm:ss}" -f $log.Name, $log.Length, $log.LastWriteTime)
     Get-Content $log.FullName -Tail 12 -ErrorAction SilentlyContinue |
         ForEach-Object { Write-Host ('  ' + (Short $_ 150)) }
+
+    if ($Match) {
+        Write-Host ""
+        Write-Host ("  lines matching '{0}':" -f $Match) -ForegroundColor Yellow
+        $hits = @(Get-Content $log.FullName -ErrorAction SilentlyContinue |
+            Select-String -SimpleMatch $Match | Select-Object -Last 8)
+        if ($hits.Count -eq 0) { Write-Host '  none' }
+        foreach ($h in $hits) { Write-Host ('  ' + (Short $h.Line $Width)) }
+    }
 }
+
+Section "can this workstation reach the GRID?"
+$ping = Test-Connection -ComputerName $GridHost -Count 2 -Quiet -ErrorAction SilentlyContinue
+Write-Host ("ping {0}: {1}" -f $GridHost, $(if ($ping) { 'answers' } else { 'no answer' }))
+$tcp = Test-NetConnection -ComputerName $GridHost -Port $GridPort -WarningAction SilentlyContinue
+Write-Host ("tcp {0}:{1}: {2}   (via {3})" -f $GridHost, $GridPort,
+    $(if ($tcp.TcpTestSucceeded) { 'open' } else { 'refused or filtered' }), $tcp.SourceAddress.IPAddress)
+try {
+    $health = Invoke-WebRequest -Uri "https://${GridHost}:${GridPort}/api/v1/health" -TimeoutSec 10 -UseBasicParsing
+    Write-Host ("https health: HTTP {0}  {1}" -f $health.StatusCode, (Short $health.Content 120))
+} catch {
+    Write-Host ("https health: " + (Short $_.Exception.Message 200))
+}
+try {
+    # The enrolment endpoint takes no client certificate by design, so an empty body is enough to
+    # see whether this machine reaches the GRID's own answer (422, it asks for the missing fields)
+    # or something in between answering for it.
+    $probe = Invoke-WebRequest -Uri "https://${GridHost}:${GridPort}/api/v1/agents/enroll" -Method POST `
+        -ContentType 'application/json' -Body '{}' -TimeoutSec 15 -UseBasicParsing
+    Write-Host ("enrolment endpoint: HTTP {0}" -f $probe.StatusCode)
+} catch {
+    $resp = $_.Exception.Response
+    if ($resp) {
+        Write-Host ("enrolment endpoint: HTTP {0} {1}" -f [int]$resp.StatusCode, $resp.StatusDescription)
+    } else {
+        Write-Host ("enrolment endpoint: " + (Short $_.Exception.Message 180))
+    }
+}
+
