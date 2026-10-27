@@ -248,6 +248,7 @@ async def list_alerts(
     severity: Severity | None = None,
     status: AlertStatus | None = None,
     agent_id: str | None = None,
+    hostname: str | None = None,
     mitre_technique: str | None = None,
     detected_after: datetime | None = None,
     detected_before: datetime | None = None,
@@ -263,6 +264,17 @@ async def list_alerts(
         .where(Alert.tenant_id == user.tenant_id)
     )
     count_stmt = select(func.count()).select_from(Alert).where(Alert.tenant_id == user.tenant_id)
+
+    if hostname:
+        # What the search box on the Alerts page says it takes. It used to send what was typed as
+        # agent_id, a UUID nobody types, so a hostname matched nothing and the list emptied --
+        # indistinguishable, from the outside, from a filter that does not work.
+        #
+        # Joined through the tenant like every other query here: on a shared server a hostname is
+        # not unique, and two hospitals may both have a PC-LABORATORY.
+        like = f"%{hostname}%"
+        stmt = stmt.where(Agent.hostname.ilike(like))
+        count_stmt = count_stmt.join(Agent, _agent_join_condition()).where(Agent.hostname.ilike(like))
 
     if severity:
         stmt = stmt.where(Alert.severity == severity)

@@ -165,7 +165,7 @@ export function ExecutiveDashboard() {
           }
         />
         <KPICard
-          label={t('dashboard.exec.kpi.alerts24h', 'Alertes 24h')}
+          label={t('dashboard.exec.kpi.alerts24h', 'Alerts, last 24 h')}
           value={summary?.alerts_24h ?? '—'}
         />
         <KPICard

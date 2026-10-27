@@ -191,7 +191,7 @@ export function AgentsListPage() {
                   <th className="px-4 py-3">{t('agents.list.version', 'Version')}</th>
                   <th className="px-4 py-3">{t('posture.list.protection')}</th>
                   <th className="px-4 py-3">{t('agents.heartbeat', 'Heartbeat')}</th>
-                  <th className="px-4 py-3">{t('agents.status', 'Statut')}</th>
+                  <th className="px-4 py-3">{t('agents.status', 'Status')}</th>
                   <th className="px-4 py-3 text-right">{t('alerts.list.col.actions', 'Actions')}</th>
                 </tr>
               </thead>

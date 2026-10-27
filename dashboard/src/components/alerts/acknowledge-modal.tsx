@@ -55,7 +55,7 @@ export function AcknowledgeModal({ alertId, open, onOpenChange }: AcknowledgeMod
       <DialogContent>
         <DialogHeader>
           <DialogTitle>
-            {t('alerts.ackModal.title', 'Prendre en charge cette alerte ?')}
+            {t('alerts.ackModal.title', 'Take charge of this alert?')}
           </DialogTitle>
           <DialogDescription>
             {t(

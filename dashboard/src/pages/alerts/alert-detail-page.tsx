@@ -97,7 +97,7 @@ export function AlertDetailPage() {
 
       {/* AC3.2.1: Header */}
       <div className="mb-1 flex items-center gap-1.5 font-mono text-xs text-text-secondary">
-        <span>{t('alerts.id', 'Alerte')} #{alert.id}</span>
+        <span>{t('alerts.id', 'Alert')} #{alert.id}</span>
         <button onClick={handleCopyId} aria-label={t('alerts.copyId', "Copier l'ID")}>
           <Copy className="size-3" />
         </button>
@@ -146,7 +146,7 @@ export function AlertDetailPage() {
           <div className="flex gap-2">
             {perms.canAcknowledge && (
               <Button variant="primary" onClick={() => setAckModalOpen(true)}>
-                {t('alerts.acknowledge', 'Prendre en charge')}
+                {t('alerts.acknowledge', 'Take charge')}
               </Button>
             )}
             {perms.canClose && (

@@ -74,7 +74,7 @@ export function AlertsListPage() {
     <div>
       <div className="mb-5 flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-text-primary">
-          {t('nav.alerts', 'Alertes')}
+          {t('nav.alerts', 'Alerts')}
         </h1>
         <Button variant="secondary" size="sm" onClick={exportCsv} disabled={items.length === 0}>
           <Download className="mr-1 size-4" />
@@ -116,7 +116,7 @@ export function AlertsListPage() {
           className="rounded border border-border-default bg-canvas px-2 py-1 text-xs text-text-secondary"
           value={filters.status ?? ''}
           onChange={(e) => setFilter('status', e.target.value || undefined)}
-          aria-label={t('alerts.list.col.status', 'Statut')}
+          aria-label={t('alerts.list.col.status', 'Status')}
         >
           <option value="">{t('alerts.list.allStatuses', 'All statuses')}</option>
           {STATUSES.map((s) => (
@@ -248,7 +248,7 @@ export function AlertsListPage() {
                             size="sm"
                             onClick={() => navigate(`/alerts/${alert.id}`)}
                           >
-                            {t('alerts.acknowledge', 'Prendre en charge')}
+                            {t('alerts.acknowledge', 'Take charge')}
                           </Button>
                         )}
                         <Button

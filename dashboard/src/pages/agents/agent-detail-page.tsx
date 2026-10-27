@@ -87,7 +87,7 @@ export function AgentDetailPage() {
 
   const TABS: Array<{ id: Tab; label: string }> = [
     { id: 'overview', label: t('agents.detail.tabOverview', 'Vue d\'ensemble') },
-    { id: 'alerts',   label: t('agents.detail.tabAlerts', 'Alertes') },
+    { id: 'alerts',   label: t('agents.detail.tabAlerts', 'Alerts') },
   ];
 
   return (
@@ -251,7 +251,7 @@ export function AgentDetailPage() {
                   <tr className="border-b border-border-subtle text-left text-xs font-semibold uppercase tracking-wide text-text-secondary">
                     <th className="px-4 py-3">{t('alerts.list.col.detected', 'Detected')}</th>
                     <th className="px-4 py-3">{t('alerts.list.col.severity', 'Severity')}</th>
-                    <th className="px-4 py-3">{t('alerts.list.col.status', 'Statut')}</th>
+                    <th className="px-4 py-3">{t('alerts.list.col.status', 'Status')}</th>
                     <th className="px-4 py-3">{t('alerts.list.col.module', 'Module')}</th>
                     <th className="px-4 py-3"></th>
                   </tr>

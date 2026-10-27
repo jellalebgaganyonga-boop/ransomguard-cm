@@ -52,7 +52,7 @@ export function ReadOnlyDashboard() {
             : {})}
         />
         <KPICard
-          label={t('dashboard.readonly.kpi.auditEntries', 'Journal derniers 7 jours')}
+          label={t('dashboard.readonly.kpi.auditEntries', 'Audit entries, last 7 days')}
           value={auditWeek.data?.total ?? '—'}
           description={t('dashboard.readonly.kpi.auditSub', "audit entries")}
         />
@@ -88,7 +88,7 @@ export function ReadOnlyDashboard() {
             <ShieldAlert className="size-5 text-text-secondary" aria-hidden="true" />
             <div className="text-left">
               <p className="font-semibold text-text-primary">
-                &#x1F6A8; {t('dashboard.readonly.alertsBtn', 'Consulter les alertes')}
+                &#x1F6A8; {t('dashboard.readonly.alertsBtn', 'View the alerts')}
               </p>
               <p className="text-sm text-text-secondary">
                 {t('dashboard.readonly.alertsSub', 'Read-only security alerts')}

@@ -115,7 +115,7 @@ export function UsersListPage() {
                   {[
                     t('users.fullName', 'Nom complet'),
                     t('users.email', 'Email'),
-                    t('users.status', 'Statut'),
+                    t('users.status', 'Status'),
                     t('users.lastLogin', 'Last login'),
                     t('alerts.list.col.actions', 'Actions'),
                   ].map((h) => (

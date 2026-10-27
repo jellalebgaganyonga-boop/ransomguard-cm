@@ -89,7 +89,10 @@ export async function fetchAlertList(params: AlertListParams = {}): Promise<Aler
   const backendParams: Record<string, unknown> = { ...rest };
   if (date_from)  backendParams['detected_after']  = date_from;
   if (date_to)    backendParams['detected_before'] = date_to;
-  if (agent)      backendParams['agent_id']        = agent;
+  // The search box takes a workstation name. It used to be sent as agent_id, a UUID, so
+  // anything typed into a box labelled "Search (hostname...)" matched nothing and emptied the
+  // list -- which looks like a filter that does not work.
+  if (agent)      backendParams['hostname']        = agent;
 
   const res = await apiClient.get('/dashboard/alerts', { params: backendParams });
   return AlertListResponseSchema.parse(res.data);
