@@ -48,7 +48,7 @@ It runs to the end, prints PASS / FAIL / NOT BUILT / NOT TESTABLE HERE for each 
 | Suspension (ADR-026) | **works** | Bench test 3: `SentinelProcessSuspended`, the writer frozen |
 | Resume from the console | **works** | Bench test 4: `SentinelProcessResumed` reaches the GRID, the PID leaves *Suspended processes*, and the process really continues on the workstation |
 | ENTROPY | **works** | Reports `active` on PC-LAB with a named writer and rule 3 evaluated (AGT-EN-002 closed) |
-| USB GUARD | **partial** | The module reports `active`, but nothing here exercised it: a real USB key must be passed into the VM. system-check §8 |
+| USB GUARD | **partial** | Exercised twice with the owner's own Kingston key (FAT32, 7.21 GB, her files on it). **2026-10-26, before the fix:** Critical within a second, on the boot signature `0x55AA` that is on the first sector of every FAT32 and NTFS volume including a blank one — in the shipped Permissive mode that means the drive is made read-only, so a nurse's key would have been locked. **2026-10-27, build `7edad8a`, shipped Permissive, on PC-LAB:** no boot-signature finding at all. The module saw the key as `E:`, scanned it, and logged `High entropy 7.98–7.99` on the key's own PDFs at Warning. A `UsbGuard` Critical was still raised two minutes in, from the content scan rather than the boot signature, but **no action was taken** (`responses: []`) and the key came back `Healthy`, 4.84 GB free of 7.21 GB — identical, nothing written, nothing removed. The false positive this was meant to fix is gone; an ordinary key still reading Critical on its own documents is in what is weakest below |
 | EXFIL WATCH | **partial** | Reports `degraded / learning_phase` honestly. It cannot raise an alert until it has learned the normal traffic, so no detection has been observed |
 | IRONCLAD (offline backup) | **partial** | The code exists and is tested against a *simulated* Arduino. Never connected to real hardware. system-check §8 |
 | Anti-tampering | **not built — planned** | The services are registered but never started. As of 2026-10-26 the agent no longer reports it as a module and the console no longer shows the row: a line on every workstation reading "inactive — not implemented" is true and nothing anybody can act on. The GRID still *accepts* it, so an agent installed before that keeps its heartbeat. It is listed by system-check under what is not built, and it is the first thing in "what is weakest" below |
@@ -94,7 +94,13 @@ It runs to the end, prints PASS / FAIL / NOT BUILT / NOT TESTABLE HERE for each 
    a user is told to be suspicious of.
 3. **EXFIL WATCH has never raised an alert here.** It is honest about learning, but that means
    the module is unproven on this bench.
-4. **USB GUARD is unproven.** It reports active; no USB key has been passed through to test it.
+4. **USB GUARD still calls an ordinary key Critical.** Not on the boot signature any more — that
+   was fixed in `6d33d77` and the key tested on 2026-10-27 produced no boot finding. It is the
+   content scan: the owner's key holds PDFs, PDFs are compressed, and compressed bytes look like
+   encrypted bytes to an entropy test (7.98–7.99 of a possible 8). Nothing was done to the key,
+   and the shipped Permissive mode says a Critical finding makes the drive read-only, so the two
+   do not agree with each other. One of them is wrong and it is not safe to assume it is the one
+   that did nothing.
 5. **IRONCLAD has never seen real hardware.**
 6. **A bench VM's clock free-runs.** There are no Guest Additions on PC-LAB or PC-RECEPTION, so
    nothing keeps their clocks with the host's after the VM starts. PC-LAB was **five hours and
