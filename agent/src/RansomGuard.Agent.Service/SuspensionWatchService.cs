@@ -70,16 +70,34 @@ public sealed class SuspensionWatchService : BackgroundService
         try
         {
             // At start too: the suspensions of a previous run are re-read and reported.
-            await SweepAsync(stoppingToken);
+            await SweepOnceAsync(stoppingToken);
             using var timer = new PeriodicTimer(Interval, _time);
             while (await timer.WaitForNextTickAsync(stoppingToken))
             {
-                await SweepAsync(stoppingToken);
+                await SweepOnceAsync(stoppingToken);
             }
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
             // Normal shutdown.
+        }
+    }
+
+    /// <summary>
+    /// One sweep, and nothing it runs into ends the watch. A sweep that throws used to leave the
+    /// console's list of frozen processes frozen itself -- still showing what was true at the last
+    /// successful sweep, with nothing saying it had stopped being updated. The next tick is a
+    /// minute away and the suspensions are still on the workstation.
+    /// </summary>
+    private async Task SweepOnceAsync(CancellationToken ct)
+    {
+        try
+        {
+            await SweepAsync(ct);
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            _logger.LogError(ex, "The suspension sweep failed; the next one is in {Interval}", Interval);
         }
     }
 

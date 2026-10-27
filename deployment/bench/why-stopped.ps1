@@ -23,6 +23,7 @@ param(
     [string] $GridHost = '192.168.56.1',
     [int] $GridPort = 443,
     [string] $Match = 'enroll',
+    [string] $EventMatch = '',
     [int] $Width = 170
 )
 
@@ -60,7 +61,9 @@ foreach ($e in $scm) {
 
 Section "the agent's own Event Log entries (Warning and above)"
 $app = Get-WinEvent -FilterHashtable @{LogName = 'Application'; ProviderName = 'RansomGuard-CM' } `
-    -MaxEvents $Events -ErrorAction SilentlyContinue
+    -MaxEvents 400 -ErrorAction SilentlyContinue
+if ($EventMatch) { $app = $app | Where-Object { $_.Message -match $EventMatch } }
+$app = $app | Select-Object -First $Events
 if (-not $app) { Write-Host 'nothing from source RansomGuard-CM' }
 foreach ($e in $app) {
     Write-Host ("{0:HH:mm:ss}  {1}" -f $e.TimeCreated, $e.LevelDisplayName) -ForegroundColor Yellow
@@ -81,7 +84,10 @@ $dir = 'C:\ProgramData\RansomGuard-CM\logs'
 $log = Get-ChildItem $dir -Filter 'agent-*.log' -ErrorAction SilentlyContinue |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1
 if ($null -eq $log) {
-    Write-Host "no agent log in $dir"
+    Write-Host "no agent-*.log in $dir; what is there:"
+    $all = @(Get-ChildItem $dir -ErrorAction SilentlyContinue)
+    if ($all.Count -eq 0) { Write-Host '  (the folder is empty, or there is no folder)' }
+    foreach ($f in $all) { Write-Host ("  {0,-30} {1,10} bytes" -f $f.Name, $f.Length) }
 } else {
     Write-Host ("{0}  {1} bytes  last written {2:HH:mm:ss}" -f $log.Name, $log.Length, $log.LastWriteTime)
     Get-Content $log.FullName -Tail 12 -ErrorAction SilentlyContinue |

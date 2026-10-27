@@ -55,6 +55,13 @@ $Iso = Join-Path $Work "$Label.iso"
 # contents of the old one.
 & $VBoxManage storageattach $VmName --storagectl SATA --port 1 --device 0 --type dvddrive --medium emptydrive --forceunmount 2>$null | Out-Null
 
+# And give the guest time to notice. Windows caches a disc's directory: swap one ISO for another
+# without a gap and the VM keeps showing the old contents -- on 2026-10-27 `dir D:\` listed the
+# previous disc's files, so `D:\run.cmd` ran the previous disc's script and the output looked like
+# a script that had ignored its arguments. An empty drive for a few seconds is what makes it
+# re-read, and it costs nothing next to building the image.
+Start-Sleep -Seconds 6
+
 if (Test-Path $Stage) { Remove-Item -Recurse -Force $Stage }
 New-Item -ItemType Directory -Force $Stage | Out-Null
 Copy-Item $Source $Stage
@@ -103,6 +110,7 @@ if (Test-Path $Iso) { Remove-Item -Force $Iso }
 
 & $VBoxManage storageattach $VmName --storagectl SATA --port 1 --device 0 --type dvddrive --medium $Iso --forceunmount
 if ($LASTEXITCODE -ne 0) { throw "VBoxManage storageattach failed ($LASTEXITCODE)" }
+Start-Sleep -Seconds 6   # the guest mounts it and re-reads the directory
 
 Write-Host "inserted $Iso into $VmName"
 Write-Host 'In the VM, open an elevated prompt and run: D:\run.cmd'

@@ -53,6 +53,12 @@ It runs to the end, prints PASS / FAIL / NOT BUILT / NOT TESTABLE HERE for each 
 | IRONCLAD (offline backup) | **partial** | The code exists and is tested against a *simulated* Arduino. Never connected to real hardware. system-check §8 |
 | Anti-tampering | **not built — planned** | The services are registered but never started. As of 2026-10-26 the agent no longer reports it as a module and the console no longer shows the row: a line on every workstation reading "inactive — not implemented" is true and nothing anybody can act on. The GRID still *accepts* it, so an agent installed before that keeps its heartbeat. It is listed by system-check under what is not built, and it is the first thing in "what is weakest" below |
 
+## The agent stays running
+
+| Feature | Status | Proof |
+|---|---|---|
+| One service failing does not stop the agent | **works** | `AgentKeepsRunningTests`, `GridCommandServiceTests`. Found on 2026-10-26: PC-LAB went quiet fourteen minutes into a 65-minute idle proof and never came back, on a machine that was awake and had not slept. `sc query` said STOPPED with exit code 0 — a clean exit. The Event Log said why: *"BackgroundService failed … the configured HttpClient.Timeout of 10 seconds elapsing"* and *"BackgroundServiceExceptionBehavior is configured to StopHost … the IHost instance is stopping"*. The GRID had taken longer than ten seconds to answer a poll for commands; `GridCommandService` guarded its catches with `ex is not OperationCanceledException`, and an HttpClient timeout **is** one, so it escaped; .NET's default then stopped the host and every detector in it. Both halves are fixed: the filter now asks whether the agent's own token was cancelled, and the host is configured to keep running. The failure is still reported — the host logs the service that threw, and each module publishes its own failed state |
+
 ## Workstation offline and back
 
 | Feature | Status | Proof |
@@ -90,11 +96,12 @@ It runs to the end, prints PASS / FAIL / NOT BUILT / NOT TESTABLE HERE for each 
    the module is unproven on this bench.
 4. **USB GUARD is unproven.** It reports active; no USB key has been passed through to test it.
 5. **IRONCLAD has never seen real hardware.**
-6. **The agent writes nothing to its own log file.** `agent-<date>.log` was 0 bytes on
-   PC-RECEPTION while the agent was running and enrolled. Both the owner guide and its
-   troubleshooting table send people to that folder when something goes wrong; today they would
-   find an empty file. Whatever else is unfinished, this is the one that makes the rest harder to
-   diagnose.
+6. **A bench VM's clock free-runs.** There are no Guest Additions on PC-LAB or PC-RECEPTION, so
+   nothing keeps their clocks with the host's after the VM starts. PC-LAB was **five hours and
+   sixteen minutes behind** on 2026-10-27. The time an alert was detected is the workstation's
+   own and travels with it, so a drifted workstation makes every alert look hours old — on the
+   console and in front of an audience. `deployment/bench/set-clock.ps1` sets it; nothing checks
+   it on its own.
 7. **The first start after an install exceeds Windows' 30 s limit**, so `sc start` returns 1053
    and the installer's retry is what completes the installation. A warm start is 13 s.
 8. **`ip_address` is not recorded in the user-actions log**, so "who did it" is answered by
