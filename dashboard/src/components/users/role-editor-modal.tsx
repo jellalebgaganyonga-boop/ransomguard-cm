@@ -1,19 +1,23 @@
 /**
  * RoleEditorModal — US5.4
  *
- * GAP-08: GET /dashboard/users does NOT return roles in UserItem.
- * Only PUT /users/{id}/roles response includes roles (UserWithRolesItem).
- * This modal therefore starts with ALL checkboxes unchecked and shows
- * a warning. Admin must explicitly set the desired roles.
+ * The list sent replaces every role the user has, so the dialog shows what they have now,
+ * ticked, and an administrator edits from there. It used to open with everything unchecked and
+ * a notice saying current roles could not be shown; GET /dashboard/users-with-roles returns
+ * them, admin-only and tenant-scoped, and had done for some time.
+ *
+ * When something goes wrong it says what the server said. "An error occurred" was shown on
+ * 2026-10-27 over role changes that had succeeded, which is how long it took to notice.
  *
  * See lib/user-permissions.ts for canUpdateRoles() self-demotion guard.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useUpdateUserRoles } from '@/hooks/use-users';
+import { useUpdateUserRoles, useUsersWithRoles } from '@/hooks/use-users';
+import { apiErrorMessage } from '@/lib/api-error';
 import { KNOWN_ROLE_NAMES, canUpdateRoles } from '@/lib/user-permissions';
 
 interface RoleEditorModalProps {
@@ -39,11 +43,20 @@ export function RoleEditorModal({
 }: RoleEditorModalProps) {
   const { t } = useTranslation();
   const mutation = useUpdateUserRoles();
-  // GAP-08: start with nothing checked — current roles not available from list endpoint
+  const current = useUsersWithRoles();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [selfDemotionError, setSelfDemotionError] = useState(false);
+  const [touched, setTouched] = useState(false);
+
+  // Pre-tick what this user has. Only until the administrator touches something: re-ticking a
+  // box they have just cleared, because a refetch landed, is the dialog arguing with them.
+  const loadedRoles = current.data?.items.find((u) => u.id === userId)?.roles;
+  useEffect(() => {
+    if (!touched && loadedRoles) setSelected(new Set(loadedRoles));
+  }, [touched, loadedRoles]);
 
   function toggle(role: string) {
+    setTouched(true);
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(role)) next.delete(role);
@@ -81,22 +94,33 @@ export function RoleEditorModal({
         </h2>
         <p className="mb-4 font-mono text-xs text-text-tertiary">{userEmail}</p>
 
-        {/* GAP-08 warning */}
         <div className="mb-4 flex items-start gap-2 rounded-md border border-primary-border bg-primary-subtle px-3 py-2">
           <Info className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
           <p className="text-xs text-text-secondary">
             {t(
-              'users.roles.gapWarning',
-              "Current roles are not shown (known backend limitation). Check the roles this user should have — the list below will replace all existing roles.",
+              'users.roles.replacesAll',
+              'Ticked below is what this user has now. Saving replaces all of their roles with what is ticked.',
             )}
           </p>
         </div>
+
+        {current.isError && (
+          <p className="mb-4 rounded-md bg-severity-critical-subtle px-3 py-2 text-xs text-severity-critical-on-subtle">
+            {apiErrorMessage(current.error) ??
+              t('users.roles.currentUnavailable', 'The roles this user has now could not be read.')}
+          </p>
+        )}
 
         {/* Role checkboxes */}
         <fieldset className="mb-6 space-y-3">
           <legend className="mb-2 text-xs font-medium text-text-secondary">
             {t('users.roles.chooseRoles', 'Select roles:')}
           </legend>
+          {current.isLoading && (
+            <p className="text-xs text-text-tertiary">
+              {t('users.roles.loadingCurrent', 'Reading current roles...')}
+            </p>
+          )}
           {KNOWN_ROLE_NAMES.map((role) => (
             <label key={role} className="flex cursor-pointer items-center gap-3">
               <input
@@ -122,8 +146,8 @@ export function RoleEditorModal({
         )}
 
         {mutation.error && (
-          <p className="mb-4 rounded-md bg-severity-critical-subtle px-3 py-2 text-xs text-severity-critical-on-subtle">
-            {t('common.error', 'An error occurred')}
+          <p role="alert" className="mb-4 rounded-md bg-severity-critical-subtle px-3 py-2 text-xs text-severity-critical-on-subtle">
+            {apiErrorMessage(mutation.error) ?? t('common.error', 'An error occurred')}
           </p>
         )}
 

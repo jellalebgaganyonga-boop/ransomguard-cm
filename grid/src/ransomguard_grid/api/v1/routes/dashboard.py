@@ -976,7 +976,7 @@ async def update_user_roles(
     await db.flush()
     return UserWithRolesItem(
         id=target.id, email=target.email, full_name=target.full_name,
-        is_active=target.is_active, roles=updated_roles,
+        is_active=target.is_active, last_login_at=target.last_login_at, roles=updated_roles,
     )
 
 

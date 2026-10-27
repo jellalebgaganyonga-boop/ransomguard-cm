@@ -82,7 +82,11 @@ class AuditLog(Base):
     agent_id: Mapped[str] = mapped_column(String(36), ForeignKey("agents.id", ondelete="RESTRICT"), nullable=False)
     sequence_number: Mapped[int] = mapped_column(nullable=False)
     payload_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
-    ed25519_signature: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    # Base64, as it arrives and as an auditor re-checks it. It was LargeBinary, and storing raw
+    # bytes through aiomysql 0.3.2 with PyMySQL 1.2.3 raises "'str' object is not callable" --
+    # escape_bytes_prefixed is a string in that pairing, not a function. Every upload was a 500,
+    # which nothing noticed because no agent uploaded until 2026-10-27.
+    ed25519_signature: Mapped[str] = mapped_column(String(128), nullable=False)
     signing_key_id: Mapped[str] = mapped_column(String(64), nullable=False)
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False)
 

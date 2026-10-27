@@ -304,12 +304,14 @@
     "roles": {
       "title": "Attribuer des rôles",
       "chooseRoles": "Sélectionnez les rôles :",
-      "gapWarning": "Les rôles actuels ne sont pas affichés (limitation backend connue). Cochez les rôles que cet utilisateur doit avoir — la liste ci-dessous remplacera l'intégralité des rôles existants.",
       "submit": "Enregistrer les rôles",
       "tenantAdmin": "Administrateur (tenant_admin)",
       "securityAnalyst": "Analyste sécurité (security_analyst)",
       "readOnlyAuditor": "Auditeur lecture seule (read_only_auditor)",
-      "selfDemotionError": "Vous ne pouvez pas retirer le rôle tenant_admin de votre propre compte."
+      "selfDemotionError": "Vous ne pouvez pas retirer le rôle tenant_admin de votre propre compte.",
+      "replacesAll": "Ticked below is what this user has now. Saving replaces all of their roles with what is ticked.",
+      "currentUnavailable": "The roles this user has now could not be read.",
+      "loadingCurrent": "Reading current roles..."
     }
   },
   "agents": {

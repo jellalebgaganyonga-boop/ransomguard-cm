@@ -142,3 +142,50 @@ async def test_admin_cannot_self_demote(client: AsyncClient) -> None:
     )
     assert resp.status_code == 409
     assert "last active administrator" in resp.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_updating_roles_returns_the_whole_user_the_console_asks_for(client: AsyncClient) -> None:
+    """The role change succeeds AND the answer is a complete user.
+
+    The console parses this response strictly. It was missing ``last_login_at``, so a perfectly
+    successful 200 failed to parse and the dialog showed "An error occurred" over a change that
+    had in fact been saved -- the owner reported it on 2026-10-27 for kelyfa3@gmail.com, whose
+    role had been assigned each time they tried.
+    """
+    env = await _setup_rbac_env()
+    token = await _login(client, env["tenant_code"], env["admin_email"])
+
+    resp = await client.put(
+        f"/api/v1/dashboard/users/{env['auditor_id']}/roles",
+        json={"role_names": ["security_analyst"]},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["roles"] == ["security_analyst"]
+    # Every field the console requires, present. A missing one is an error message over a
+    # change that worked, which is worse than a failure: the admin retries and sees it again.
+    assert set(body) >= {"id", "email", "full_name", "is_active", "last_login_at", "roles"}
+
+
+@pytest.mark.asyncio
+async def test_the_console_can_read_current_roles_before_changing_them(client: AsyncClient) -> None:
+    """The dialog pre-ticks what the user has, instead of asking an admin to remember.
+
+    Replacing roles blind is how an admin removes one by accident: the list sent replaces
+    everything. Tenant-scoped, admin-only, like every other user endpoint.
+    """
+    env = await _setup_rbac_env()
+    token = await _login(client, env["tenant_code"], env["admin_email"])
+
+    resp = await client.get(
+        "/api/v1/dashboard/users-with-roles",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert resp.status_code == 200
+    users = {u["email"]: u for u in resp.json()["items"]}
+    assert users[env["auditor_email"]]["roles"] == ["read_only_auditor"]
+    assert set(users[env["auditor_email"]]) >= {"id", "email", "full_name", "is_active", "last_login_at", "roles"}

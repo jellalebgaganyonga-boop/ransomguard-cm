@@ -304,12 +304,14 @@
     "roles": {
       "title": "Assign roles",
       "chooseRoles": "Select roles:",
-      "gapWarning": "Current roles are not shown (known backend limitation). Check the roles this user should have — the list below will replace all existing roles.",
       "submit": "Save roles",
       "tenantAdmin": "Administrator (tenant_admin)",
       "securityAnalyst": "Security analyst (security_analyst)",
       "readOnlyAuditor": "Read-only auditor (read_only_auditor)",
-      "selfDemotionError": "You cannot remove the tenant_admin role from your own account."
+      "selfDemotionError": "You cannot remove the tenant_admin role from your own account.",
+      "replacesAll": "Ticked below is what this user has now. Saving replaces all of their roles with what is ticked.",
+      "currentUnavailable": "The roles this user has now could not be read.",
+      "loadingCurrent": "Reading current roles..."
     }
   },
   "agents": {

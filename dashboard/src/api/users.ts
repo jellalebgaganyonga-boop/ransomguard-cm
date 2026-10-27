@@ -9,7 +9,7 @@
  *   PUT    /dashboard/users/{id}/roles     → UserWithRolesItem
  *
  * Backend gaps noted here:
- *   - UserItem has NO roles field (GET /users list) — BACKEND GAP (GRID-SEC-002)
+ *   - UserItem has NO roles field (GET /users list); GET /users-with-roles does
  *   - No GET /users/{id} single-user detail endpoint exists
  *   - disable_user has no server-side self-protection (GRID-SEC-002)
  *   - enable_user returns 422 on self-modify (correct)
@@ -29,11 +29,19 @@ export const UserItemSchema = z.object({
 });
 export type UserItem = z.infer<typeof UserItemSchema>;
 
-/** Only returned by PUT /users/{id}/roles */
+/** Returned by PUT /users/{id}/roles and by GET /users-with-roles. */
 export const UserWithRolesItemSchema = UserItemSchema.extend({
   roles: z.array(z.string()),
 });
 export type UserWithRolesItem = z.infer<typeof UserWithRolesItemSchema>;
+
+export const PaginatedUserWithRolesResponseSchema = z.object({
+  items: z.array(UserWithRolesItemSchema),
+  total: z.number().int().nonnegative(),
+  offset: z.number().int().nonnegative(),
+  limit: z.number().int().positive(),
+});
+export type PaginatedUserWithRolesResponse = z.infer<typeof PaginatedUserWithRolesResponseSchema>;
 
 export const PaginatedUserResponseSchema = z.object({
   items: z.array(UserItemSchema),
@@ -89,4 +97,14 @@ export async function updateUserRoles(
 ): Promise<UserWithRolesItem> {
   const res = await apiClient.put(`/dashboard/users/${userId}/roles`, payload);
   return UserWithRolesItemSchema.parse(res.data);
+}
+
+/**
+ * Users with the roles they actually have. Admin-only and tenant-scoped on the server, like
+ * every other user endpoint; the role dialog reads it so an administrator is not asked to
+ * remember what someone already has before replacing all of it.
+ */
+export async function fetchUsersWithRoles(): Promise<PaginatedUserWithRolesResponse> {
+  const res = await apiClient.get('/dashboard/users-with-roles', { params: { offset: 0, limit: 200 } });
+  return PaginatedUserWithRolesResponseSchema.parse(res.data);
 }

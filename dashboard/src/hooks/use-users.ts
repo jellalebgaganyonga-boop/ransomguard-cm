@@ -7,6 +7,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMe } from './use-me';
 import {
   fetchUserList,
+  fetchUsersWithRoles,
   createUser,
   disableUser,
   enableUser,
@@ -77,5 +78,17 @@ export function useUpdateUserRoles() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['users', tenantId] });
     },
+  });
+}
+
+/**
+ * The roles each user currently has, for the role dialog to pre-tick.
+ */
+export function useUsersWithRoles(enabled = true) {
+  const tenantId = useTenantId();
+  return useQuery({
+    queryKey: ['users-with-roles', tenantId],
+    queryFn: () => fetchUsersWithRoles(),
+    enabled,
   });
 }

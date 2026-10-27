@@ -35,7 +35,8 @@ public static class AuditUploadPayload
     {
         WriteIndented = false,
         // Python's ensure_ascii=False leaves non-ASCII as itself; .NET escapes it by default,
-        // and "Yaoundé" signed one way and verified the other does not come back equal.
+        // and the hospital's own name, signed one way and verified the other, does not come back
+        // equal. The accented spelling is exercised in AuditUploadPayloadTests.
         Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 

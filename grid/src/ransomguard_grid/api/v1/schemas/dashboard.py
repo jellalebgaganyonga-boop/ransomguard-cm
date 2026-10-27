@@ -264,10 +264,18 @@ class UpdateUserRolesRequest(BaseModel):
 
 
 class UserWithRolesItem(BaseModel):
+    """The answer to a role change: the whole user, not just the part that changed.
+
+    ``last_login_at`` is here because the console parses this strictly and a missing field is an
+    error message shown over a change that was in fact saved. Reported on 2026-10-27: assigning
+    an analyst role said "An error occurred" every time, and had worked every time.
+    """
+
     id: str
     email: str
     full_name: str
     is_active: bool
+    last_login_at: datetime | None = None
     roles: list[str]
 
 
