@@ -65,7 +65,13 @@ class AuditLogRepository(BaseRepository[AuditLog]):
 
         total = (await self.session.execute(count_base)).scalar_one()
         items = (await self.session.execute(
-            base.order_by(AuditLog.received_at.desc()).offset(offset).limit(min(limit, 200))
+            # Newest first, and within one arrival the chain's own order. A batch of a hundred
+            # entries lands in the same second, and ordering by time alone let MySQL return them
+            # in whatever order it liked: the console compares adjacent rows to spot a missing
+            # entry, so a shuffled page cried "sequence gap" over a chain that was complete.
+            base.order_by(AuditLog.received_at.desc(), AuditLog.sequence_number.desc())
+            .offset(offset)
+            .limit(min(limit, 200))
         )).scalars().all()
 
         return items, total

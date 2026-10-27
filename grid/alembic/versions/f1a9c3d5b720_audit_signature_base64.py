@@ -25,7 +25,7 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    with op.batch_alter_table("audit_logs") as batch:
+    with op.batch_alter_table("audit_logs_grid") as batch:
         batch.alter_column(
             "ed25519_signature",
             existing_type=sa.LargeBinary(),
@@ -35,7 +35,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    with op.batch_alter_table("audit_logs") as batch:
+    with op.batch_alter_table("audit_logs_grid") as batch:
         batch.alter_column(
             "ed25519_signature",
             existing_type=sa.String(128),

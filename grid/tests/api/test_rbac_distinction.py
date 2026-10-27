@@ -54,6 +54,7 @@ async def _setup_rbac_env() -> dict[str, str]:
         session.add(alert)
         await session.flush()
         result["alert_id"] = alert.id
+        result["agent_id"] = agent.id
 
         await session.commit()
     return result
@@ -189,3 +190,40 @@ async def test_the_console_can_read_current_roles_before_changing_them(client: A
     users = {u["email"]: u for u in resp.json()["items"]}
     assert users[env["auditor_email"]]["roles"] == ["read_only_auditor"]
     assert set(users[env["auditor_email"]]) >= {"id", "email", "full_name", "is_active", "last_login_at", "roles"}
+
+
+@pytest.mark.asyncio
+async def test_audit_entries_come_back_in_chain_order_within_one_arrival(client: AsyncClient) -> None:
+    """A batch that lands in the same second still reads as a chain.
+
+    The console flags a missing entry by comparing one row with the row above it. Ordering only
+    by received_at let the database return a hundred same-second entries in any order, so a
+    complete chain was covered in "Sequence gap detected" -- seen on 2026-10-27 the moment real
+    entries first arrived.
+    """
+    from datetime import UTC, datetime
+    from uuid import uuid4
+
+    from ransomguard_grid.db.models.alerts import AuditLog as GridAuditLog
+
+    env = await _setup_rbac_env()
+    arrived = datetime.now(UTC)
+    async with _test_session_factory() as session:
+        agent_id = env["agent_id"]
+        for seq in (3, 1, 4, 2):  # inserted out of order, one timestamp
+            session.add(GridAuditLog(
+                id=str(uuid4()), tenant_id=env["tenant_id"], agent_id=agent_id,
+                sequence_number=seq, payload_json={"action": f"n{seq}"},
+                ed25519_signature="c2ln", signing_key_id="k1", received_at=arrived,
+            ))
+        await session.commit()
+
+    token = await _login(client, env["tenant_code"], env["admin_email"])
+    resp = await client.get(
+        f"/api/v1/dashboard/audit-logs?agent_id={agent_id}&limit=10",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert resp.status_code == 200
+    seqs = [i["sequence_number"] for i in resp.json()["items"]]
+    assert seqs == sorted(seqs, reverse=True), f"not in chain order: {seqs}"
