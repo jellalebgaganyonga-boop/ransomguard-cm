@@ -17,13 +17,18 @@ const badgeVariants = cva(
   {
     variants: {
       variant: {
-        critical: 'border-severity-critical-border bg-severity-critical-subtle text-[color:var(--ref-palette-red-40)]',
-        high: 'border-severity-high-border bg-severity-high-subtle text-[color:var(--ref-palette-orange-30)]',
-        medium: 'border-severity-medium-border bg-severity-medium-subtle text-[color:var(--ref-palette-yellow-20)]',
-        low: 'border-severity-low-border bg-severity-low-subtle text-severity-low',
-        // Green: the "protected" verdict. Text green-30 on green-95 = 5.7:1 (green-50 would be 2.5:1).
-        success: 'border-success-border bg-success-subtle text-[color:var(--ref-palette-green-30)]',
-        info: 'border-severity-info-border bg-severity-info-subtle text-severity-info',
+        // Each badge's text is an -on-subtle token, defined once per role for each theme, never
+        // a reference-palette shade picked here. Picked here, it cannot follow the theme: the
+        // MEDIUM badge said yellow-20, and in dark mode the background it sits on IS yellow-20,
+        // so the word was painted in its own background colour and the badge read as an empty
+        // yellow box. Reported by the owner on 2026-10-28. Every pair is >= 4.5:1 in both
+        // themes, checked by badge-contrast.test.ts.
+        critical: 'border-severity-critical-border bg-severity-critical-subtle text-severity-critical-on-subtle',
+        high: 'border-severity-high-border bg-severity-high-subtle text-severity-high-on-subtle',
+        medium: 'border-severity-medium-border bg-severity-medium-subtle text-severity-medium-on-subtle',
+        low: 'border-severity-low-border bg-severity-low-subtle text-severity-low-on-subtle',
+        success: 'border-success-border bg-success-subtle text-success-on-subtle',
+        info: 'border-severity-info-border bg-severity-info-subtle text-severity-info-on-subtle',
         neutral: 'border-border-default bg-surface-subtle text-text-secondary',
       },
     },

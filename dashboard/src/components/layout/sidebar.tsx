@@ -49,7 +49,7 @@ export function Sidebar({ role, badgeCounts = {} }: SidebarProps) {
             <span className="flex-1">{t(item.labelKey)}</span>
             {badge !== undefined && badge > 0 && (
               <span
-                className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-severity-critical px-1 text-[11px] font-bold text-white"
+                className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-severity-critical px-1 text-[11px] font-bold text-severity-critical-on"
                 aria-label={`${badge} ${t('nav.alerts')}`}
               >
                 {badge}

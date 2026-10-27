@@ -227,21 +227,25 @@
   --sys-color-severity-high-subtle: var(--ref-palette-orange-95);
   --sys-color-severity-high-border: var(--ref-palette-orange-40);
   --sys-color-severity-high-on: var(--ref-palette-white);
+  --sys-color-severity-high-on-subtle: var(--ref-palette-orange-30);
 
   --sys-color-severity-medium: var(--ref-palette-yellow-50);
   --sys-color-severity-medium-subtle: var(--ref-palette-yellow-95);
   --sys-color-severity-medium-border: var(--ref-palette-yellow-40);
   --sys-color-severity-medium-on: var(--ref-palette-gray-10);
+  --sys-color-severity-medium-on-subtle: var(--ref-palette-yellow-20);
 
   --sys-color-severity-low: var(--ref-palette-blue-40);
   --sys-color-severity-low-subtle: var(--ref-palette-blue-95);
   --sys-color-severity-low-border: var(--ref-palette-blue-30);
   --sys-color-severity-low-on: var(--ref-palette-white);
+  --sys-color-severity-low-on-subtle: var(--ref-palette-blue-40);
 
   --sys-color-severity-info: var(--ref-palette-gray-50);
   --sys-color-severity-info-subtle: var(--ref-palette-gray-95);
   --sys-color-severity-info-border: var(--ref-palette-gray-40);
   --sys-color-severity-info-on: var(--ref-palette-white);
+  --sys-color-severity-info-on-subtle: var(--ref-palette-gray-40);
 
   /* Status */
   --sys-color-status-new: var(--ref-palette-red-50);
@@ -262,6 +266,7 @@
   /* Feedback */
   --sys-color-feedback-success: var(--ref-palette-green-50);
   --sys-color-feedback-success-subtle: var(--ref-palette-green-95);
+  --sys-color-feedback-success-on-subtle: var(--ref-palette-green-30);
   --sys-color-feedback-success-border: var(--ref-palette-green-40);
 
   --sys-color-feedback-warning: var(--ref-palette-orange-50);

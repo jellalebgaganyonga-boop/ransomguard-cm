@@ -35,7 +35,7 @@ const buttonVariants = cva(
         secondary:
           'border border-border-default bg-transparent text-text-primary hover:bg-hover-bg disabled:text-disabled-text',
         danger:
-          'bg-severity-critical text-white shadow-sm hover:bg-severity-critical-border disabled:bg-disabled-bg disabled:text-disabled-text',
+          'bg-severity-critical text-severity-critical-on shadow-sm hover:bg-severity-critical-border disabled:bg-disabled-bg disabled:text-disabled-text',
         ghost: 'bg-transparent text-text-primary hover:bg-hover-bg disabled:text-disabled-text',
       },
       size: {

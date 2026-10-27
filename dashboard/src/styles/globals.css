@@ -42,14 +42,19 @@ html.dark {
   --sys-color-severity-critical-on-subtle: var(--ref-palette-red-80);
   --sys-color-severity-high-subtle: var(--ref-palette-orange-20);
   --sys-color-severity-high-border: var(--ref-palette-orange-50);
+  --sys-color-severity-high-on-subtle: var(--ref-palette-orange-80);
   --sys-color-severity-medium-subtle: var(--ref-palette-yellow-20);
   --sys-color-severity-medium-border: var(--ref-palette-yellow-50);
+  --sys-color-severity-medium-on-subtle: var(--ref-palette-yellow-80);
   --sys-color-severity-low-subtle: var(--ref-palette-blue-20);
   --sys-color-severity-low-border: var(--ref-palette-blue-50);
+  --sys-color-severity-low-on-subtle: var(--ref-palette-blue-80);
   --sys-color-severity-info-subtle: var(--ref-palette-gray-30);
   --sys-color-severity-info-border: var(--ref-palette-gray-50);
+  --sys-color-severity-info-on-subtle: var(--ref-palette-gray-80);
 
   --sys-color-feedback-success-subtle: var(--ref-palette-green-20);
+  --sys-color-feedback-success-on-subtle: var(--ref-palette-green-80);
   --sys-color-feedback-success-border: var(--ref-palette-green-50);
   --sys-color-feedback-warning-subtle: var(--ref-palette-orange-20);
   --sys-color-feedback-warning-border: var(--ref-palette-orange-50);

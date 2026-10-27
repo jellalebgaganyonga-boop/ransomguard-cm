@@ -88,11 +88,11 @@ export function NotificationPreferencesPanel() {
                     disabled={mutation.isPending}
                     onClick={() => void toggle(field)}
                     className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                      prefs[field] ? 'bg-primary' : 'bg-gray-300'
+                      prefs[field] ? 'bg-primary' : 'bg-surface-muted'
                     }`}
                   >
                     <span
-                      className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                      className={`inline-block h-4 w-4 rounded-full bg-elevated shadow transition-transform ${
                         prefs[field] ? 'translate-x-6' : 'translate-x-1'
                       }`}
                     />

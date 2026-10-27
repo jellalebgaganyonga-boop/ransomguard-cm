@@ -80,7 +80,7 @@ export function UserActionsPage() {
           type="button"
           onClick={exportCsv}
           disabled={!data?.items.length}
-          className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50"
+          className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-on hover:bg-primary-hover disabled:opacity-50"
         >
           {t('audit.exportCsv')}
         </button>
@@ -109,7 +109,7 @@ export function UserActionsPage() {
       <div className="rounded-lg border border-border-subtle bg-canvas overflow-x-auto" tabIndex={0} role="region" aria-label={t('a11y.scrollableTable')}>
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-border-subtle bg-gray-50">
+            <tr className="border-b border-border-subtle bg-surface-subtle">
               <th className="px-4 py-3 text-left font-medium text-text-muted">{t('userActions.col.date')}</th>
               <th className="px-4 py-3 text-left font-medium text-text-muted">{t('userActions.col.action')}</th>
               <th className="px-4 py-3 text-left font-medium text-text-muted">{t('userActions.col.user')}</th>
@@ -132,12 +132,12 @@ export function UserActionsPage() {
               </tr>
             ) : (
               data.items.map((item) => (
-                <tr key={item.id} className="border-b border-border-subtle last:border-0 hover:bg-gray-50/50">
+                <tr key={item.id} className="border-b border-border-subtle last:border-0 hover:bg-surface-subtle">
                   <td className="px-4 py-3 whitespace-nowrap font-mono text-xs">
                     {formatDate(item.created_at)}
                   </td>
                   <td className="px-4 py-3">
-                    <span className="inline-block rounded bg-gray-100 px-2 py-0.5 text-xs font-medium">
+                    <span className="inline-block rounded bg-surface-muted px-2 py-0.5 text-xs font-medium text-text-primary">
                       {t(`userActions.actionType.${item.action_type}`, item.action_type)}
                     </span>
                   </td>

@@ -154,7 +154,7 @@ export function AgentsListPage() {
             className={[
               'rounded-full px-3 py-1 text-xs font-medium transition-colors',
               statusFilter === f.value
-                ? 'bg-primary text-white'
+                ? 'bg-primary text-primary-on'
                 : 'bg-surface-subtle text-text-secondary hover:bg-surface-muted',
             ].join(' ')}
           >
@@ -286,7 +286,7 @@ export function AgentsListPage() {
           role="dialog"
           aria-modal="true"
           aria-label={t('agents.provision.title', 'Add new agent')}
-          className="fixed inset-0 z-modal flex items-center justify-center bg-black/50"
+          className="fixed inset-0 z-modal flex items-center justify-center bg-scrim"
         >
           <div className="relative w-full max-w-lg rounded-xl bg-elevated p-6 shadow-xl">
             <button

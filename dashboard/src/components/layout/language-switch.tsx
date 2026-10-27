@@ -58,7 +58,7 @@ export function LanguageSwitch({ localOnly = false, className = '' }: LanguageSw
             className={
               'rounded px-1.5 py-0.5 text-xs font-medium transition-colors ' +
               (active
-                ? 'bg-primary text-on-primary'
+                ? 'bg-primary text-primary-on'
                 : 'text-text-secondary hover:bg-subtle hover:text-text-primary')
             }
           >
