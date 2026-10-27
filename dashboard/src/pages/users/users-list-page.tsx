@@ -18,7 +18,7 @@ import { useNavigate } from 'react-router-dom';
 import { UserPlus, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useMe } from '@/hooks/use-me';
-import { useUserList } from '@/hooks/use-users';
+import { useUsersWithRoles } from '@/hooks/use-users';
 import { canDisable, canEnable } from '@/lib/user-permissions';
 import { formatDistanceToNow } from '@/lib/format-date';
 import { DisableEnableModal } from '@/components/users/disable-enable-modal';
@@ -48,7 +48,9 @@ export function UsersListPage() {
   const [offset, setOffset] = useState(0);
   const [modal, setModal] = useState<ModalState>({ kind: 'none' });
 
-  const { data, isLoading, isError, refetch } = useUserList({ offset, limit: PAGE_SIZE });
+  // The roles are part of what this page is for, and GET /dashboard/users does not carry
+  // them. users-with-roles does, admin-only and tenant-scoped.
+  const { data, isLoading, isError, refetch } = useUsersWithRoles();
 
   // Redirect non-admin (belt-and-suspenders — ProtectedRoute already guards /users)
   if (me && !me.roles.includes('tenant_admin')) {
@@ -115,6 +117,7 @@ export function UsersListPage() {
                   {[
                     t('users.fullName', 'Nom complet'),
                     t('users.email', 'Email'),
+                    t('users.roles.column', 'Roles'),
                     t('users.status', 'Status'),
                     t('users.lastLogin', 'Last login'),
                     t('alerts.list.col.actions', 'Actions'),
@@ -144,6 +147,22 @@ export function UsersListPage() {
                     </td>
                     <td className="px-4 py-3 font-mono text-text-secondary">
                       {user.email}
+                    </td>
+                    <td className="px-4 py-3">
+                      {user.roles.length === 0 ? (
+                        <span className="text-text-tertiary">{t('users.roles.none', 'No role')}</span>
+                      ) : (
+                        <span className="flex flex-wrap gap-1">
+                          {user.roles.map((role) => (
+                            <span
+                              key={role}
+                              className="rounded-full bg-surface-muted px-2 py-0.5 text-xs text-text-primary"
+                            >
+                              {t(`users.roles.${role}`, role)}
+                            </span>
+                          ))}
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <span

@@ -311,7 +311,12 @@
       "selfDemotionError": "You cannot remove the tenant_admin role from your own account.",
       "replacesAll": "Ticked below is what this user has now. Saving replaces all of their roles with what is ticked.",
       "currentUnavailable": "The roles this user has now could not be read.",
-      "loadingCurrent": "Reading current roles..."
+      "loadingCurrent": "Reading current roles...",
+      "column": "Roles",
+      "none": "No role",
+      "tenant_admin": "Administrator",
+      "security_analyst": "Security analyst",
+      "read_only_auditor": "Read-only auditor"
     }
   },
   "agents": {

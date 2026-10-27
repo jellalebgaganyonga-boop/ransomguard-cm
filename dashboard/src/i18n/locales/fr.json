@@ -311,7 +311,12 @@
       "selfDemotionError": "Vous ne pouvez pas retirer le rôle tenant_admin de votre propre compte.",
       "replacesAll": "Ci-dessous, les rôles actuels de cet utilisateur. Enregistrer remplace tous ses rôles par ceux qui sont cochés.",
       "currentUnavailable": "Les rôles actuels de cet utilisateur n'ont pas pu être lus.",
-      "loadingCurrent": "Lecture des rôles actuels..."
+      "loadingCurrent": "Lecture des rôles actuels...",
+      "column": "Rôles",
+      "none": "Aucun rôle",
+      "tenant_admin": "Administrateur",
+      "security_analyst": "Analyste sécurité",
+      "read_only_auditor": "Auditeur en lecture seule"
     }
   },
   "agents": {
