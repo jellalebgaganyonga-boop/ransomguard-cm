@@ -15,7 +15,7 @@ namespace RansomGuard.Agent.Core.Persistence.Migrations
         protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
-            modelBuilder.HasAnnotation("ProductVersion", "8.0.32");
+            modelBuilder.HasAnnotation("ProductVersion", "8.0.33");
 
             modelBuilder.Entity("RansomGuard.Agent.Core.Persistence.Entities.AgentState", b =>
                 {
@@ -138,6 +138,9 @@ namespace RansomGuard.Agent.Core.Persistence.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("UploadedAt")
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");

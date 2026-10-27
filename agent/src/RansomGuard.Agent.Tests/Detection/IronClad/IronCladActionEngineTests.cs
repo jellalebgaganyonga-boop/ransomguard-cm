@@ -300,6 +300,12 @@ public sealed class IronCladActionEngineTests : IDisposable
     /// <summary>Fake audit log for unit tests.</summary>
     private sealed class FakeAuditLogRepository(List<string>? journal = null) : IAuditLogRepository
     {
+
+        public Task<IReadOnlyList<RansomGuard.Agent.Core.Persistence.Entities.AuditLog>> GetPendingUploadAsync(int max, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<RansomGuard.Agent.Core.Persistence.Entities.AuditLog>>([]);
+
+        public Task MarkUploadedAsync(IReadOnlyCollection<Guid> ids, DateTime uploadedAt, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
         public Task AppendAsync(string action, string details, string? entityType = null, Guid? entityId = null, CancellationToken cancellationToken = default)
         {
             journal?.Add($"audit:{action}");

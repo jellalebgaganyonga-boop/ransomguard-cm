@@ -36,6 +36,18 @@ public interface IAuditLogRepository
     Task<IReadOnlyList<AuditLog>> GetByTimeRangeAsync(DateTime from, DateTime to, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// The chained entries this workstation has not handed to the GRID yet, oldest first.
+    /// </summary>
+    /// <remarks>
+    /// In sequence order, never by time: the GRID refuses a gap, and two entries can share a
+    /// clock tick while a clock that is put right jumps over a whole afternoon.
+    /// </remarks>
+    Task<IReadOnlyList<AuditLog>> GetPendingUploadAsync(int max, CancellationToken cancellationToken = default);
+
+    /// <summary>Marks entries as handed over, after the GRID has accepted them.</summary>
+    Task MarkUploadedAsync(IReadOnlyCollection<Guid> ids, DateTime uploadedAt, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Verifies the integrity of the audit log hash chain.
     /// Returns true if the chain is intact, false if tampered.
     /// </summary>

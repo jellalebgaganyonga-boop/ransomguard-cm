@@ -12,7 +12,7 @@ namespace RansomGuard.Agent.Core.Security.Cryptography;
 /// Compliant with ANTIC audit trail requirements and Cameroon Law 2024/017.
 /// </summary>
 [SupportedOSPlatform("windows")]
-public sealed class AuditLogSigner
+public sealed class AuditLogSigner : IAuditUploadSigner
 {
     private readonly Key _signingKey;
     private readonly PublicKey _publicKey = null!;
@@ -73,6 +73,35 @@ public sealed class AuditLogSigner
         byte[] payload = BuildCanonicalPayload(id, timestamp, action, previousHash, currentHash);
         byte[] signature = Algorithm.Sign(_signingKey, payload);
         return Convert.ToBase64String(signature);
+    }
+
+    /// <summary>
+    /// Signs the bytes the GRID will verify: the canonical JSON of an entry, not the packed
+    /// binary payload <see cref="Sign(Guid, DateTime, string, string?, string)"/> covers.
+    /// </summary>
+    /// <remarks>
+    /// Two signatures over one entry, on purpose. The binary one proves the local chain was not
+    /// edited on the workstation; this one is what the GRID, and an external auditor holding
+    /// only the public key, can check against the payload they were given.
+    /// </remarks>
+    public string SignUpload(ReadOnlySpan<byte> canonicalJson)
+    {
+        byte[] signature = Algorithm.Sign(_signingKey, canonicalJson);
+        return Convert.ToBase64String(signature);
+    }
+
+    /// <summary>
+    /// Which key signed it. The GRID stores this beside every entry so a rotated key does not
+    /// make the entries before it unverifiable.
+    /// </summary>
+    /// <inheritdoc />
+    public string KeyId
+    {
+        get
+        {
+            byte[] raw = _publicKey.Export(KeyBlobFormat.RawPublicKey);
+            return Convert.ToHexString(SHA256.HashData(raw))[..32].ToLowerInvariant();
+        }
     }
 
     /// <summary>

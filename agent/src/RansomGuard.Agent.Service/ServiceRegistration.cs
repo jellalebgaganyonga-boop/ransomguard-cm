@@ -178,6 +178,7 @@ public static class ServiceRegistration
         var auditLogSigner = new AuditLogSigner(keyDir,
             Microsoft.Extensions.Logging.Abstractions.NullLogger<AuditLogSigner>.Instance);
         services.AddSingleton(auditLogSigner);
+        services.AddSingleton<IAuditUploadSigner>(auditLogSigner);
 
         // Repositories
         services.AddScoped<IDetectionEventRepository, DetectionEventRepository>();
@@ -404,6 +405,10 @@ public static class ServiceRegistration
         services.AddSingleton<GridHeartbeatService>();
         services.AddHostedService(sp => sp.GetRequiredService<GridHeartbeatService>());
         services.AddHostedService<GridCommandService>();
+
+        // The signed audit chain goes to the GRID. Without this the console's Audit log page is
+        // empty on a workstation that has been chaining entries correctly all along.
+        services.AddHostedService<AuditLogUploadService>();
 
         // Alert forwarding (the bridge: agent detections → GRID dashboard)
         services.AddSingleton<AlertForwardingService>();

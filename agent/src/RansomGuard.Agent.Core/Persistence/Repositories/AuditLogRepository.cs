@@ -200,6 +200,31 @@ public sealed class AuditLogRepository : IAuditLogRepository
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<AuditLog>> GetPendingUploadAsync(int max, CancellationToken cancellationToken = default)
+    {
+        return await _context.AuditLogs
+            .AsNoTracking()
+            .Where(a => a.UploadedAt == null)
+            .OrderBy(a => a.Sequence)
+            .Take(max)
+            .ToListAsync(cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task MarkUploadedAsync(IReadOnlyCollection<Guid> ids, DateTime uploadedAt, CancellationToken cancellationToken = default)
+    {
+        if (ids.Count == 0)
+        {
+            return;
+        }
+
+        await _context.AuditLogs
+            .Where(a => ids.Contains(a.Id))
+            .ExecuteUpdateAsync(set => set.SetProperty(a => a.UploadedAt, uploadedAt), cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
     public async Task<IReadOnlyList<AuditLog>> GetByTimeRangeAsync(DateTime from, DateTime to, CancellationToken cancellationToken = default)
     {
         return await _context.AuditLogs

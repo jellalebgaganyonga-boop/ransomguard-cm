@@ -272,13 +272,21 @@ public sealed record AuditLogEntryInput
     public required long SequenceNumber { get; init; }
 
     [JsonPropertyName("payload")]
-    public required Dictionary<string, object> Payload { get; init; }
+    public required Dictionary<string, System.Text.Json.JsonElement> Payload { get; init; }
 
     [JsonPropertyName("ed25519_signature_base64")]
     public required string Ed25519SignatureBase64 { get; init; }
 
     [JsonPropertyName("signing_key_id")]
     public required string SigningKeyId { get; init; }
+
+    /// <summary>
+    /// When the entry was recorded on the workstation. Required by the GRID's schema, which
+    /// forbids unknown fields and refuses a missing one -- so an agent that leaves it out is
+    /// answered 422 and never gets as far as having its signature checked.
+    /// </summary>
+    [JsonPropertyName("timestamp")]
+    public required DateTime Timestamp { get; init; }
 }
 
 public sealed record AuditLogBatchRequest

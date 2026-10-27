@@ -69,6 +69,17 @@ public sealed class AuditLog
     public DateTime UpdatedAt { get; init; } = DateTime.UtcNow;
 
     /// <summary>
+    /// When this entry reached the GRID, or null while it is still only on this workstation.
+    /// </summary>
+    /// <remarks>
+    /// The one field on an otherwise immutable row that is written twice, and it has to be: the
+    /// entry is the record, and whether it has been handed over is a fact about the handover,
+    /// not about the entry. Keeping it here is what lets a workstation that was offline for a
+    /// day send exactly what the GRID is missing, in order, instead of everything or nothing.
+    /// </remarks>
+    public DateTime? UploadedAt { get; set; }
+
+    /// <summary>
     /// Computes the SHA-256 hash for this audit entry given its content and the previous hash.
     /// </summary>
     /// <param name="action">The action performed.</param>
