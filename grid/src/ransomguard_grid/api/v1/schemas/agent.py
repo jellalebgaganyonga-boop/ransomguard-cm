@@ -96,6 +96,9 @@ class HeartbeatRequest(BaseModel):
 
     schema_version: Literal[1, 2] = 1
     agent_uptime_seconds: int = Field(ge=0)
+    #: The workstation's own clock when it sent this. Absent from agents older than 2026-10-28,
+    #: which is why it is optional: a hospital's agents are not all updated the same day.
+    agent_time_utc: datetime | None = None
     threat_intel_version: str | None = Field(max_length=50, default=None)
 
     # v1 only: free-form, bounded, ignored (no posture, no log).

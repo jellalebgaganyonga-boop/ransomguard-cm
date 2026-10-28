@@ -174,6 +174,8 @@ public sealed class GridHeartbeatService : BackgroundService
         return new HeartbeatRequest
         {
             AgentUptimeSeconds = uptimeSeconds,
+            // This workstation's clock, so the GRID can say how far it has drifted from its own.
+            AgentTimeUtc = _time.GetUtcNow().UtcDateTime,
             AgentVersion = AgentVersion.Current,
             OsVersion = Environment.OSVersion.ToString(),
             ThreatIntelVersion = null,

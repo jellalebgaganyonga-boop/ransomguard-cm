@@ -58,6 +58,25 @@ public sealed record HeartbeatRequest
     [JsonPropertyName("agent_uptime_seconds")]
     public required int AgentUptimeSeconds { get; init; }
 
+    /// <summary>
+    /// This workstation's own clock, now. The GRID compares it with its own to see how far the
+    /// two have drifted apart.
+    /// </summary>
+    /// <remarks>
+    /// It is here, on the heartbeat, because the heartbeat is the one thing a workstation sends
+    /// whether or not anything has happened on it. Reading the drift from an alert or an audit
+    /// entry only works while something is being recorded, and a quiet morning then reports the
+    /// skew of whatever was recorded last -- which may be from before the clock was corrected.
+    ///
+    /// <para>
+    /// Worth knowing because these clocks are not kept by anything: a bench VM has no Guest
+    /// Additions, free-runs, and is corrected by hand. A drifted workstation makes every alert
+    /// on the console look hours old, and until 2026-10-28 it stopped attribution naming anyone.
+    /// </para>
+    /// </remarks>
+    [JsonPropertyName("agent_time_utc")]
+    public DateTime? AgentTimeUtc { get; init; }
+
     [JsonPropertyName("agent_version")]
     public string? AgentVersion { get; init; }
 

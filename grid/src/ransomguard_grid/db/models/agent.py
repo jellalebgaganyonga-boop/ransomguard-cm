@@ -85,6 +85,11 @@ class AgentPosture(Base):
     tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id", ondelete="RESTRICT"), index=True, nullable=False)
     schema_version: Mapped[int] = mapped_column(Integer, nullable=False)
     agent_uptime_seconds: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    #: The workstation's own clock at the moment it sent this heartbeat. Compared with
+    #: ``received_at`` it says how far the two have drifted apart -- the bench VMs have no Guest
+    #: Additions and free-run, and a drifted workstation makes every alert look hours old.
+    #: Null from an agent older than 2026-10-28, which did not send it.
+    agent_clock_utc: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     threat_intel_version: Mapped[str | None] = mapped_column(String(50), nullable=True)
     last_detection_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # Null = the agent could not measure it ("unavailable"), never 0.

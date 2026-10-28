@@ -173,6 +173,9 @@ class AgentPostureItem(BaseModel):
     schema_version: int
     received_at: datetime
     agent_uptime_seconds: int
+    #: How far this workstation's clock is from the GRID's, in seconds, at the last heartbeat.
+    #: Positive: the workstation is behind. None from an agent that does not report its clock.
+    clock_skew_seconds: int | None = None
     threat_intel_version: str | None
     last_detection_at: datetime | None
     system_free_bytes: int | None

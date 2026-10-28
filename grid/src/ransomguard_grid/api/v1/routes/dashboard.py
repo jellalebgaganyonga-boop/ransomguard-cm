@@ -544,6 +544,10 @@ async def _agent_items(db: AsyncSession, tenant_id: str, agents: list[Agent]) ->
                 schema_version=posture.schema_version,
                 received_at=posture.received_at,
                 agent_uptime_seconds=posture.agent_uptime_seconds,
+                clock_skew_seconds=(
+                    int((posture.received_at - posture.agent_clock_utc).total_seconds())
+                    if posture.agent_clock_utc is not None else None
+                ),
                 threat_intel_version=posture.threat_intel_version,
                 last_detection_at=posture.last_detection_at,
                 system_free_bytes=posture.system_free_bytes,

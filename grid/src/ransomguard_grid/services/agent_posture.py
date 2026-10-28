@@ -123,6 +123,10 @@ class PostureSnapshot:
     schema_version: int
     received_at: datetime  # server clock
     agent_uptime_seconds: int
+    #: The workstation's own clock when it sent this heartbeat. Beside received_at it gives the
+    #: drift between the two, which on a bench VM with no Guest Additions is whatever the last
+    #: hand correction left. None from an agent older than 2026-10-28.
+    agent_clock_utc: datetime | None = None
     modules: Mapping[str, ModuleStatus] = field(default_factory=dict)
     pending_alerts: int | None = None
     last_upload_ok_at: datetime | None = None  # agent clock

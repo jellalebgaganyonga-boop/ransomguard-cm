@@ -46,6 +46,10 @@ async def record_heartbeat(db: AsyncSession, agent: Agent, body: HeartbeatReques
     posture.schema_version = body.schema_version
     posture.agent_uptime_seconds = body.agent_uptime_seconds
     posture.threat_intel_version = body.threat_intel_version
+    # The workstation's own clock beside the server's, so the drift between them can be seen.
+    # None from an agent older than 2026-10-28; the row then keeps whatever it had, and the
+    # reader treats a missing one as "not reported" rather than as agreement.
+    posture.agent_clock_utc = body.agent_time_utc
     posture.received_at = now
 
     disk, transmission = body.disk, body.transmission
@@ -210,6 +214,7 @@ def snapshot(posture: AgentPosture, modules: Sequence[AgentModuleStatus]) -> Pos
         schema_version=posture.schema_version,
         received_at=posture.received_at,
         agent_uptime_seconds=posture.agent_uptime_seconds,
+        agent_clock_utc=posture.agent_clock_utc,
         modules={m.module_code: ModuleStatus(m.state, m.reason_code) for m in modules},
         pending_alerts=posture.pending_alerts,
         last_upload_ok_at=posture.last_upload_ok_at,
