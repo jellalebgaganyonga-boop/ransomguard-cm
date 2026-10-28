@@ -23,10 +23,10 @@ test.describe('Header — user menu', () => {
     await expect(page.getByRole('tab', { name: 'Profile' })).toHaveAttribute('aria-selected', 'true');
   });
 
-  test('the user menu offers no way to leave English, and stays accessible', async ({ page }) => {
-    // The console is English (owner's decision, 2026-10-25). French is kept but is not offered:
-    // VITE_ENABLE_FRENCH is false, so the menu must not carry a language item at all. A console
-    // that can be switched to French by a stray click is the thing this guards against.
+  test('the bar carries the language switch, and the menu stays accessible', async ({ page }) => {
+    // The console is bilingual, English by default (owner's decision, 2026-10-28). The switch
+    // lives in the bar where it can be found, not in the account menu, so the menu carries no
+    // language item -- what changed is that the switch exists at all.
     await setupMocks(page, 'security_analyst');
     const sent: unknown[] = [];
     await page.route('**/api/v1/dashboard/me/preferences', (r) => {
@@ -34,6 +34,10 @@ test.describe('Header — user menu', () => {
       return r.fulfill({ status: 200, json: { language: 'en' } });
     });
     await loginAs(page, 'security_analyst');
+
+    // Before the menu is opened: Radix marks the rest of the page aria-hidden while it is open,
+    // so anything outside the menu is invisible to a role query from then on.
+    await expect(page.getByRole('group', { name: /language/i })).toBeVisible();
 
     await page.getByTestId('user-menu').click();
     const menu = page.getByRole('menu');

@@ -49,10 +49,10 @@ test.describe('Settings', () => {
     expect(critical, `Critical/serious a11y violations: ${JSON.stringify(critical, null, 2)}`).toEqual([]);
   });
 
-  test('the Language tab offers English only', async ({ page }) => {
-    // The console is English (owner's decision, 2026-10-25). French is kept -- fr.json is still
-    // there and still loads if VITE_ENABLE_FRENCH is turned on -- but it is not offered, so the
-    // Settings tab must show one choice and storing a language must not be reachable from it.
+  test('the Language tab offers both languages', async ({ page }) => {
+    // The console is bilingual, English by default (owner's decision, 2026-10-28), so the tab
+    // offers both. English stays selected until somebody chooses otherwise: the browser's own
+    // language decides nothing.
     await setupMocks(page, 'security_analyst');
     await mockPrefs(page);
     const sent: unknown[] = [];
@@ -66,10 +66,11 @@ test.describe('Settings', () => {
     await expect(page.getByRole('tab', { name: 'Language' })).toHaveAttribute('aria-selected', 'true');
 
     const select = page.getByRole('tabpanel').getByRole('combobox');
-    await expect(select.getByRole('option')).toHaveCount(1);
+    await expect(select.getByRole('option')).toHaveCount(2);
     await expect(select.getByRole('option', { name: 'English' })).toHaveCount(1);
+    await expect(select.getByRole('option', { name: /Fran/ })).toHaveCount(1);
 
-    // The page stays English, and nothing was stored because nothing could be chosen.
+    // Offered is not chosen: the page is still English and nothing has been stored.
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Settings');
     expect(sent).toEqual([]);
   });

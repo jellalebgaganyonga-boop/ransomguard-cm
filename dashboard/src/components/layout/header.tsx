@@ -4,7 +4,7 @@
 // US1.2 AC1.2.4 — Logout always succeeds client-side
 // ============================================================
 
-import { Bell, Globe, LogOut, Menu, Moon, Settings, Sun } from 'lucide-react';
+import { Bell, LogOut, Menu, Moon, Settings, Sun } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -28,7 +28,6 @@ import {
 } from '@/components/ui/dialog';
 import { useUIStore } from '@/stores/ui.store';
 import { useLogout } from '@/hooks/use-auth';
-import { useLanguage } from '@/hooks/use-language';
 import { FRENCH_ENABLED } from '@/i18n';
 import { LanguageSwitch } from '@/components/layout/language-switch';
 import { useTheme } from '@/hooks/use-theme';
@@ -53,7 +52,6 @@ export function Header({ me }: HeaderProps) {
   const toggleMobileSidebar = useUIStore((s) => s.toggleMobileSidebar);
   const logoutMutation = useLogout();
   const navigate = useNavigate();
-  const language = useLanguage();
   const theme = useTheme();
 
   // AC1.2.1 + AC1.2.4: logout wired to backend, always clears client state
@@ -174,13 +172,6 @@ export function Header({ me }: HeaderProps) {
               <Settings className="size-4" aria-hidden="true" />
               {t('header.mySettings')}
             </DropdownMenuItem>
-            {/* The other language is only offered when the build enables French. */}
-            {FRENCH_ENABLED && (
-              <DropdownMenuItem onSelect={() => void language.choose(language.other)} disabled={language.isPending}>
-                <Globe className="size-4" aria-hidden="true" />
-                {t('header.switchLanguage', { language: LANGUAGE_NAMES[language.other] })}
-              </DropdownMenuItem>
-            )}
             <DropdownMenuSeparator />
             {/* AC1.2.1: single session logout */}
             <DropdownMenuItem
