@@ -69,6 +69,13 @@ export function useEnableUser() {
   });
 }
 
+/**
+ * A role change takes effect on the server immediately -- the roles are read from the database on
+ * every request, not from the token. What has to catch up is this console: the user list, the
+ * dialog's pre-ticked boxes, and ['me'], which decides which menus are drawn and so matters when
+ * an administrator changes their own roles or their own browser is the one signed in as the user
+ * being changed.
+ */
 export function useUpdateUserRoles() {
   const queryClient = useQueryClient();
   const tenantId = useTenantId();
@@ -77,6 +84,8 @@ export function useUpdateUserRoles() {
       updateUserRoles(userId, payload),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['users', tenantId] });
+      void queryClient.invalidateQueries({ queryKey: ['users-with-roles', tenantId] });
+      void queryClient.invalidateQueries({ queryKey: ['me'] });
     },
   });
 }

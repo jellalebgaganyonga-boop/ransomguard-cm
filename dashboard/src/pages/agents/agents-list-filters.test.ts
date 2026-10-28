@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { STATUS_FILTERS } from './agents-list-page';
+import { STATUS_FILTERS } from './agent-status-filters';
 
 /**
  * A filter that can never match anything is worse than no filter: it is tried once, it returns an

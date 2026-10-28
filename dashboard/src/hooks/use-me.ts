@@ -54,11 +54,28 @@ const KNOWN_ROLES: readonly Role[] = [
   'read_only_auditor',
 ] as const;
 
+/**
+ * How long the console may go on drawing menus for the role the user had.
+ *
+ * The server does not care: `require_roles` reads the roles from the database on every request,
+ * so a role change takes effect on the user's very next request with the token they already hold
+ * (grid/tests/api/test_role_change_takes_effect.py). The menus here are a convenience over that,
+ * never the authority.
+ *
+ * But a convenience that is wrong for five minutes -- the old staleTime -- is a console that
+ * shows an analyst actions the server will refuse, so it is re-read every minute and whenever the
+ * window is focused again. Anything the console itself changes about roles invalidates ['me'] on
+ * the spot (see useUpdateUserRoles), so the lag only applies to a change made elsewhere.
+ */
+export const ME_REFRESH_MS = 60 * 1000;
+
 export function useMe() {
   return useQuery<MeResponse>({
     queryKey: ['me'],
     queryFn: fetchMe,
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: ME_REFRESH_MS / 2,
+    refetchInterval: ME_REFRESH_MS,
+    refetchOnWindowFocus: true,
     retry: false, // auth failures should not retry — handled by axios interceptor
   });
 }
