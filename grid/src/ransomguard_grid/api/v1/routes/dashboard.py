@@ -734,11 +734,21 @@ async def get_metrics_summary(
     now = datetime.now(UTC)
     day_ago = now - timedelta(hours=24)
 
+    # The fleet, by the same rule the Agents page uses: a decommissioned agent is a machine that
+    # was reinstalled or retired, not one that could be protected, so it is not in the
+    # denominator. Counting every row the tenant ever had put "Active endpoints 1/14" on the
+    # dashboard beside an Agents page listing two workstations -- twelve of the fourteen were
+    # rows left by rebuilding the same bench machine, and a hospital reads 1/14 as thirteen
+    # machines with nothing watching them.
     total_agents = (await db.execute(
-        select(func.count()).select_from(Agent).where(Agent.tenant_id == tid)
+        select(func.count()).select_from(Agent).where(
+            Agent.tenant_id == tid, Agent.status != AgentStatus.decommissioned,
+        )
     )).scalar_one()
     active_agents = (await db.execute(
-        select(func.count()).select_from(Agent).where(Agent.tenant_id == tid, Agent.status == "active")
+        select(func.count()).select_from(Agent).where(
+            Agent.tenant_id == tid, Agent.status == AgentStatus.active,
+        )
     )).scalar_one()
     alerts_24h = (await db.execute(
         select(func.count()).select_from(Alert).where(Alert.tenant_id == tid, Alert.detected_at >= day_ago)

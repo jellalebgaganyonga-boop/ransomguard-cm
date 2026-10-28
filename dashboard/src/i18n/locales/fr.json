@@ -328,7 +328,6 @@
       "totalEndpoints": "endpoints enregistrés",
       "active": "Actif",
       "disconnected": "Déconnecté",
-      "provisioned": "Provisionné",
       "decommissioned": "Désactivé",
       "version": "Version",
       "empty": "Aucun agent enregistré",

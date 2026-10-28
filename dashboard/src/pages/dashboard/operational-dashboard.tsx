@@ -111,7 +111,8 @@ export function OperationalDashboard() {
   const staleAgents = agentList.filter(isSignalLostRed);
   const hasStaleAgents = staleAgents.length > 0;
   const staleCount = staleAgents.length;
-  // total_agents - active_agents gives the "not active" count (disconnected + decommissioned + provisioned)
+  // total_agents is the fleet without the decommissioned rows -- the same count the Agents page
+  // shows -- so the difference is the workstations that are enrolled and not reporting.
   const inactiveCount = (summary?.total_agents ?? 0) - (summary?.active_agents ?? 0);
 
   return (
