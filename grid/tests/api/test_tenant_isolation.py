@@ -37,7 +37,13 @@ async def _create_two_tenants() -> dict[str, str]:
                 session.add(existing_role)
                 await session.flush()
 
-            user = User(id=str(uuid4()), tenant_id=tenant.id, email=f"admin-{label}@test.local", hashed_password=hash_password(_PASSWORD), full_name=f"Admin {label.upper()}", is_active=True, created_at=datetime.now(UTC))
+# The email carries the same suffix as the tenant code. Two calls used to make two users
+            # called admin-a@test.local, and a helper that looks an admin up by email alone
+            # (test_admin_protection._admin_id) then raised MultipleResultsFound rather than
+            # failing its own assertion -- seen once on 2026-10-28, on a loaded machine, in a
+            # test that passes on its own. Rows from one test reaching the next is the real
+            # fault; a unique email means it cannot be mistaken for a permission bug.
+            user = User(id=str(uuid4()), tenant_id=tenant.id, email=f"admin-{label}-{suffix}@test.local", hashed_password=hash_password(_PASSWORD), full_name=f"Admin {label.upper()}", is_active=True, created_at=datetime.now(UTC))
             session.add(user)
 
             agent = Agent(id=str(uuid4()), tenant_id=tenant.id, hostname=f"pc-{label}", fqdn=f"pc-{label}.local", os_version="10", agent_version="1.0", hardware_fingerprint=f"fp-{label}-{suffix}", status=AgentStatus.active)
