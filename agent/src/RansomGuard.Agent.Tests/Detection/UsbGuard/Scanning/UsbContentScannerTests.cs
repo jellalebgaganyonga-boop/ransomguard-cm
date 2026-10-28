@@ -261,9 +261,12 @@ public sealed class UsbContentScannerTests : IDisposable
     // --- Entropy Scanner Tests (28-29) ---
 
     [Fact]
-    public async Task Entropy_Above_7_9_On_Docx_Flagged_Medium()
+    public async Task Entropy_On_A_File_That_Is_Not_What_It_Claims_Is_Reported_At_Low()
     {
-        // Create a file with random bytes (high entropy) and .docx extension
+        // High entropy and a name that promises a known format, with none of its header: what a
+        // file looks like once it has been encrypted and renamed. It is said, at Low -- Medium is
+        // where the drive is made read-only, and that belongs to a real sign (bootable, autorun,
+        // an executable), not to entropy on its own. See CompressedByDesignTests.
         string path = Path.Combine(_testDir, "encrypted.docx");
         await File.WriteAllBytesAsync(path, RandomNumberGenerator.GetBytes(200 * 1024)); // 200 KB
 
@@ -271,17 +274,20 @@ public sealed class UsbContentScannerTests : IDisposable
 
         finding.ShouldNotBeNull();
         finding.Entropy.ShouldBeGreaterThan(7.5);
-        finding.Severity.ShouldBe(ScanSeverity.Medium);
+        finding.Severity.ShouldBe(ScanSeverity.Low);
     }
 
     [Fact]
-    public async Task Entropy_On_Zip_Not_Flagged()
+    public async Task Entropy_On_A_Real_Zip_Is_Not_Flagged()
     {
+        // Forgiven for its header, not its name: the owner's key was called Critical because the
+        // forgiven formats were listed by extension and .pdf was not among them.
         string path = Path.Combine(_testDir, "archive.zip");
-        await File.WriteAllBytesAsync(path, RandomNumberGenerator.GetBytes(200 * 1024));
+        byte[] zip = [0x50, 0x4B, 0x03, 0x04, .. RandomNumberGenerator.GetBytes(200 * 1024)];
+        await File.WriteAllBytesAsync(path, zip);
 
         var finding = await _entropyScanner.ScanAsync(path);
-        finding.ShouldBeNull("ZIP files are in high-entropy whitelist");
+        finding.ShouldBeNull("a zip is compressed by design: high entropy is what it is made of");
     }
 
     // --- Rate Limiter + Cancellation Tests (30) ---
