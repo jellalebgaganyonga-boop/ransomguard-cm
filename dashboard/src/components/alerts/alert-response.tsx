@@ -50,7 +50,7 @@ export function AlertResponse({ alert, role }: { alert: AlertDetail; role: Role 
       stateText = t('alerts.response.resumed', 'Process resumed at your request: {who}', { who });
       break;
     case 'suspend_failed':
-      stateText = t('alerts.response.suspendFailed', 'Suspension impossible : {who} tourne encore ({reason})', {
+      stateText = t('alerts.response.suspendFailed', 'Suspension failed: {who} still runs ({reason})', {
         who, reason: t(`alerts.response.reason.${view.reason ?? 'unknown'}`, view.reason ?? ''),
       });
       break;
@@ -65,11 +65,11 @@ export function AlertResponse({ alert, role }: { alert: AlertDetail; role: Role 
 
   const commandLabel = (type: string) =>
     type === 'suspend_process'
-      ? t('alerts.response.command.suspend', 'Suspendre')
+      ? t('alerts.response.command.suspend', 'Suspend')
       : type === 'resume_process'
-        ? t('alerts.response.command.resume', 'Reprendre')
+        ? t('alerts.response.command.resume', 'Resume')
         : type === 'isolate'
-          ? t('alerts.response.command.isolate', 'Isoler')
+          ? t('alerts.response.command.isolate', 'Isolate')
           : type;
 
   return (

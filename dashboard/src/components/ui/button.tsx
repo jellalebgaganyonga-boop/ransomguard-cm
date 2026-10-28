@@ -67,6 +67,25 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     ref
   ) => {
     const Comp = asChild ? Slot : 'button';
+
+    // Slot takes exactly one child and replaces it; a spinner beside the child -- even the
+    // `false` an unused `isLoading &&` leaves behind -- makes two, and React throws during
+    // render. Every `asChild` button did that, so any address the console does not know blanked
+    // the whole page instead of showing "page not found": the error escapes to the root, React
+    // unmounts the tree, and what is left is a white screen with the console's own 404 page the
+    // thing that broke it. A button rendered as a link is also never the one that is loading.
+    if (asChild) {
+      return (
+        <Comp
+          ref={ref}
+          className={cn(buttonVariants({ variant, size }), className)}
+          {...props}
+        >
+          {children}
+        </Comp>
+      );
+    }
+
     return (
       <Comp
         ref={ref}
