@@ -142,7 +142,11 @@ public sealed class CanaryAttributorTests
     public void A_start_event_and_a_running_process_that_disagree_mean_the_PID_was_reused()
     {
         // The start seen in the session belongs to an earlier process; the running one is newer.
+        // Nobody has touched this machine's clock, so the event is observed at its own time and
+        // the two clocks agree: what follows is PID reuse and nothing else.
+        _wallClock.SetWallClock(WriteAt.AddHours(-1));
         _processes.OnProcessStart(new ProcessStartRecord(4242, WriteAt.AddHours(-1)));
+        _wallClock.SetWallClock(WriteAt);
         _running[4242] = new ProcessFacts(WriteAt.AddSeconds(5), "newcomer", null);
 
         _attributor.Resolve(Detection(Write(4242)), etwRunning: true).Reason.ShouldBe("pid_reused");
