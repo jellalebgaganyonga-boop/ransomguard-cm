@@ -22,9 +22,18 @@ public sealed class CanaryAttributorTests
     private readonly ProcessCreationTimes _processes;
     private readonly CanaryAttributor _attributor;
 
+    /// <summary>
+    /// The wall clock, held still beside the session's. Every start event is read as a pair --
+    /// the session's stamp and this -- and the difference between them is the offset the
+    /// attribution uses to read a write time in the frame a process creation time is in. Held at
+    /// the moment of the write, so an undisturbed machine has an offset of zero.
+    /// </summary>
+    private readonly ManualTimeProvider _wallClock = new();
+
     public CanaryAttributorTests()
     {
-        _processes = new ProcessCreationTimes(pid => _running.GetValueOrDefault(pid));
+        _wallClock.SetWallClock(WriteAt);
+        _processes = new ProcessCreationTimes(pid => _running.GetValueOrDefault(pid), _wallClock);
         _attributor = new CanaryAttributor(_processes);
     }
 
@@ -140,13 +149,17 @@ public sealed class CanaryAttributorTests
     }
 
     [Fact]
-    public void The_start_event_and_the_OS_within_50_ms_are_the_same_process()
+    public void The_session_stamp_and_the_OS_time_are_both_kept_for_their_own_question()
     {
         _processes.OnProcessStart(new ProcessStartRecord(4242, WriteAt.AddMinutes(-3).AddMilliseconds(3)));
 
         ProcessFacts facts = _processes.Read(4242).ShouldNotBeNull();
 
-        facts.CreatedAtUtc.ShouldBe(WriteAt.AddMinutes(-3).AddMilliseconds(3)); // the start event's time
+        // The wall-clock time is what a person reads and what the response engine re-checks
+        // against the live process, so it is kept as Windows reports it; the session's own
+        // stamp is kept beside it for the ordering question, not folded into it.
+        facts.CreatedAtUtc.ShouldBe(WriteAt.AddMinutes(-3));
+        facts.SessionCreatedAtUtc.ShouldBe(WriteAt.AddMinutes(-3).AddMilliseconds(3));
         facts.Name.ShouldBe("evil");                                           // the running process's name
     }
 
@@ -186,6 +199,8 @@ public sealed class CanaryAttributorTests
     [InlineData(9.5)]  // the jump actually made on PC-RECEPTION
     public void A_wall_clock_change_while_the_agent_runs_still_names_the_writer(double hours)
     {
+        // The clock was corrected, so Windows now reads that many hours away from the session.
+        _wallClock.SetWallClock(WriteAt.AddHours(hours));
         // The session saw this process start, 20 seconds before the write, on the session clock.
         _processes.OnProcessStart(new ProcessStartRecord(4242, WriteAt.AddSeconds(-20)));
         // The wall clock then moved, so the OS reports the same process with a creation time
@@ -210,6 +225,7 @@ public sealed class CanaryAttributorTests
         // The guard that must survive the fix. The session saw this PID start AFTER the write,
         // which is the real signature of reuse -- both times from the session's own clock, so
         // the comparison holds whatever the wall clock has done since.
+        _wallClock.SetWallClock(WriteAt.AddHours(3));
         _processes.OnProcessStart(new ProcessStartRecord(4242, WriteAt.AddSeconds(1)));
         _running[4242] = new ProcessFacts(WriteAt.AddSeconds(1).AddHours(3), "innocent-viewer",
             @"C:\Program Files\Imaging\viewer.exe");

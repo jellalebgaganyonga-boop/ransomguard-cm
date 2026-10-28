@@ -163,7 +163,7 @@ public sealed class FileWriteAttributionCache
         // Both times from the session's own clock; see CanaryAttributor.BornAfter. A wall-clock
         // correction while the agent runs moves Process.StartTime and leaves the session's
         // records where they were, and comparing across the two named nobody for every write.
-        if (CanaryAttributor.BornAfter(facts, firstWrite))
+        if (CanaryAttributor.BornAfter(facts, firstWrite, _processes.SessionToWallOffset))
         {
             return new AttributionOutcome(AttributionState.Unavailable, Reason: AttributionReason.PidReused);
         }

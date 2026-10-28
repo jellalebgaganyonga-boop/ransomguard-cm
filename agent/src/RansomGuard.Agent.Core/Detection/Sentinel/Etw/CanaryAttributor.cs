@@ -97,17 +97,38 @@ public sealed class ProcessCreationTimes
 
     private readonly ConcurrentDictionary<int, DateTime> _started = new();
     private readonly Func<int, ProcessFacts?> _readProcess;
+    private readonly TimeProvider _time;
+    private long _offsetTicks;
 
     /// <summary>Creates the store.</summary>
     /// <param name="readProcess">Reads a running process; the OS by default. Null when it has exited.</param>
-    public ProcessCreationTimes(Func<int, ProcessFacts?>? readProcess = null)
+    /// <param name="time">The wall clock, for measuring how far the session's clock is from it.</param>
+    public ProcessCreationTimes(Func<int, ProcessFacts?>? readProcess = null, TimeProvider? time = null)
     {
         _readProcess = readProcess ?? ReadRunningProcess;
+        _time = time ?? TimeProvider.System;
     }
+
+    /// <summary>
+    /// How far the wall clock has moved away from the clock the ETW session was opened with.
+    /// </summary>
+    /// <remarks>
+    /// Zero on a machine whose time nobody touches. On a bench VM with no Guest Additions, whose
+    /// clock free-runs and is corrected by hand, it becomes however far the correction moved it:
+    /// the session goes on stamping records against the clock it started with, and a process
+    /// born afterwards is stamped by Windows against the new one. It is measured, not assumed,
+    /// so that write times can be read in the frame a process creation time is in.
+    /// </remarks>
+    public TimeSpan SessionToWallOffset => TimeSpan.FromTicks(Interlocked.Read(ref _offsetTicks));
 
     /// <summary>The session callback for Process/Start. Never blocks.</summary>
     public void OnProcessStart(ProcessStartRecord record)
     {
+        // Every start event is a pair of readings of the same instant, one from each clock. The
+        // difference between them is the offset; it is overwritten rather than averaged because
+        // the newest reading is the one that matters after a correction.
+        Interlocked.Exchange(ref _offsetTicks, (_time.GetUtcNow().UtcDateTime - record.StartUtc).Ticks);
+
         _started[record.ProcessId] = record.StartUtc;
         if (_started.Count > Capacity)
         {
@@ -225,7 +246,7 @@ public sealed class CanaryAttributor
             return new AttributionOutcome(AttributionState.Unavailable, Reason: AttributionReason.ProcessExited);
         }
 
-        if (BornAfter(facts, firstWrite))
+        if (BornAfter(facts, firstWrite, _processes.SessionToWallOffset))
         {
             // The process holding this PID now was born after the write: not the writer.
             return new AttributionOutcome(AttributionState.Unavailable, Reason: AttributionReason.PidReused);
@@ -246,25 +267,32 @@ public sealed class CanaryAttributor
     /// came back pid_reused and nothing was suspended.
     ///
     /// <para>
-    /// When the session saw the process start, that is the time to use: it and the write record
-    /// are both the session's, so the answer is exact whatever the clock has done.
+    /// Two readings, and a process is refused if either says it is too young. The session's own
+    /// start timestamp against the session's write timestamp, which is exact whatever the clock
+    /// has done; and the OS creation time against the write time carried into the OS frame with
+    /// the measured offset between the two clocks.
     /// </para>
     ///
     /// <para>
-    /// When it did not, the process was already running before the session opened — and a
-    /// creation time Windows recorded then is in the same frame as the session's own records,
-    /// because a later clock change rewrites neither. So the wall-clock times may be compared
-    /// with each other; it is only comparing one against the other that was wrong.
+    /// Both are needed. The session's reading alone misses a PID recycled while a start event
+    /// was dropped, because the stale entry then describes the previous process and looks old
+    /// enough. The OS reading alone is what broke on 2026-10-27: without the offset it compares
+    /// a corrected clock against an uncorrected one and calls every writer a recycled PID.
     /// </para>
     ///
     /// <para>
-    /// Widening a tolerance was not an option: PID reuse is what this comparison exists to
-    /// catch, and a window wide enough to absorb a clock correction is wide enough to let a
-    /// recycled PID through.
+    /// No tolerance was widened. PID reuse is what this comparison exists to catch, and a window
+    /// wide enough to absorb a clock correction is wide enough to let a recycled PID through;
+    /// the offset is measured from the clocks themselves instead.
     /// </para>
     /// </remarks>
-    internal static bool BornAfter(ProcessFacts facts, DateTime firstWriteUtc) =>
-        facts.SessionCreatedAtUtc is { } inSessionFrame
-            ? inSessionFrame > firstWriteUtc
-            : facts.CreatedAtUtc > firstWriteUtc;
+    internal static bool BornAfter(ProcessFacts facts, DateTime firstWriteUtc, TimeSpan sessionToWallOffset)
+    {
+        if (facts.SessionCreatedAtUtc is { } inSessionFrame && inSessionFrame > firstWriteUtc)
+        {
+            return true;
+        }
+
+        return facts.CreatedAtUtc > firstWriteUtc + sessionToWallOffset;
+    }
 }
