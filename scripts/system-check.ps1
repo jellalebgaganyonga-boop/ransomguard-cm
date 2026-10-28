@@ -124,6 +124,20 @@ foreach ($container in $expected) {
 Write-Section '2-5. The GRID, the accounts, the workstations and the installer'
 
 $probeOutput = & python -I (Join-Path $Repo 'scripts\system_check_probe.py') --section all 2>&1
+
+# The workstation clocks. These VMs have no Guest Additions, so nothing keeps their clocks with
+# the host's: they free-run and are corrected by hand. A drifted workstation makes every alert on
+# the console look hours old, and before 2026-10-28 it blinded attribution outright -- the ETW
+# session timestamps and Process.StartTime ended up in different frames and every writer looked
+# like a recycled PID. An agent that has uploaded nothing recently says so rather than passing.
+$clockOutput = & python -I (Join-Path $Repo 'scripts\clock_skew_probe.py') --max-seconds 120 2>&1
+$clockOk = $LASTEXITCODE -eq 0
+$clockDetail = ($clockOutput | Where-Object { $_ -match '\S' } | Select-Object -First 4) -join '; '
+Add-Result -Section 'The platform answers' -Name 'Workstation clocks match the GRID' `
+    -Status $(if ($clockOk) { 'PASS' } else { 'FAIL' }) `
+    -Detail $clockDetail `
+    -Fix 'in the VM as administrator: Set-Date -Date "<correct local time>", then restart the VM so the ETW session reopens on the new clock'
+
 $currentSection = 'General'
 foreach ($line in $probeOutput) {
     $text = [string]$line

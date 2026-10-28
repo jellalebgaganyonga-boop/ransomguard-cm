@@ -280,12 +280,20 @@ class UserWithRolesItem(BaseModel):
 
 
 class AuditLogItem(BaseModel):
+    """One entry of a workstation's signed chain, as the console lists it."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: str
     agent_id: str
     sequence_number: int
     signing_key_id: str
+    action: str | None = None
+    #: When the workstation recorded it, by its own clock -- not when the GRID received it.
+    #: The two differ by the delivery delay, seconds, unless the workstation's clock has drifted,
+    #: and then they differ by however far it has drifted. The bench VMs have no Guest Additions
+    #: and free-run, so that is worth being able to see.
+    recorded_at: datetime | None = None
     received_at: datetime
 
 

@@ -238,6 +238,23 @@ if ($NoVm) {
     }
 }
 
+# -- 4b. the workstation clocks ------------------------------------------------
+
+# No Guest Additions on these VMs, so nothing keeps their clocks with the host's: they free-run
+# and are corrected by hand. A drifted workstation makes every alert on the console look hours
+# old, and before 2026-10-28 it blinded attribution outright. Worth one line before a demo.
+if (-not $NoVm) {
+    Say ''
+    Say '      workstation clocks' 'Cyan'
+    $clock = & python -I (Join-Path $Repo 'scripts\clock_skew_probe.py') --max-seconds 120 2>&1
+    $clockOk = $LASTEXITCODE -eq 0
+    foreach ($line in $clock) { Say "      $line" }
+    if (-not $clockOk) {
+        Problem 'a workstation clock is more than 2 minutes from the GRID' `
+            'in the VM as administrator: Set-Date -Date "<correct local time>", then restart the VM'
+    }
+}
+
 # -- 5. the health check -------------------------------------------------------
 
 Step '[5/5] The health check'

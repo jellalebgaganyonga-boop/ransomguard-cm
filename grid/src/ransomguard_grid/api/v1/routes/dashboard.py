@@ -1,6 +1,7 @@
 """Dashboard REST API endpoints — JWT authenticated, RBAC enforced, tenant-isolated."""
 
 import json
+from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 from uuid import uuid4
@@ -905,6 +906,30 @@ async def enable_user(
 # --- AUDIT LOGS ---
 
 
+def _audit_log_item(log: object) -> AuditLogItem:
+    """The stored entry, plus the two fields that live inside its signed payload.
+
+    ``payload_json`` is the agent's canonical JSON, exactly as it was signed, so the action and
+    the time the workstation recorded it are read from there rather than stored twice.
+    """
+    item = AuditLogItem.model_validate(log)
+    payload = getattr(log, "payload_json", None)
+    if not isinstance(payload, dict):
+        return item
+
+    recorded = payload.get("created_at")
+    parsed: datetime | None = None
+    if isinstance(recorded, str):
+        with suppress(ValueError):
+            parsed = datetime.fromisoformat(recorded.replace("Z", "+00:00"))
+
+    action = payload.get("action")
+    return item.model_copy(update={
+        "action": action if isinstance(action, str) else None,
+        "recorded_at": parsed,
+    })
+
+
 @router.get("/audit-logs", response_model=PaginatedAuditLogResponse)
 async def search_audit_logs(
     agent_id: str | None = None,
@@ -929,7 +954,7 @@ async def search_audit_logs(
         limit=limit,
     )
     return PaginatedAuditLogResponse(
-        items=[AuditLogItem.model_validate(log) for log in items],
+        items=[_audit_log_item(log) for log in items],
         total=total, offset=offset, limit=limit,
     )
 
