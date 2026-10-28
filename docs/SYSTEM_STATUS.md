@@ -1,6 +1,6 @@
 # RansomGuard-CM — what works, what is partial, what is not built
 
-**As of 2026-10-26**, branch `sprint8/recovery`.
+**As of 2026-10-28**, branch `sprint8/recovery`.
 
 Every row says how it was checked. Nothing here is a plan or an intention: a row says **works**
 only if something was run and observed. Where a thing cannot be exercised on this bench, the row
@@ -47,8 +47,9 @@ It runs to the end, prints PASS / FAIL / NOT BUILT / NOT TESTABLE HERE for each 
 | GENEALOGY — what started it | **works** | `explorer -> cmd -> powershell` on the alert page, PID 7744 matching the trigger output. Screenshot: `docs/screenshots/real/round4-english/alert_genealogy_section.png`. 8 GRID tests, 8 console tests |
 | Suspension (ADR-026) | **works** | Bench test 3: `SentinelProcessSuspended`, the writer frozen |
 | Resume from the console | **works** | Bench test 4: `SentinelProcessResumed` reaches the GRID, the PID leaves *Suspended processes*, and the process really continues on the workstation |
+| Attribution survives a clock change | **works** | The ETW session timestamps against the clock it was opened with and does not follow the wall clock, so correcting a drifted workstation while the agent ran made every writer look younger than its own write: on 2026-10-27 PC-RECEPTION raised five alerts, all `unavailable / pid_reused`, and nothing was suspended. Fixed in `8d89fd2` and `84500b9` by measuring the offset between the two clocks rather than widening any tolerance. Proven on PC-LAB on 2026-10-28: after a +3 h 01 m change the alert named `powershell PID 1152` with the chain `explorer -> cmd -> powershell` and suspended it, and again after a 7 h 52 m correction (`PID 4684`) |
 | ENTROPY | **works** | Reports `active` on PC-LAB with a named writer and rule 3 evaluated (AGT-EN-002 closed) |
-| USB GUARD | **partial** | Exercised twice with the owner's own Kingston key (FAT32, 7.21 GB, her files on it). **2026-10-26, before the fix:** Critical within a second, on the boot signature `0x55AA` that is on the first sector of every FAT32 and NTFS volume including a blank one — in the shipped Permissive mode that means the drive is made read-only, so a nurse's key would have been locked. **2026-10-27, build `7edad8a`, shipped Permissive, on PC-LAB:** no boot-signature finding at all. The module saw the key as `E:`, scanned it, and logged `High entropy 7.98–7.99` on the key's own PDFs at Warning. A `UsbGuard` Critical was still raised two minutes in, from the content scan rather than the boot signature, but **no action was taken** (`responses: []`) and the key came back `Healthy`, 4.84 GB free of 7.21 GB — identical, nothing written, nothing removed. The false positive this was meant to fix is gone; an ordinary key still reading Critical on its own documents is in what is weakest below |
+| USB GUARD | **partial** | Exercised twice with the owner's own Kingston key (FAT32, 7.21 GB, her files on it). **2026-10-26, before the fix:** Critical within a second, on the boot signature `0x55AA` that is on the first sector of every FAT32 and NTFS volume including a blank one — in the shipped Permissive mode that means the drive is made read-only, so a nurse's key would have been locked. **2026-10-27, build `7edad8a`, shipped Permissive, on PC-LAB:** no boot-signature finding at all. The module saw the key as `E:`, scanned it, and logged `High entropy 7.98–7.99` on the key's own PDFs at Warning. A `UsbGuard` Critical was still raised two minutes in, from the content scan rather than the boot signature, but **no action was taken** (`responses: []`) and the key came back `Healthy`, 4.84 GB free of 7.21 GB — identical, nothing written, nothing removed. The false positive this was meant to fix is gone. **2026-10-28, `70b5c2a`:** the content scan now recognises the formats that are compressed by design by their magic bytes rather than their extension — a renamed PDF is forgiven, a .pdf that is not one is not — and high entropy behind no known header is reported at Low, below the Medium that makes a drive read-only. Tests cover eleven formats, a renamed PDF, a fake PDF, and the whole-device line the owner's key crossed; no key has been plugged in since, so that half is CI-proven and not yet bench-proven |
 | EXFIL WATCH | **partial** | Reports `degraded / learning_phase` honestly. It cannot raise an alert until it has learned the normal traffic, so no detection has been observed |
 | IRONCLAD (offline backup) | **partial** | The code exists and is tested against a *simulated* Arduino. Never connected to real hardware. system-check §8 |
 | Anti-tampering | **not built — planned** | The services are registered but never started. As of 2026-10-26 the agent no longer reports it as a module and the console no longer shows the row: a line on every workstation reading "inactive — not implemented" is true and nothing anybody can act on. The GRID still *accepts* it, so an agent installed before that keeps its heartbeat. It is listed by system-check under what is not built, and it is the first thing in "what is weakest" below |
@@ -94,20 +95,26 @@ It runs to the end, prints PASS / FAIL / NOT BUILT / NOT TESTABLE HERE for each 
    a user is told to be suspicious of.
 3. **EXFIL WATCH has never raised an alert here.** It is honest about learning, but that means
    the module is unproven on this bench.
-4. **USB GUARD still calls an ordinary key Critical.** Not on the boot signature any more — that
-   was fixed in `6d33d77` and the key tested on 2026-10-27 produced no boot finding. It is the
-   content scan: the owner's key holds PDFs, PDFs are compressed, and compressed bytes look like
-   encrypted bytes to an entropy test (7.98–7.99 of a possible 8). Nothing was done to the key,
-   and the shipped Permissive mode says a Critical finding makes the drive read-only, so the two
-   do not agree with each other. One of them is wrong and it is not safe to assume it is the one
-   that did nothing.
+4. **USB GUARD has not been re-tested with a real key since the fix.** The content scan used to
+   call an ordinary key Critical: the owner's key holds PDFs, PDFs are compressed, and compressed
+   bytes look like encrypted bytes to an entropy test (7.98–7.99 of a possible 8). Since
+   `70b5c2a` the formats that are compressed by design are recognised by their magic bytes — PDF,
+   zip and so docx/xlsx/pptx, JPEG, PNG, MP4, 7z, RAR, gzip and the rest — and what is left is
+   reported at Low rather than Medium, which is the severity that makes a drive read-only. The
+   tests cover it, including a key of documents and photos staying below Medium while autorun.inf
+   plus an executable still reaches High. No USB key has been plugged into a bench VM since, so
+   the fix is proven in CI and not yet on hardware.
 5. **IRONCLAD has never seen real hardware.**
 6. **A bench VM's clock free-runs.** There are no Guest Additions on PC-LAB or PC-RECEPTION, so
-   nothing keeps their clocks with the host's after the VM starts. PC-LAB was **five hours and
-   sixteen minutes behind** on 2026-10-27. The time an alert was detected is the workstation's
-   own and travels with it, so a drifted workstation makes every alert look hours old — on the
-   console and in front of an audience. `deployment/bench/set-clock.ps1` sets it; nothing checks
-   it on its own.
+   nothing keeps their clocks with the host's after the VM starts: PC-LAB was five hours and
+   sixteen minutes behind on 2026-10-27, PC-RECEPTION **twenty hours and seven minutes** behind
+   on 2026-10-28. The time an alert was detected is the workstation's own and travels with it, so
+   a drifted workstation makes every alert look hours old. Two things changed on 2026-10-28:
+   attribution no longer breaks when the clock is corrected while the agent runs (`8d89fd2`,
+   `84500b9` — the ETW session's records and `Process.StartTime` had ended up in different frames
+   and every writer looked like a recycled PID), and the heartbeat now carries the workstation's
+   own clock so the drift is visible on the console and `demo-ready.ps1` refuses a demo over two
+   minutes out. `deployment/bench/set-clock.ps1` still sets it; nothing sets it automatically.
 7. **The first start after an install exceeds Windows' 30 s limit**, so `sc start` returns 1053
    and the installer's retry is what completes the installation. A warm start is 13 s.
 8. **`ip_address` is not recorded in the user-actions log**, so "who did it" is answered by
