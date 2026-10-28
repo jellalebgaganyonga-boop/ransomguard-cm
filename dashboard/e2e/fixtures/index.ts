@@ -143,6 +143,23 @@ export const MOCK_AGENTS_LIST = {
   limit: 50,
 };
 
+/**
+ * The same users, with the roles the list column shows. The console reads this endpoint for the
+ * Users page; /users does not carry roles and never did.
+ */
+export const MOCK_USERS_WITH_ROLES = {
+  get items() {
+    const roles: Record<string, string[]> = {
+      [ADMIN_ID]: ['tenant_admin'],
+      'a0e2e000-0000-0000-0000-000000000020': ['security_analyst'],
+    };
+    return MOCK_USERS_LIST.items.map((u) => ({ ...u, roles: roles[u.id] ?? ['read_only_auditor'] }));
+  },
+  get total() { return MOCK_USERS_LIST.total; },
+  offset: 0,
+  limit: 200,
+};
+
 export const MOCK_USERS_LIST = {
   items: [
     {
@@ -293,7 +310,11 @@ export async function setupMocks(page: Page, role: Role): Promise<void> {
   await page.route('**/api/v1/dashboard/commands', (r) =>
     r.fulfill({ status: 201, json: MOCK_COMMAND }));
 
-  // Users
+  // Users. The list page reads users-with-roles (the roles are a column now); other callers
+  // still use /users. The more specific pattern is registered first: Playwright matches routes
+  // in order and '**/dashboard/users*' would otherwise swallow it.
+  await page.route('**/api/v1/dashboard/users-with-roles**', (r) =>
+    r.fulfill({ status: 200, json: MOCK_USERS_WITH_ROLES }));
   await page.route('**/api/v1/dashboard/users?**', (r) =>
     r.fulfill({ status: 200, json: MOCK_USERS_LIST }));
   await page.route('**/api/v1/dashboard/users', (r) =>

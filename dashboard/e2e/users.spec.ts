@@ -31,12 +31,14 @@ test.describe('Users list — tenant_admin', () => {
         createCalled = true;
         await route.fulfill({ status: 201, json: NEW_USER });
       } else {
-        // First GET returns original list; subsequent returns updated list
+        // The list page reads users-with-roles, and this pattern catches that too, so the
+        // items have to carry roles or the response does not parse and the table stays empty.
+        const withRoles = (u: { id: string }) => ({ ...u, roles: ['read_only_auditor'] });
         await route.fulfill({
           status: 200,
           json: createCalled
-            ? { ...MOCK_USERS_LIST, items: [...MOCK_USERS_LIST.items, NEW_USER], total: 3 }
-            : MOCK_USERS_LIST,
+            ? { ...MOCK_USERS_LIST, items: [...MOCK_USERS_LIST.items, NEW_USER].map(withRoles), total: 3 }
+            : { ...MOCK_USERS_LIST, items: MOCK_USERS_LIST.items.map(withRoles) },
         });
       }
     });
@@ -123,10 +125,12 @@ test.describe('Users list — tenant_admin', () => {
     const modal = page.getByRole('dialog');
     await expect(modal).toBeVisible();
 
-    // Check all non-admin roles only (no tenant_admin checkbox checked)
+    // The dialog shows what the user has, so the admin's own tenant_admin starts ticked. It
+    // used to start unchecked for everyone, which is how an administrator removed a role by
+    // accident. Clearing it is what has to be refused.
     const tenantAdminCb = modal.getByRole('checkbox', { name: /tenant_admin/i });
-    // If it's unchecked (starts unchecked per GAP-08), submit should be blocked
-    await expect(tenantAdminCb).not.toBeChecked(); // GAP-08: starts unchecked
+    await expect(tenantAdminCb).toBeChecked();
+    await tenantAdminCb.uncheck();
 
     const saveBtn = modal.getByRole('button', { name: /enregistrer|save/i });
     await saveBtn.click();
