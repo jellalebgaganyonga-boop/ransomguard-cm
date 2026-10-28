@@ -1,13 +1,13 @@
 # System check - 2026-10-28
 
-Run at 2026-10-28 07:44:51 on KELYFA-PC by `scripts/system-check.ps1`.
+Run at 2026-10-28 23:54:55 on KELYFA-PC by `scripts/system-check.ps1`.
 
 A line says PASS only if it was checked and worked. NOT BUILT and NOT TESTABLE HERE are
 the honest state of the system, not failures, and do not change the exit code.
 
 | | Count |
 |---|---|
-| PASS | 27 |
+| PASS | 29 |
 | FAIL | 0 |
 | NOT BUILT | 4 |
 | NOT TESTABLE HERE | 4 |
@@ -16,16 +16,17 @@ the honest state of the system, not failures, and do not change the exit code.
 
 | Status | Check | Detail |
 |---|---|---|
-| PASS | Container grid-nginx | Up 35 hours |
-| PASS | Container grid-api | Up 8 hours (healthy) |
-| PASS | Container grid-mysql | Up 35 hours (healthy) |
-| PASS | Container grid-redis | Up 35 hours (healthy) |
-| PASS | Container grid-notifier | Up 25 hours (healthy) |
+| PASS | Container grid-nginx | Up 2 days |
+| PASS | Container grid-api | Up 2 hours (healthy) |
+| PASS | Container grid-mysql | Up 2 days (healthy) |
+| PASS | Container grid-redis | Up 2 days (healthy) |
+| PASS | Container grid-notifier | Up 42 hours (healthy) |
 
 ## The platform answers
 
 | Status | Check | Detail |
 |---|---|---|
+| PASS | Workstation clocks match the GRID | PC-LAB              2s behind the GRID   ok |
 | PASS | GRID answers over validated TLS | version 0.8.0 |
 | PASS | Console answers on localhost:5175 |  |
 
@@ -37,6 +38,7 @@ the honest state of the system, not failures, and do not change the exit code.
 | PASS | Sign-in: analyst@yde-hospital.cm (security_analyst) | tenant yde-hospital |
 | PASS | Sign-in: auditor@yde-hospital.cm (read_only_auditor) | tenant yde-hospital |
 | PASS | Sign-in: admin@test-clinic.cm (tenant_admin) | tenant test-clinic |
+| PASS | Sign-in: bench-roles@hopital-yaounde.cm (security_analyst) | tenant yde-hospital |
 | PASS | One customer sees nothing of another | test-clinic: 0 workstations, 0 alerts; the hospital: 1 workstation(s) |
 | PASS | The auditor can read but not act | reads alerts (200), refused creating a user (403) |
 
@@ -76,10 +78,10 @@ the honest state of the system, not failures, and do not change the exit code.
 
 | Status | Check | Detail |
 |---|---|---|
-| PASS | GRID suite (pytest) | 440 passed, 1 skipped in 792.58s (0:13:12) |
-| PASS | Console suite (vitest) | [2m      Tests [22m [1m[32m262 passed[39m[22m[90m (262)[39m |
+| PASS | GRID suite (pytest) | 447 passed, 1 skipped in 605.25s (0:10:05) |
+| PASS | Console suite (vitest) | [2m      Tests [22m [1m[32m269 passed[39m[22m[90m (269)[39m |
 | PASS | No French reaches a user | no French reaches a user |
-| PASS | Agent suite (CI, cannot run here) | CI run 40643343823 green on 2679e58 |
-| PASS | Console end-to-end (Playwright) | 83 passed (2.4m) |
+| PASS | Agent suite (CI, cannot run here) | CI run 40781882875 green on 53fbed1 |
+| PASS | Console end-to-end (Playwright) | 83 passed (2.3m) |
 
 

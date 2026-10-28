@@ -1,4 +1,4 @@
-# Demo readiness - 2026-10-28 07:44
+# Demo readiness - 2026-10-28 23:54
 
 Verdict: **DEMO READY**
 
@@ -10,11 +10,11 @@ Written by `scripts/demo-ready.ps1`. No password appears here.
       Docker is running
 
 [2/5] The GRID
-      grid-nginx  Up 35 hours
-      grid-api  Up 8 hours (healthy)
-      grid-mysql  Up 35 hours (healthy)
-      grid-redis  Up 35 hours (healthy)
-      grid-notifier  Up 25 hours (healthy)
+      grid-nginx  Up 2 days
+      grid-api  Up 2 hours (healthy)
+      grid-mysql  Up 2 days (healthy)
+      grid-redis  Up 2 days (healthy)
+      grid-notifier  Up 42 hours (healthy)
       the GRID answers over TLS, validated against its own authority
 
 [3/5] The console
@@ -23,22 +23,27 @@ Written by `scripts/demo-ready.ps1`. No password appears here.
 [4/5] The workstation
       PC-LAB is already running
 
+      workstation clocks
+      PC-LAB              2s behind the GRID   ok
+
 [5/5] The health check
       running scripts/system-check.ps1; this takes several minutes
 
 1. The platform
   PASS               Container grid-nginx
-                     Up 35 hours
+                     Up 2 days
   PASS               Container grid-api
-                     Up 8 hours (healthy)
+                     Up 2 hours (healthy)
   PASS               Container grid-mysql
-                     Up 35 hours (healthy)
+                     Up 2 days (healthy)
   PASS               Container grid-redis
-                     Up 35 hours (healthy)
+                     Up 2 days (healthy)
   PASS               Container grid-notifier
-                     Up 25 hours (healthy)
+                     Up 42 hours (healthy)
 
 2-5. The GRID, the accounts, the workstations and the installer
+  PASS               Workstation clocks match the GRID
+                     PC-LAB              2s behind the GRID   ok
 
   The platform answers
   PASS               GRID answers over validated TLS
@@ -54,6 +59,8 @@ Written by `scripts/demo-ready.ps1`. No password appears here.
                      tenant yde-hospital
   PASS               Sign-in: admin@test-clinic.cm (tenant_admin)
                      tenant test-clinic
+  PASS               Sign-in: bench-roles@hopital-yaounde.cm (security_analyst)
+                     tenant yde-hospital
   PASS               One customer sees nothing of another
                      test-clinic: 0 workstations, 0 alerts; the hospital: 1 workstation(s)
   PASS               The auditor can read but not act
@@ -97,20 +104,20 @@ Written by `scripts/demo-ready.ps1`. No password appears here.
 6. The automated suites
   (several minutes)
   PASS               GRID suite (pytest)
-                     440 passed, 1 skipped in 792.58s (0:13:12)
+                     447 passed, 1 skipped in 605.25s (0:10:05)
   PASS               Console suite (vitest)
-                     [2m      Tests [22m [1m[32m262 passed[39m[22m[90m (262)[39m
+                     [2m      Tests [22m [1m[32m269 passed[39m[22m[90m (269)[39m
   PASS               No French reaches a user
                      no French reaches a user
   PASS               Agent suite (CI, cannot run here)
-                     CI run 40643343823 green on 2679e58
+                     CI run 40781882875 green on 53fbed1
   PASS               Console end-to-end (Playwright)
-                     83 passed (2.4m)
+                     83 passed (2.3m)
 
 ------------------------------------------------------------
  SUMMARY
 ------------------------------------------------------------
-  PASS               27
+  PASS               29
   FAIL               0
   NOT BUILT          4
   NOT TESTABLE HERE  4
@@ -120,7 +127,7 @@ Written by `scripts/demo-ready.ps1`. No password appears here.
 
   Report: C:\Users\Fabiola\source\repos\ransomguard-cm\docs\testing\system-check-2026-10-28.md
 
-      PASS               27
+      PASS               29
       FAIL               0
       NOT BUILT          4
       NOT TESTABLE HERE  4
