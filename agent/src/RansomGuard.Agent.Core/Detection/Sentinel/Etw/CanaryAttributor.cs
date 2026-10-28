@@ -54,7 +54,35 @@ public sealed record AttributionOutcome(
 }
 
 /// <summary>A running process as the attribution needs it: creation time, name, image.</summary>
-public sealed record ProcessFacts(DateTime CreatedAtUtc, string? Name, string? ImagePath);
+/// <param name="CreatedAtUtc">
+/// The wall-clock creation time. What a person reads on the alert, and what the response engine
+/// re-checks against the live process before it suspends anything.
+/// </param>
+/// <param name="Name">The process name, when it could be read.</param>
+/// <param name="ImagePath">The image on disk, when it could be read.</param>
+/// <param name="SessionCreatedAtUtc">
+/// The same creation time as the ETW session recorded it, when the session saw the process
+/// start; null when it did not.
+///
+/// <para>
+/// It exists because the two clocks are not the same one. An ETW session timestamps every
+/// record against the clock it was opened with, and does not follow the wall clock afterwards.
+/// Put the machine's clock forward while the agent runs -- which is what happens on a bench VM
+/// with no Guest Additions, corrected by hand -- and the session's write records stay in the old
+/// frame while <see cref="System.Diagnostics.Process.StartTime"/> jumps to the new one. Compared
+/// against each other, every process looks as though it were created after the write it made.
+/// </para>
+///
+/// <para>
+/// So the ordering question "was this process created after that write?" is answered with both
+/// times from the session's clock, and this is the one in that frame.
+/// </para>
+/// </param>
+public sealed record ProcessFacts(
+    DateTime CreatedAtUtc,
+    string? Name,
+    string? ImagePath,
+    DateTime? SessionCreatedAtUtc = null);
 
 /// <summary>
 /// The creation times of processes, so that an attribution is a (PID, creation time) pair and a
@@ -90,20 +118,33 @@ public sealed class ProcessCreationTimes
         }
     }
 
-    /// <summary>The facts of a PID now: creation time from the start event when seen, else from the OS.</summary>
+    /// <summary>
+    /// The facts of a PID now: the wall-clock creation time for people and for the response
+    /// engine, and the session's own recording of it for the ordering comparison.
+    /// </summary>
+    /// <remarks>
+    /// The two times used to be reconciled into one, keeping the session's if the two agreed
+    /// within 50 ms and the OS's otherwise. That is exactly backwards when a clock is corrected:
+    /// the disagreement becomes hours, the OS time wins, and it is then compared against write
+    /// records that are still in the session's old frame -- so the writer looks younger than its
+    /// own write and the alert comes back pid_reused with nothing suspended. They are kept apart
+    /// now, and each question is answered with the clock that can answer it.
+    /// </remarks>
     public ProcessFacts? Read(int pid)
     {
         ProcessFacts? running = _readProcess(pid);
         if (_started.TryGetValue(pid, out DateTime started))
         {
-            // The start event is the creation time of the process the event saw; the running
-            // process, if any, gives the name and the image (and its own creation time, compared
-            // by the caller).
+            // The session saw this process start. Its own timestamp is the one that can be
+            // compared with the writes it recorded, whatever the wall clock has done since.
             return running is null
-                ? new ProcessFacts(started, null, null)
-                : running with { CreatedAtUtc = Math.Abs((running.CreatedAtUtc - started).TotalMilliseconds) <= 50 ? started : running.CreatedAtUtc };
+                ? new ProcessFacts(started, null, null, started)
+                : running with { SessionCreatedAtUtc = started };
         }
 
+        // No start event: this process was already running when the session opened, so it
+        // predates every write the session could have recorded. There is no session-frame time
+        // for it, and none is needed.
         return running;
     }
 
@@ -184,7 +225,7 @@ public sealed class CanaryAttributor
             return new AttributionOutcome(AttributionState.Unavailable, Reason: AttributionReason.ProcessExited);
         }
 
-        if (facts.CreatedAtUtc > firstWrite)
+        if (BornAfter(facts, firstWrite))
         {
             // The process holding this PID now was born after the write: not the writer.
             return new AttributionOutcome(AttributionState.Unavailable, Reason: AttributionReason.PidReused);
@@ -192,4 +233,38 @@ public sealed class CanaryAttributor
 
         return new AttributionOutcome(AttributionState.Resolved, pid, facts.CreatedAtUtc, facts.Name, facts.ImagePath);
     }
+
+    /// <summary>
+    /// Was the process holding this PID created after the write -- that is, is this a reused PID?
+    /// </summary>
+    /// <remarks>
+    /// Both times must come from the same clock. An ETW session timestamps its records against
+    /// the clock it was opened with and does not follow the wall clock afterwards, so on a
+    /// machine whose time is corrected while the agent runs the two drift apart by however far
+    /// the clock moved. Comparing across them made every writer look younger than its own write:
+    /// on PC-RECEPTION on 2026-10-27, after the clock went forward about nine hours, every alert
+    /// came back pid_reused and nothing was suspended.
+    ///
+    /// <para>
+    /// When the session saw the process start, that is the time to use: it and the write record
+    /// are both the session's, so the answer is exact whatever the clock has done.
+    /// </para>
+    ///
+    /// <para>
+    /// When it did not, the process was already running before the session opened — and a
+    /// creation time Windows recorded then is in the same frame as the session's own records,
+    /// because a later clock change rewrites neither. So the wall-clock times may be compared
+    /// with each other; it is only comparing one against the other that was wrong.
+    /// </para>
+    ///
+    /// <para>
+    /// Widening a tolerance was not an option: PID reuse is what this comparison exists to
+    /// catch, and a window wide enough to absorb a clock correction is wide enough to let a
+    /// recycled PID through.
+    /// </para>
+    /// </remarks>
+    internal static bool BornAfter(ProcessFacts facts, DateTime firstWriteUtc) =>
+        facts.SessionCreatedAtUtc is { } inSessionFrame
+            ? inSessionFrame > firstWriteUtc
+            : facts.CreatedAtUtc > firstWriteUtc;
 }

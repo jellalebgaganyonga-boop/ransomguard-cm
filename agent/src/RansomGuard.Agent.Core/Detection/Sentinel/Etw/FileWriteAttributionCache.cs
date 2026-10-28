@@ -160,7 +160,10 @@ public sealed class FileWriteAttributionCache
             return new AttributionOutcome(AttributionState.Unavailable, Reason: AttributionReason.ProcessExited);
         }
 
-        if (facts.CreatedAtUtc > firstWrite)
+        // Both times from the session's own clock; see CanaryAttributor.BornAfter. A wall-clock
+        // correction while the agent runs moves Process.StartTime and leaves the session's
+        // records where they were, and comparing across the two named nobody for every write.
+        if (CanaryAttributor.BornAfter(facts, firstWrite))
         {
             return new AttributionOutcome(AttributionState.Unavailable, Reason: AttributionReason.PidReused);
         }

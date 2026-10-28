@@ -162,6 +162,65 @@ public sealed class CanaryAttributorTests
         _processes.Read(100_000 + ProcessCreationTimes.Capacity + 10).ShouldNotBeNull();
     }
 
+    /// <summary>
+    /// The owner corrects a bench VM's clock while the agent is running, and attribution keeps
+    /// working.
+    ///
+    /// <para>
+    /// The ETW session timestamps every record against the clock it was opened with. Move the
+    /// wall clock and the session does not follow: its write records stay in the old frame while
+    /// <c>Process.StartTime</c> jumps to the new one. The two were compared against each other,
+    /// so every process looked as if it had been created after the write it made, and every
+    /// alert came back unavailable / pid_reused with nothing suspended. Seen on PC-RECEPTION on
+    /// 2026-10-27 after the clock was put forward about nine hours, and again on PC-LAB.
+    /// </para>
+    ///
+    /// <para>
+    /// These VMs have no Guest Additions, so their clocks free-run and are corrected by hand:
+    /// this is not an edge case on this bench, it is Tuesday.
+    /// </para>
+    /// </summary>
+    [Theory]
+    [InlineData(3)]    // the clock put forward, which is the case that was seen
+    [InlineData(-3)]   // and backward, which the same comparison breaks the other way
+    [InlineData(9.5)]  // the jump actually made on PC-RECEPTION
+    public void A_wall_clock_change_while_the_agent_runs_still_names_the_writer(double hours)
+    {
+        // The session saw this process start, 20 seconds before the write, on the session clock.
+        _processes.OnProcessStart(new ProcessStartRecord(4242, WriteAt.AddSeconds(-20)));
+        // The wall clock then moved, so the OS reports the same process with a creation time
+        // that many hours away from anything the session recorded.
+        _running[4242] = new ProcessFacts(
+            WriteAt.AddSeconds(-20).AddHours(hours), "powershell",
+            @"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe");
+
+        AttributionOutcome outcome = _attributor.Resolve(Detection(Write(4242)), etwRunning: true);
+
+        outcome.State.ShouldBe(AttributionState.Resolved);
+        outcome.ProcessId.ShouldBe(4242);
+        outcome.ProcessName.ShouldBe("powershell");
+        // The time reported is the one a person reads and the one the response engine re-checks
+        // against the live process: the wall clock, not the session's drifted frame.
+        outcome.ProcessCreatedAtUtc.ShouldBe(WriteAt.AddSeconds(-20).AddHours(hours));
+    }
+
+    [Fact]
+    public void A_reused_PID_is_still_refused_after_a_clock_change()
+    {
+        // The guard that must survive the fix. The session saw this PID start AFTER the write,
+        // which is the real signature of reuse -- both times from the session's own clock, so
+        // the comparison holds whatever the wall clock has done since.
+        _processes.OnProcessStart(new ProcessStartRecord(4242, WriteAt.AddSeconds(1)));
+        _running[4242] = new ProcessFacts(WriteAt.AddSeconds(1).AddHours(3), "innocent-viewer",
+            @"C:\Program Files\Imaging\viewer.exe");
+
+        AttributionOutcome outcome = _attributor.Resolve(Detection(Write(4242)), etwRunning: true);
+
+        outcome.State.ShouldBe(AttributionState.Unavailable);
+        outcome.Reason.ShouldBe("pid_reused");
+        outcome.ProcessId.ShouldBeNull();
+    }
+
     private static CanaryDetection Detection(params FileIoRecord[] writes)
     {
         var correlator = new CanaryCorrelator(new ManualTimeProvider());
