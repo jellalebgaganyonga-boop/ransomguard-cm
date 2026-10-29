@@ -23,7 +23,23 @@ Fires when a text-like file (.docx, .pdf, .xlsx, .csv, .txt) has entropy > 7.5 A
 Fires when any file's entropy increases by more than 2.5 bits/byte from baseline AND current entropy > 7.0. Catches encryption regardless of file type.
 
 ### Rule 3 — DirectoryWideEntropyShift (Critical)
-Fires when 5+ files in the same directory show entropy increase > 1.5 within 60 seconds. This is the strongest ransomware indicator — mass encryption of a directory.
+Fires when `DirectoryShiftMinFiles` (5) **distinct** files in the same directory show an average
+entropy increase above `DirectoryShiftThreshold` (1.5) within `DirectoryShiftWindowSeconds` (60):
+the strongest ransomware indicator, mass encryption of a directory.
+
+`DirectoryEntropyWindow` keeps the count. Two properties of it matter:
+
+- **Distinct files, not writes.** One document rewritten twenty times by a noisy application is one
+  file and can never reach the threshold on its own. Mass encryption is about breadth.
+- **One alert per burst.** After the rule fires for a directory it goes quiet for the length of the
+  window, so fifty encrypted files raise one Critical naming the directory, not fifty that would
+  bury it. A second wave after the window is reported again.
+
+The directory-wide alert names the writing process when every attributed file in the window agrees
+on one PID; files nobody could attribute do not contradict it, two different writers do, and then
+nobody is named.
+
+The three configuration values are read and act: an administrator who tunes them tunes the rule.
 
 ### Rule 4 — ExtensionWhitelist (Suppression)
 Prevents false positives on legitimately high-entropy files: .zip, .7z, .gz, .rar, .jpg, .jpeg, .png, .mp3, .mp4, .avi, .mkv. Evaluated first — if triggered, no other rules run.
@@ -60,12 +76,47 @@ At startup, ENTROPY scans all files in configured watch directories:
 - Detection latency: < 100 ms from file modification to alert
 - RAM overhead: < 10 MB for baseline tracking of 10,000 files
 
+## Module posture
+
+| State | When | Why |
+|---|---|---|
+| `disabled_by_config` | `Entropy.Enabled` false | Not asked to run. |
+| `inactive / no_watch_directory` | none of the configured folders is watchable | It would see no write at all. |
+| `active` | running **with the kernel FileIO session up** | It watches, computes Shannon entropy, evaluates rules 1–4, and an alert names the process that wrote the file. |
+| `degraded / attribution_unreliable` | running **without the kernel FileIO session** | Detection and all four rules still run; no alert can name its writer, so the console must not read green (AGT-ATTR-001). |
+
+The state follows the session at runtime, not the build: if the session is stopped from outside
+(`logman stop`, an anti-EDR tool) the module drops to `degraded` on the next alert, and returns to
+`active` when the session's restart succeeds.
+
+**How a writer is named.** The session is SENTINEL's — one per machine, shared through
+`FileIoFanout` rather than opening a second one. `FileWriteAttributionCache` keeps the write
+records of the watched folders for two minutes, so ENTROPY can still ask "who wrote this" after it
+has read and hashed the file, by which time the writer has closed its handle. (The Restart Manager,
+which GENEALOGY uses, only reports processes *currently holding* a file, so for the write-and-close
+that ransomware does it reports nobody — that is why it was never enough.)
+
+The refusals are reported as precisely as the answers, because a wrong PID is worse than no PID:
+`system_pid` (the write was PID 0 or 4), `pid_reused`, `process_exited`, `no_write_event`,
+`etw_unavailable`, or `ambiguous` when two processes wrote the same file in the window. The console
+shows each of these differently rather than implying the file wrote itself.
+
+**Needs administrator rights.** The kernel session needs them, and a free system-logger slot
+(Windows allows eight). Without either, ENTROPY runs degraded and SENTINEL's log says which is
+missing.
+
 ## Known Limitations
 
 1. **Encrypted backups**: Legitimate encrypted backup files may trigger if extension is susceptible
 2. **Extension spoofing**: Attacker renaming .docx to .zip bypasses Rule 4 (magic byte detection planned)
 3. **Slow ransomware**: Encryption over days may cause baseline drift
 4. **Pre-compressed files**: Already-compressed files show high baseline, delta detection still works
+5. **One de-duplication filter per watcher** (V5, 2026-10-21): the 500 ms filter that folds a burst of
+   events on one file is ENTROPY's own. Until then one instance was shared with the Worker (and SENTINEL,
+   USB GUARD): within the window, the first watcher to handle a write takes the slot and the others do not
+   get it. Measured honestly: the identity test is red on the old code (one instance); the loss itself was
+   not observed in CI (`FileEventDeduplicationPerConsumerTests`: 20 writes with both watchers on the
+   folder, 20/20 analysed on the old code, run 39652508279). Possible by construction, not seen.
 
 ## Academic References
 

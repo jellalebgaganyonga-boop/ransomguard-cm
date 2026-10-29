@@ -71,9 +71,9 @@ class BaseRepository(Generic[ModelType]):
         """Add entity, validating tenant_id matches repository tenant."""
         if not hasattr(entity, "tenant_id"):
             raise ValueError(f"Entity {type(entity).__name__} missing tenant_id")
-        if entity.tenant_id != self.tenant_id:  # type: ignore[attr-defined]
+        if entity.tenant_id != self.tenant_id:
             raise ValueError(
-                f"Tenant ID mismatch: entity={entity.tenant_id}, repo={self.tenant_id}"  # type: ignore[attr-defined]
+                f"Tenant ID mismatch: entity={entity.tenant_id}, repo={self.tenant_id}"
             )
         self.session.add(entity)
         await self.session.flush()

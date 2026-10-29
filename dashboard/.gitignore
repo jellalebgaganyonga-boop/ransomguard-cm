@@ -1,0 +1,17 @@
+node_modules/
+dist/
+storybook-static/
+.env
+.env.local
+.env.*.local
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.log
+npm-debug.log*
+coverage/
+playwright-report/
+test-results/
+blob-report/
+.DS_Store
+src/types/design-tokens.ts

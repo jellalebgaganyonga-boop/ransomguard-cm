@@ -73,6 +73,9 @@ public enum IronCladActionOutcome
     /// <summary>IronClad module is disabled in configuration.</summary>
     Disabled,
 
-    /// <summary>Audit log write failed.</summary>
+    /// <summary>
+    /// Audit log write failed and the action was aborted. No longer produced since AGT-AUD-002:
+    /// the cut goes ahead and the lost trace is counted. Kept because stored events use it.
+    /// </summary>
     AuditLogFailure
 }

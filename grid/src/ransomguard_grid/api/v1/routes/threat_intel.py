@@ -1,6 +1,7 @@
 """Threat intel public endpoints — mTLS required."""
 
 import base64
+from collections.abc import Iterator
 from pathlib import Path
 from uuid import uuid4
 
@@ -60,7 +61,7 @@ async def download_package(
     if not package or not Path(package.file_path).exists():
         raise HTTPException(500, "Package file missing on server")
 
-    def file_iter():  # type: ignore[no-untyped-def]
+    def file_iter() -> Iterator[bytes]:
         with open(package.file_path, "rb") as f:
             while chunk := f.read(8192):
                 yield chunk

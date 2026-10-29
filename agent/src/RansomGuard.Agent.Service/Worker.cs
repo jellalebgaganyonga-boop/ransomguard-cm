@@ -21,6 +21,7 @@ public sealed class Worker : BackgroundService
     private readonly ILogger<Worker> _logger;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IFileEventDeduplicator _deduplicator;
+    private readonly UserProfileEnumerator _profiles;
     private readonly AgentConfiguration _config;
     private readonly List<FileSystemWatcher> _watchers = [];
     private readonly Channel<DetectionEvent> _eventChannel;
@@ -35,16 +36,19 @@ public sealed class Worker : BackgroundService
     /// <param name="config">Agent configuration from Options pattern.</param>
     /// <param name="scopeFactory">Service scope factory for creating scoped repositories.</param>
     /// <param name="deduplicator">File event deduplicator to filter duplicate FSW events.</param>
+    /// <param name="profiles">The real user profiles that %EACHUSERPROFILE% expands to (AGT-PATH-001); null: the Windows registry.</param>
     public Worker(
         ILogger<Worker> logger,
         IOptionsMonitor<AgentConfiguration> config,
         IServiceScopeFactory scopeFactory,
-        IFileEventDeduplicator deduplicator)
+        IFileEventDeduplicator deduplicator,
+        UserProfileEnumerator? profiles = null)
     {
         _logger = logger;
         _config = config.CurrentValue;
         _scopeFactory = scopeFactory;
         _deduplicator = deduplicator;
+        _profiles = profiles ?? UserProfileEnumerator.Windows;
         _eventChannel = Channel.CreateBounded<DetectionEvent>(
             new BoundedChannelOptions(EventChannelCapacity)
             {
@@ -55,12 +59,20 @@ public sealed class Worker : BackgroundService
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("RansomGuard-CM Agent v{Version} starting", _config.Identity.Version);
-        _logger.LogInformation("Environment: {Environment}", _config.Identity.Environment);
+        // Off the startup path: see the note in GenealogyMonitor. Resolving the watch paths walks
+        // every user profile on the machine, and the watchers are opened just below it.
+        await Task.Yield();
+        // ... and nothing below may touch the database before it exists. Creating it is no
+        // longer done before the host starts -- that is what made Windows wait and return
+        // 1053 -- so the waiting happens here, with the service already reported running.
+        await _scopeFactory.WaitForDatabaseAsync(stoppingToken);
+
+
+        _logger.LogInformation("RansomGuard-CM Agent v{Version} starting", AgentVersion.Current);
 
         Task persistenceTask = ConsumeEventsAsync(stoppingToken);
 
-        string[] resolvedPaths = EnvironmentVariableResolver.ResolvePaths(_config.Detection.WatchPaths);
+        string[] resolvedPaths = EnvironmentVariableResolver.ResolvePaths(_config.Detection.WatchPaths, _profiles, _logger);
 
         if (!_config.Detection.EnableFileSystemWatcher)
         {
@@ -71,6 +83,13 @@ public sealed class Worker : BackgroundService
 
         foreach (string watchPath in resolvedPaths)
         {
+            // AGT-PATH-001: a system or service profile is never watched, and never created.
+            if (WatchedPathPolicy.IsRefused(watchPath))
+            {
+                _logger.LogError("Watch path {Path} is in a system or service profile: not watched, not created (AGT-PATH-001)", watchPath);
+                continue;
+            }
+
             if (!Directory.Exists(watchPath))
             {
                 _logger.LogWarning("Watch path does not exist, creating: {Path}", watchPath);

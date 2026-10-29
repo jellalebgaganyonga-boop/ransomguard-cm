@@ -1,6 +1,7 @@
 """Group 5: Operations models (3 models)."""
 
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, Text
 from sqlalchemy.dialects.sqlite import JSON
@@ -19,7 +20,7 @@ class CommandQueue(Base):
     tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id", ondelete="RESTRICT"), index=True, nullable=False)
     agent_id: Mapped[str] = mapped_column(String(36), ForeignKey("agents.id", ondelete="RESTRICT"), nullable=False)
     command_type: Mapped[str] = mapped_column(String(50), nullable=False)
-    parameters_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # type: ignore[assignment]
+    parameters_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     status: Mapped[CommandStatus] = mapped_column(Enum(CommandStatus), nullable=False, default=CommandStatus.Pending)
     issued_by_user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False)
@@ -38,7 +39,7 @@ class CommandResponse(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id", ondelete="RESTRICT"), index=True, nullable=False)
     command_id: Mapped[str] = mapped_column(String(36), ForeignKey("command_queue.id", ondelete="RESTRICT"), nullable=False)
-    response_payload_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # type: ignore[assignment]
+    response_payload_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False)
     success: Mapped[bool] = mapped_column(Boolean, nullable=False)
 
@@ -56,7 +57,7 @@ class SystemLog(Base):
     level: Mapped[LogLevel] = mapped_column(Enum(LogLevel), nullable=False)
     component: Mapped[str] = mapped_column(String(100), nullable=False)
     message: Mapped[str] = mapped_column(Text, nullable=False)
-    context_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # type: ignore[assignment]
+    context_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False)
 
     def __repr__(self) -> str:

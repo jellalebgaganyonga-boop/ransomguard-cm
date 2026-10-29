@@ -164,33 +164,33 @@ Protection is organized in 5 concentric rings. A ransomware must traverse all 5 
 
 **Ring 1 — Perimeter**: USB GUARD module intercepts any USB key insertion before Windows mounting. Automatic scan, blocking of executables and scripts, timestamped logging.
 
-**Ring 2 — Behavior**: Combination of canary file monitoring (SENTINEL — realistic medical decoys, GRID — multi-positional distribution), real-time Shannon entropy analysis, mass modification detection, process tree monitoring (GENEALOGY — Word should never spawn PowerShell), and behavioral learning by Isolation Forest over 30 days.
+**Ring 2 — Behavior**: Combination of canary file monitoring (SENTINEL — realistic medical decoys, GRID — multi-positional distribution), real-time Shannon entropy analysis, mass modification detection, process tree monitoring (GENEALOGY — Word should never spawn PowerShell), and behavioral learning by Isolation Forest over 30 days (**Not implemented as of 2026-10-22** — no model, no ML dependency; debt PROD-003).
 
 **Ring 3 — Deception**: Fake medically-coherent patient files strategically distributed. A ransomware that avoids them misses real files, a ransomware that touches them reveals itself instantly.
 
-**Ring 4 — Data**: Internal Zero Trust on patient files. No non-whitelisted process can access protected files, even with legitimate Windows rights.
+**Ring 4 — Data**: Internal Zero Trust on patient files. No non-whitelisted process can access protected files, even with legitimate Windows rights. (**Not implemented as of 2026-10-22** — nothing restricts access to a file; the agent observes writes and acts on a canary write; debt PROD-006.)
 
-**Ring 5 — Recovery**: Versioned automatic backup with IRONCLAD — automated physical air-gap via GPIO Arduino-controlled USB relay. The backup disk is electrically disconnected permanently, connects only during backup window (5 minutes), then disconnects. No ransomware can reach a disk absent from the bus.
+**Ring 5 — Recovery**: Versioned automatic backup with IRONCLAD — automated physical air-gap via GPIO Arduino-controlled USB relay. The backup disk is electrically disconnected permanently, connects only during backup window (5 minutes), then disconnects. No ransomware can reach a disk absent from the bus. (**Not implemented as of 2026-10-22** — there is no backup, no backup disk and no backup window; IRONCLAD exists only as the cut of a USB port, on a mock Arduino server by default, used by USB GUARD in Strict; debt PROD-001.)
 
 ### 5.3 Functional Modules
 
 Eight modules constitute the product. Each covers a distinct responsibility:
 
-**Module 1 — Network Deployment**: Centralized installation from server via WMI/PSExec, license key activation verified online, degraded mode if license server unreachable, blocking after 30-day grace period post-expiration.
+**Module 1 — Network Deployment**: Centralized installation from server via WMI/PSExec, license key activation verified online, degraded mode if license server unreachable, blocking after 30-day grace period post-expiration. (**Not implemented as of 2026-10-22** — the deployment is a double-click installer built by the GRID for one enrollment code (ADR-027) and `install.ps1`; no licensing exists anywhere; debt PROD-005.)
 
-**Module 2 — Supervision Dashboard**: Bilingual React interface accessible on LAN, real-time view of endpoints (green/orange/red), alert history, whitelist management, license status, strict RBAC (Admin/Technician/Director roles), OAuth2 authentication with MFA TOTP.
+**Module 2 — Supervision Dashboard**: Bilingual React interface accessible on LAN, real-time view of endpoints (green/orange/red), alert history, whitelist management, license status, strict RBAC (Admin/Technician/Director roles), OAuth2 authentication with MFA TOTP (**Not implemented** — no MFA in the GRID, the console or the database; see `docs/console/INVENTAIRE_CONSOLE.md` (MFA); decided: mandatory TOTP for tenant_admin, after Sprint 8.).
 
 **Module 3 — Detection**: Combination of the 7 Rings 1-3 mechanisms (USB GUARD, SENTINEL canaries, GRID multi-position, Shannon entropy, mass detection, GENEALOGY process tree, EXFIL WATCH exfiltration detection).
 
-**Module 4 — Backup (SNAPSHOT)**: Configurable incremental scheduled every 2 hours, 10-snapshot versioning, emergency backup on detection, IRONCLAD hardware air gap, automatic integrity verification, AES-256-GCM encryption before writing.
+**Module 4 — Backup (SNAPSHOT)**: Configurable incremental scheduled every 2 hours, 10-snapshot versioning, emergency backup on detection, IRONCLAD hardware air gap, automatic integrity verification, AES-256-GCM encryption before writing. (**Not implemented as of 2026-10-22** — no SNAPSHOT code exists; debt PROD-001.)
 
-**Module 5 — Restoration**: Guided snapshot selection, selective or full restoration, double authentication (technician + director) required, immutable action logging.
+**Module 5 — Restoration**: Guided snapshot selection, selective or full restoration, double authentication (technician + director) required, immutable action logging. (**Not implemented as of 2026-10-22** — nothing to restore from; debt PROD-001.)
 
-**Module 6 — Reports**: Automatic bilingual PDF generation on incident, weekly health report, monthly ANTIC compliance report, non-technical language for director.
+**Module 6 — Reports**: Automatic bilingual PDF generation on incident, weekly health report, monthly ANTIC compliance report, non-technical language for director. (**Not implemented as of 2026-10-22** — no report generation of any kind; debt PROD-002.)
 
-**Module 7 — Email Alerts**: Email with PDF report attached on attack, daily backup confirmation, license expiration alert 30/7 days before, mandatory TLS (RFC 8314), DKIM + SPF + DMARC, anonymization of sensitive data in body.
+**Module 7 — Email Alerts**: Email with PDF report attached on attack, daily backup confirmation, license expiration alert 30/7 days before, mandatory TLS (RFC 8314), DKIM + SPF + DMARC, anonymization of sensitive data in body. (**Partly implemented as of 2026-10-22** — the `grid-notifier` service e-mails each new alert of the severities a user chose in Settings, through the SMTP relay of the facility; no PDF (PROD-002), no backup confirmation (PROD-001), no license alert (PROD-005); DKIM, SPF and DMARC belong to that relay and are not checked by the product; the anonymization of the body is not implemented.)
 
-**Module 8 — Updates**: Periodic cloud pull, mandatory Ed25519 signature verification before installation, silent application, automatic rollback on failure, offline mode with retained latest signatures.
+**Module 8 — Updates**: Periodic cloud pull, mandatory Ed25519 signature verification before installation, silent application, automatic rollback on failure, offline mode with retained latest signatures. (**Not implemented as of 2026-10-22** — no update channel; the agent is reinstalled by the installer; the only Ed25519-signed distribution that exists is the threat-intelligence feed from the GRID to its agents; debt PROD-005.)
 
 ### 5.4 Technical Stack
 
@@ -297,6 +297,13 @@ The hybrid client-server architecture with distributed intelligence was retained
 **R4 — Compromise of cloud signing infrastructure**
 *Impact:* Catastrophic — SolarWinds scenario.
 *Mitigation:* Mandatory dual signature, canary deployment 1%→10%→50%→100% with automatic monitoring, publishable reproducible build.
+
+**R12 — A third-party antivirus blocks or quarantines the agent**
+*Observed:* 2026-10-08, on the development machine. Bitdefender silently denied access to freshly compiled agent binaries (`RansomGuard.Agent.Core.dll`, `RansomGuard.Agent.Tests.dll`): no Defender detection, correct ACLs, no process holding the file. The agent legitimately behaves like what antivirus heuristics hunt for (file-system monitoring, entropy measurement, canary files, encryption simulation in tests).
+*Diagnosis (2026-10-08):* the refusal comes from a file-system filter driver, not from a detection. The exact error is MSBuild's `MSB3021: Unable to copy file "obj\...\RansomGuard.Agent.Tests.dll" ... Access to the path '...' is denied.` — not `contains a virus` (Defender, `ERROR_VIRUS_INFECTED`) nor `Application Control policy has blocked this file` (Smart App Control, which is off on that machine; no CodeIntegrity event). A Bitdefender filter driver, **even without an active licence**, silently denies access to an unsigned DLL right after it is written: no alert, no quarantine, no entry on the antivirus side. ACLs were correct and no process held the file; deleting `bin`/`obj` and rebuilding reproduces it.
+*Impact:* Critical — in a hospital the agent will run next to Kaspersky, Bitdefender or Defender. A blocked or quarantined agent is a workstation that looks protected and is not; an antivirus fighting the agent can also slow the workstation down until it is uninstalled.
+*Mitigation:* Prerequisites of the installer (Sprint 12), not options: (1) Authenticode code signing of every binary (already planned); (2) false-positive submission of each signed release to Kaspersky, Bitdefender and Microsoft before distribution; (3) a cohabitation test with each of the three antiviruses, real-time protection on, covering installation, startup, detection and update. On development machines, the exclusion is limited to the repository folder, never the whole user profile. The installer must also **verify** that signature before extracting anything: today `install.ps1` trusts the package on TLS alone, then runs its executables as LocalSystem (debt AGT-INST-001, `agent/README.md`).
+*Consequence for hospitals:* installing or updating the agent could fail with nothing recorded on the antivirus side — the installer only sees an access-denied error, the antivirus console shows nothing. The cohabitation test that gates the installer (Sprint 12) must therefore cover **installation, update and first start**, with real-time protection on, and check the antivirus' own logs as well as the agent's.
 
 ### 7.2 Legal Risks
 

@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Sockets;
 using RansomGuard.Agent.Core.Detection.IronClad.Communication;
 using RansomGuard.Agent.Core.Detection.IronClad.Models;
@@ -12,7 +13,12 @@ public sealed class MockArduinoServerTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        _server = new MockArduinoServer(tcpPort: 0, relayCount: 4, relayDelayMs: 10, clientTimeoutSeconds: 3, logger: _logger);
+        // 30 s client-timeout for the shared server, not 3: the previous value raced the test
+        // that reads STATUS after CUT -- a slow CI runner between the two writes let the fail-safe
+        // watchdog restore all ports before STATUS was asked (CI run 40193818441,
+        // Status_Command_Returns_All_Port_States saw PORT_3 not PORT_3_CUT). The one test that
+        // actually exercises the timeout builds its own tighter server.
+        _server = new MockArduinoServer(tcpPort: 0, relayCount: 4, relayDelayMs: 10, clientTimeoutSeconds: 30, logger: _logger);
         await _server.StartAsync(CancellationToken.None);
     }
 
@@ -24,7 +30,7 @@ public sealed class MockArduinoServerTests : IAsyncLifetime
     private async Task<(StreamReader reader, StreamWriter writer, TcpClient client)> ConnectAsync()
     {
         var client = new TcpClient();
-        await client.ConnectAsync("localhost", _server.ListeningPort);
+        await client.ConnectAsync(IPAddress.Loopback, _server.ListeningPort);
         var stream = client.GetStream();
         var reader = new StreamReader(stream);
         var writer = new StreamWriter(stream) { AutoFlush = true };
@@ -129,19 +135,29 @@ public sealed class MockArduinoServerTests : IAsyncLifetime
     [Fact(Timeout = 15_000)]
     public async Task Client_Timeout_Triggers_FailSafe_RestoreAll()
     {
-        var (reader, writer, client) = await ConnectAsync();
+        // This is the only test that actually needs a tight client-timeout: the shared server
+        // runs with 30 s (see InitializeAsync for why), so a dedicated server is built here.
+        await using var tightServer = new MockArduinoServer(
+            tcpPort: 0, relayCount: 4, relayDelayMs: 10, clientTimeoutSeconds: 3, logger: _logger);
+        await tightServer.StartAsync(CancellationToken.None);
+
+        var client = new TcpClient();
+        await client.ConnectAsync(IPAddress.Loopback, tightServer.ListeningPort);
         using var _ = client;
+        var stream = client.GetStream();
+        var reader = new StreamReader(stream);
+        var writer = new StreamWriter(stream) { AutoFlush = true };
 
         // Cut port 2
         await writer.WriteLineAsync("CMD:CUT_PORT:2");
         await reader.ReadLineAsync();
-        Assert.Equal(PortState.Cut, _server.GetPortStates()[2]);
+        Assert.Equal(PortState.Cut, tightServer.GetPortStates()[2]);
 
         // Wait for timeout (3 seconds + margin)
         await Task.Delay(5000);
 
         // Fail-safe should have restored all ports
-        var states = _server.GetPortStates();
+        var states = tightServer.GetPortStates();
         Assert.Equal(PortState.Active, states[2]);
     }
 

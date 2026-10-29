@@ -1,0 +1,12 @@
+[Unit]
+Description=RansomGuard GRID - database and secrets backup
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/opt/ransomguard/app/deployment/grid
+ExecStart=/opt/ransomguard/app/deployment/grid/backup.sh
+Nice=10
+IOSchedulingClass=idle

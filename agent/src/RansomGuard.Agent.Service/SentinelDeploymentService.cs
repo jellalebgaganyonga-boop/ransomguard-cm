@@ -16,23 +16,36 @@ public sealed class SentinelDeploymentService : BackgroundService
     private readonly ILogger<SentinelDeploymentService> _logger;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly AgentConfiguration _config;
+    private readonly UserProfileEnumerator _profiles;
 
     /// <summary>
     /// Initializes the SENTINEL deployment service.
     /// </summary>
+    /// <param name="profiles">The real user profiles that %EACHUSERPROFILE% expands to (AGT-PATH-001); null: the Windows registry.</param>
     public SentinelDeploymentService(
         ILogger<SentinelDeploymentService> logger,
         IOptionsMonitor<AgentConfiguration> config,
-        IServiceScopeFactory scopeFactory)
+        IServiceScopeFactory scopeFactory,
+        UserProfileEnumerator? profiles = null)
     {
         _logger = logger;
         _config = config.CurrentValue;
         _scopeFactory = scopeFactory;
+        _profiles = profiles ?? UserProfileEnumerator.Windows;
     }
 
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Off the startup path: see the note in GenealogyMonitor. Planting the decoys writes a
+        // file per decoy per watched folder, and a fresh install does that for the first time.
+        await Task.Yield();
+        // ... and nothing below may touch the database before it exists. Creating it is no
+        // longer done before the host starts -- that is what made Windows wait and return
+        // 1053 -- so the waiting happens here, with the service already reported running.
+        await _scopeFactory.WaitForDatabaseAsync(stoppingToken);
+
+
         SentinelOptions? sentinel = _config.Sentinel;
 
         if (sentinel is null || !sentinel.Enabled)
@@ -44,7 +57,7 @@ public sealed class SentinelDeploymentService : BackgroundService
         _logger.LogInformation("SENTINEL deployment starting — {DirectoryCount} directories, {CanariesPerDir} canaries each",
             sentinel.WatchDirectories.Length, sentinel.CanariesPerDirectory);
 
-        string[] resolvedDirs = EnvironmentVariableResolver.ResolvePaths(sentinel.WatchDirectories);
+        string[] resolvedDirs = EnvironmentVariableResolver.ResolvePaths(sentinel.WatchDirectories, _profiles, _logger);
         int totalDeployed = 0;
         int totalExisting = 0;
 
@@ -76,6 +89,13 @@ public sealed class SentinelDeploymentService : BackgroundService
 
     private async Task<int> DeployCanariesForDirectoryAsync(string directory, SentinelOptions sentinel, CancellationToken cancellationToken)
     {
+        // AGT-PATH-001: no canary, and no folder, in a system or service profile.
+        if (WatchedPathPolicy.IsRefused(directory))
+        {
+            _logger.LogError("SENTINEL: {Directory} is in a system or service profile, no canary deployed (AGT-PATH-001)", directory);
+            return 0;
+        }
+
         if (!Directory.Exists(directory))
         {
             Directory.CreateDirectory(directory);
@@ -103,7 +123,12 @@ public sealed class SentinelDeploymentService : BackgroundService
             string template = sentinel.CanaryTemplates[templateIndex % sentinel.CanaryTemplates.Length];
             templateIndex++;
 
-            await canaryService.CreateCanaryAsync(directory, template, sentinel.CanaryPrefix, cancellationToken);
+            // The decoy is marked as the agent's own write by CanaryFileService, before the bytes
+            // reach the disk. Marking it here, after the call returned, was too late: the monitor
+            // is a hosted service like this one and is usually already watching, so the watcher
+            // had already turned the creation into a Critical "canary modified".
+            await canaryService.CreateCanaryAsync(
+                directory, template, sentinel.CanaryPrefix, cancellationToken);
             deployed++;
         }
 

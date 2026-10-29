@@ -15,10 +15,10 @@ public sealed class XlsxCanaryGenerator : ICanaryFileGenerator
         ["Mballa", "Ngoa", "Kamga", "Tchamba", "Bekolo", "Etoundi", "Mvondo", "Fotso", "Nkoulou", "Tagne"];
 
     private static readonly string[] FirstNames =
-        ["Jean-Pierre", "Marie-Claire", "Paul", "Françoise", "Emmanuel", "Bernadette", "Samuel", "Cécile", "Joseph", "Anne-Marie"];
+        ["Jean-Pierre", "Marie-Claire", "Paul", "Francine", "Emmanuel", "Bernadette", "Samuel", "Cecile", "Joseph", "Anne-Marie"];
 
     private static readonly string[] Diagnostics =
-        ["Paludisme", "Hypertension", "Diabète type 2", "Anémie", "Tuberculose", "Drépanocytose", "Gastrite", "Asthme"];
+        ["Malaria", "Hypertension", "Type 2 diabetes", "Anaemia", "Tuberculosis", "Sickle cell disease", "Gastritis", "Asthma"];
 
     /// <inheritdoc />
     public string Extension => ".xlsx";
@@ -48,11 +48,11 @@ public sealed class XlsxCanaryGenerator : ICanaryFileGenerator
             // Header row
             Row header = new() { RowIndex = 1 };
             header.Append(CreateCell("A1", "ID"));
-            header.Append(CreateCell("B1", "Nom"));
-            header.Append(CreateCell("C1", "Prénom"));
-            header.Append(CreateCell("D1", "Date Naissance"));
-            header.Append(CreateCell("E1", "N° Dossier"));
-            header.Append(CreateCell("F1", "Diagnostic"));
+            header.Append(CreateCell("B1", "Surname"));
+            header.Append(CreateCell("C1", "First name"));
+            header.Append(CreateCell("D1", "Date of birth"));
+            header.Append(CreateCell("E1", "Record no."));
+            header.Append(CreateCell("F1", "Diagnosis"));
             sheetData.Append(header);
 
             // Generate 15 patient rows

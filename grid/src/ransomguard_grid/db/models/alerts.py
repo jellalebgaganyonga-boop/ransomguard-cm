@@ -1,8 +1,9 @@
 """Group 3: Alert models (6 models)."""
 
 from datetime import UTC, datetime
+from typing import Any
 
-from sqlalchemy import DateTime, Enum, Float, ForeignKey, Index, LargeBinary, String, Text, UniqueConstraint
+from sqlalchemy import DateTime, Enum, Float, ForeignKey, Index, String, Text, UniqueConstraint
 from sqlalchemy.dialects.sqlite import JSON
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -30,7 +31,7 @@ class Alert(Base):
     detected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     ingested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False)
     summary: Mapped[str] = mapped_column(String(500), nullable=False)
-    raw_payload_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # type: ignore[assignment]
+    raw_payload_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
     def __repr__(self) -> str:
         return f"<Alert {self.alert_type} severity={self.severity}>"
@@ -61,7 +62,7 @@ class AlertArtifact(Base):
     alert_id: Mapped[str] = mapped_column(String(36), ForeignKey("alerts.id", ondelete="RESTRICT"), nullable=False)
     artifact_type: Mapped[str] = mapped_column(String(50), nullable=False)
     artifact_hash_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
-    artifact_metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # type: ignore[assignment]
+    artifact_metadata_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
     def __repr__(self) -> str:
         return f"<AlertArtifact {self.artifact_type}>"
@@ -80,8 +81,12 @@ class AuditLog(Base):
     tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id", ondelete="RESTRICT"), index=True, nullable=False)
     agent_id: Mapped[str] = mapped_column(String(36), ForeignKey("agents.id", ondelete="RESTRICT"), nullable=False)
     sequence_number: Mapped[int] = mapped_column(nullable=False)
-    payload_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # type: ignore[assignment]
-    ed25519_signature: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    payload_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    # Base64, as it arrives and as an auditor re-checks it. It was LargeBinary, and storing raw
+    # bytes through aiomysql 0.3.2 with PyMySQL 1.2.3 raises "'str' object is not callable" --
+    # escape_bytes_prefixed is a string in that pairing, not a function. Every upload was a 500,
+    # which nothing noticed because no agent uploaded until 2026-10-27.
+    ed25519_signature: Mapped[str] = mapped_column(String(128), nullable=False)
     signing_key_id: Mapped[str] = mapped_column(String(64), nullable=False)
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False)
 

@@ -1,0 +1,145 @@
+@import './tokens.css';
+
+/* ============================================================ */
+/* DARK THEME — overrides Tier 2 on <html class="dark">          */
+/* ------------------------------------------------------------ */
+/* tokens.css is regenerated from design-tokens/*.json by        */
+/* `npm run tokens:build`; this block lives here so the          */
+/* generator never clobbers it. The ref-palette-* primitives     */
+/* from Tier 1 are reused as is; the semantic Tier 2 (sys-*)     */
+/* layer re-points to darker shades. Opt in by setting           */
+/* document.documentElement.classList.toggle('dark', true), via  */
+/* useTheme / applyStoredThemeEagerly in src/hooks/use-theme.ts. */
+/* ============================================================ */
+html.dark {
+  color-scheme: dark;
+
+  --sys-color-surface-default: var(--ref-palette-gray-20);
+  --sys-color-surface-subtle: var(--ref-palette-gray-30);
+  --sys-color-surface-muted: var(--ref-palette-gray-40);
+  --sys-color-surface-inverse: var(--ref-palette-gray-99);
+
+  --sys-color-background-canvas: var(--ref-palette-gray-10);
+  --sys-color-background-elevated: var(--ref-palette-gray-20);
+
+  --sys-color-text-primary: var(--ref-palette-gray-95);
+  --sys-color-text-secondary: var(--ref-palette-gray-70);
+  --sys-color-text-tertiary: var(--ref-palette-gray-60);
+  --sys-color-text-disabled: var(--ref-palette-gray-50);
+  --sys-color-text-inverse: var(--ref-palette-gray-10);
+  --sys-color-text-link: var(--ref-palette-blue-70);
+  --sys-color-text-link-hover: var(--ref-palette-blue-80);
+  --sys-color-text-link-visited: var(--ref-palette-blue-60);
+
+  --sys-color-primary: var(--ref-palette-blue-50);
+  --sys-color-primary-hover: var(--ref-palette-blue-60);
+  --sys-color-primary-active: var(--ref-palette-blue-70);
+  --sys-color-primary-subtle: var(--ref-palette-blue-20);
+  --sys-color-primary-on: var(--ref-palette-white);
+
+  --sys-color-severity-critical-subtle: var(--ref-palette-red-20);
+  --sys-color-severity-critical-border: var(--ref-palette-red-50);
+  --sys-color-severity-critical-on-subtle: var(--ref-palette-red-80);
+  --sys-color-severity-high-subtle: var(--ref-palette-orange-20);
+  --sys-color-severity-high-border: var(--ref-palette-orange-50);
+  --sys-color-severity-high-on-subtle: var(--ref-palette-orange-80);
+  --sys-color-severity-medium-subtle: var(--ref-palette-yellow-20);
+  --sys-color-severity-medium-border: var(--ref-palette-yellow-50);
+  --sys-color-severity-medium-on-subtle: var(--ref-palette-yellow-80);
+  --sys-color-severity-low-subtle: var(--ref-palette-blue-20);
+  --sys-color-severity-low-border: var(--ref-palette-blue-50);
+  --sys-color-severity-low-on-subtle: var(--ref-palette-blue-80);
+  --sys-color-severity-info-subtle: var(--ref-palette-gray-30);
+  --sys-color-severity-info-border: var(--ref-palette-gray-50);
+  --sys-color-severity-info-on-subtle: var(--ref-palette-gray-80);
+
+  --sys-color-feedback-success-subtle: var(--ref-palette-green-20);
+  --sys-color-feedback-success-on-subtle: var(--ref-palette-green-80);
+  --sys-color-feedback-success-border: var(--ref-palette-green-50);
+  --sys-color-feedback-warning-subtle: var(--ref-palette-orange-20);
+  --sys-color-feedback-warning-border: var(--ref-palette-orange-50);
+  --sys-color-feedback-error-subtle: var(--ref-palette-red-20);
+  --sys-color-feedback-error-border: var(--ref-palette-red-50);
+  --sys-color-feedback-info-subtle: var(--ref-palette-blue-20);
+  --sys-color-feedback-info-border: var(--ref-palette-blue-50);
+
+  --sys-color-border-default: var(--ref-palette-gray-40);
+  --sys-color-border-subtle: var(--ref-palette-gray-30);
+  --sys-color-border-strong: var(--ref-palette-gray-60);
+
+  --sys-color-interactive-hover-bg: var(--ref-palette-gray-30);
+  --sys-color-interactive-active-bg: var(--ref-palette-gray-40);
+  --sys-color-interactive-selected-bg: var(--ref-palette-blue-20);
+  --sys-color-interactive-disabled-bg: var(--ref-palette-gray-30);
+  --sys-color-interactive-disabled-text: var(--ref-palette-gray-50);
+}
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================ */
+/* Base styles                                                   */
+/* ============================================================ */
+
+@layer base {
+  * {
+    @apply border-border-default;
+  }
+
+  html {
+    /* Per Definition Phase: support 320-1440px breakpoints */
+    font-size: 16px;
+  }
+
+  body {
+    @apply bg-canvas text-text-primary;
+    font-family: var(--ref-font-family-sans);
+    line-height: var(--ref-line-height-normal);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  code,
+  pre,
+  kbd {
+    font-family: var(--ref-font-family-mono);
+  }
+
+  /* Per WCAG 2.2 SC 2.4.7 + 2.4.11 — visible focus indicators */
+  :focus-visible {
+    outline: var(--cmp-button-focus-ring-width) solid var(--cmp-button-focus-ring-color);
+    outline-offset: 2px;
+  }
+
+  /* Per WCAG 2.3.3 — respect reduced motion preference */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+/* ============================================================ */
+/* Component-level utility classes (used across organisms)      */
+/* ============================================================ */
+
+@layer components {
+  /* Skeleton loading shimmer — per Design Tokens cmp.skeleton */
+  .skeleton {
+    @apply animate-pulse rounded-sm bg-surface-muted;
+  }
+
+  /* Visually-hidden but screen-reader accessible (WCAG 1.3.1) */
+  .sr-only-focusable {
+    @apply sr-only;
+  }
+  .sr-only-focusable:focus {
+    @apply not-sr-only fixed left-2 top-2 z-tooltip rounded-md bg-primary px-3 py-2 text-sm text-white;
+  }
+}

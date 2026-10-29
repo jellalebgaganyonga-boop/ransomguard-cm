@@ -4,9 +4,20 @@ using System.Text;
 namespace RansomGuard.Agent.Core.Detection.Sentinel;
 
 /// <summary>
-/// Generates realistic semantic medical canary file content in French and English.
-/// All content is synthetic — zero real patient data (GDPR/Law 2024/017 compliant).
-/// Content is designed to look like genuine hospital records to defeat heuristic filters.
+/// Generates realistic hospital records to use as canary files.
+///
+/// <para>
+/// All of it is invented. No real patient data is involved, which is what makes the decoys
+/// lawful to plant (GDPR, Cameroon Law 2024/017). It has to read like a genuine record anyway:
+/// ransomware that skips files which do not look like documents would skip a decoy that reads
+/// like a placeholder.
+/// </para>
+///
+/// <para>
+/// The content is English (owner's decision, 2026-10-25). The hospital is in Cameroon, so the
+/// names stay Cameroonian -- they are names, not a language -- and the medicine stays what a
+/// hospital in Yaounde actually treats.
+/// </para>
 /// </summary>
 public static class CanaryContentGenerator
 {
@@ -19,9 +30,9 @@ public static class CanaryContentGenerator
 
     private static readonly string[] CameroonianFirstNames =
     [
-        "Jean-Pierre", "Marie-Claire", "Paul", "Françoise", "Emmanuel", "Bernadette",
-        "Samuel", "Cécile", "Joseph", "Anne-Marie", "Michel", "Thérèse",
-        "David", "Isabelle", "Pierre", "Claudine", "André", "Marguerite",
+        "Jean-Pierre", "Marie-Claire", "Paul", "Francine", "Emmanuel", "Bernadette",
+        "Samuel", "Cecile", "Joseph", "Anne-Marie", "Michel", "Therese",
+        "David", "Isabelle", "Pierre", "Claudine", "Andre", "Marguerite",
         "Alain", "Solange"
     ];
 
@@ -29,50 +40,79 @@ public static class CanaryContentGenerator
     [
         "Dr. Nkeng Patrice", "Dr. Fotso Mireille", "Dr. Kamga Bernard",
         "Dr. Tchamba Sylvie", "Dr. Mvondo Jean", "Dr. Atangana Rose",
-        "Dr. Simo Étienne", "Dr. Njoya Marianne"
+        "Dr. Simo Etienne", "Dr. Njoya Marianne"
     ];
 
     private static readonly string[] MedicalConditions =
     [
-        "Paludisme sévère (P. falciparum)", "Hypertension artérielle stade 2",
-        "Diabète de type 2 non insulinodépendant", "Infection urinaire récurrente",
-        "Anémie ferriprive modérée", "Gastrite chronique à H. pylori",
-        "Tuberculose pulmonaire (en traitement)", "Drépanocytose SS",
-        "Insuffisance rénale chronique stade 3", "Asthme bronchique persistant"
+        "Severe malaria (P. falciparum)", "Stage 2 hypertension",
+        "Type 2 diabetes, non insulin-dependent", "Recurrent urinary tract infection",
+        "Moderate iron-deficiency anaemia", "Chronic H. pylori gastritis",
+        "Pulmonary tuberculosis (under treatment)", "Sickle cell disease SS",
+        "Stage 3 chronic kidney disease", "Persistent bronchial asthma"
     ];
 
     private static readonly string[] Treatments =
     [
-        "Artéméther-Luméfantrine 80/480mg, 2x/jour pendant 3 jours",
-        "Amlodipine 10mg, 1x/jour le matin",
-        "Metformine 850mg, 2x/jour aux repas",
-        "Ciprofloxacine 500mg, 2x/jour pendant 7 jours",
-        "Fer Foldine 1cp/jour pendant 3 mois",
-        "Oméprazole 20mg, 1x/jour avant le petit-déjeuner",
-        "Rifampicine + Isoniazide + Pyrazinamide (RHZ), protocole national",
-        "Acide folique 5mg/jour + Hydroxycarbamide 15mg/kg/jour"
+        "Artemether-Lumefantrine 80/480 mg, twice daily for 3 days",
+        "Amlodipine 10 mg, once daily in the morning",
+        "Metformin 850 mg, twice daily with meals",
+        "Ciprofloxacin 500 mg, twice daily for 7 days",
+        "Ferrous sulphate + folic acid, 1 tablet daily for 3 months",
+        "Omeprazole 20 mg, once daily before breakfast",
+        "Rifampicin + Isoniazid + Pyrazinamide (RHZ), national protocol",
+        "Folic acid 5 mg/day + Hydroxycarbamide 15 mg/kg/day"
     ];
 
     /// <summary>
-    /// Generates canary content for the specified template.
-    /// Each call produces unique content using randomized data.
+    /// The templates a canary can be generated from, and the names they used to have.
+    ///
+    /// <para>
+    /// The names were French. A canary already planted on a workstation records the name it was
+    /// made with, and that name is read again every time the decoy is checked or repaired, so
+    /// dropping the old names would orphan every canary already in the field: the agent would
+    /// fall through to the default template and quietly repair a laboratory result as a patient
+    /// record. The old names are kept here and map to the same content. They are not offered to
+    /// anything new -- appsettings.json lists the English ones -- so the field migrates as
+    /// workstations are reinstalled, without a canary going unwatched in the meantime.
+    /// </para>
     /// </summary>
-    /// <param name="template">Template name (e.g., "dossier_patient").</param>
-    /// <returns>Tuple of (content bytes, file extension).</returns>
+    private static readonly Dictionary<string, Func<string>> Templates = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["patient_record"] = GeneratePatientRecord,
+        ["lab_results"] = GenerateLabResults,
+        ["medical_imaging"] = GenerateImagingReport,
+        ["pharmacy_prescription"] = GeneratePrescription,
+        ["consultation_report"] = GenerateConsultationReport,
+
+        // The names used before 2026-10-25, kept so canaries already in the field stay watched.
+        ["dossier_patient"] = GeneratePatientRecord,
+        ["analyses_laboratoire"] = GenerateLabResults,
+        ["imagerie_medicale"] = GenerateImagingReport,
+        ["prescription_pharmacie"] = GeneratePrescription,
+        ["rapport_consultation"] = GenerateConsultationReport,
+    };
+
+    /// <summary>
+    /// Generates canary content for a template. Each call produces different content.
+    /// </summary>
+    /// <param name="template">Template name, for example "patient_record".</param>
+    /// <returns>The content bytes and the file extension.</returns>
     public static (byte[] Content, string Extension) Generate(string template)
     {
-        string content = template switch
-        {
-            "dossier_patient" => GeneratePatientRecord(),
-            "analyses_laboratoire" => GenerateLabAnalysis(),
-            "imagerie_medicale" => GenerateImagingReport(),
-            "prescription_pharmacie" => GeneratePrescription(),
-            "rapport_consultation" => GenerateConsultationReport(),
-            _ => GeneratePatientRecord()
-        };
+        Func<string> generator = Templates.TryGetValue(template, out Func<string>? found)
+            ? found
+            : GeneratePatientRecord;
 
-        return (Encoding.UTF8.GetBytes(content), ".txt");
+        return (Encoding.UTF8.GetBytes(generator()), ".txt");
     }
+
+    /// <summary>The template names offered to anything new. The old names still work.</summary>
+    public static IReadOnlyCollection<string> KnownTemplates =>
+    [
+        "patient_record", "lab_results", "medical_imaging",
+        "pharmacy_prescription", "consultation_report"
+    ];
 
     /// <summary>
     /// Computes SHA-256 hash of the given content bytes.
@@ -87,93 +127,93 @@ public static class CanaryContentGenerator
     {
         string firstName = Pick(CameroonianFirstNames);
         string lastName = Pick(CameroonianLastNames);
-        string dob = RandomDate(1950, 2005);
-        string fileNumber = $"DM-{RandomInt(10000, 99999)}-{RandomInt(100, 999)}";
+        string dob = RandomBirthDate();
+        string fileNumber = $"HCY-{RandomInt(2020, 2026)}-{RandomInt(10000, 99999)}";
 
         return $"""
-            ╔══════════════════════════════════════════════════════════════╗
-            ║          DOSSIER MÉDICAL CONFIDENTIEL                        ║
-            ║          HÔPITAL CENTRAL DE YAOUNDÉ                          ║
-            ╚══════════════════════════════════════════════════════════════╝
+            ================================================================
+                      CONFIDENTIAL MEDICAL RECORD
+                      YAOUNDE CENTRAL HOSPITAL
+            ================================================================
 
-            Patient         : {lastName} {firstName}
-            Date de naissance : {dob}
-            Numéro de dossier : {fileNumber}
-            Médecin traitant  : {Pick(DoctorNames)}
-            Service           : Médecine Interne
+            Patient          : {lastName} {firstName}
+            Date of birth    : {dob}
+            Record number    : {fileNumber}
+            Attending doctor : {Pick(DoctorNames)}
+            Ward             : Internal Medicine
 
-            ─────────────────────────────────────────────────────────────
-            ANTÉCÉDENTS MÉDICAUX
-            ─────────────────────────────────────────────────────────────
+            ----------------------------------------------------------------
+            MEDICAL HISTORY
+            ----------------------------------------------------------------
               - {Pick(MedicalConditions)}
               - {Pick(MedicalConditions)}
 
-            ─────────────────────────────────────────────────────────────
-            TRAITEMENT EN COURS
-            ─────────────────────────────────────────────────────────────
+            ----------------------------------------------------------------
+            CURRENT TREATMENT
+            ----------------------------------------------------------------
               - {Pick(Treatments)}
               - {Pick(Treatments)}
 
-            ─────────────────────────────────────────────────────────────
-            NOTES DE SUIVI
-            ─────────────────────────────────────────────────────────────
-            Consultation du {RandomRecentDate()} :
-            Le patient se présente pour un contrôle de routine. Examen clinique
-            sans particularité. Tension artérielle {RandomInt(110, 160)}/{RandomInt(60, 100)} mmHg.
-            Température {RandomDecimal(36.0, 38.5)}°C. Poids {RandomInt(50, 95)} kg.
+            ----------------------------------------------------------------
+            FOLLOW-UP NOTES
+            ----------------------------------------------------------------
+            Consultation of {RandomRecentDate()}:
+            The patient attends for a routine review. Clinical examination
+            unremarkable. Blood pressure {RandomInt(110, 160)}/{RandomInt(60, 100)} mmHg.
+            Temperature {RandomDecimal(36.0, 38.5)} C. Weight {RandomInt(50, 95)} kg.
 
-            Prochaine consultation prévue dans 4 semaines.
+            Next appointment in 4 weeks.
 
-            Signature : {Pick(DoctorNames)}
-            Date : {RandomRecentDate()}
+            Signed : {Pick(DoctorNames)}
+            Date   : {RandomRecentDate()}
 
-            ── Ce document est confidentiel. Toute divulgation non autorisée
-               est sanctionnée par la Loi N°2024/017. ──
+            -- This document is confidential. Unauthorised disclosure is an
+               offence under Law No. 2024/017. --
             """;
     }
 
-    private static string GenerateLabAnalysis()
+    private static string GenerateLabResults()
     {
         string firstName = Pick(CameroonianFirstNames);
         string lastName = Pick(CameroonianLastNames);
 
         return $"""
-            ╔══════════════════════════════════════════════════════════════╗
-            ║          RÉSULTATS D'ANALYSES DE LABORATOIRE                ║
-            ║          LABORATOIRE CENTRAL — HÔPITAL DE YAOUNDÉ           ║
-            ╚══════════════════════════════════════════════════════════════╝
+            ================================================================
+                      LABORATORY RESULTS
+                      CENTRAL LABORATORY - YAOUNDE HOSPITAL
+            ================================================================
 
-            Patient     : {lastName} {firstName}
-            N° Analyse  : LAB-{RandomInt(100000, 999999)}
-            Date prélèv.: {RandomRecentDate()}
-            Prescripteur: {Pick(DoctorNames)}
+            Patient        : {lastName} {firstName}
+            Sample number  : LAB-{RandomInt(2025, 2026)}-{RandomInt(100000, 999999)}
+            Collected on   : {RandomRecentDate()}
+            Requested by   : {Pick(DoctorNames)}
 
-            ─────────────────────────────────────────────────────────────
-            HÉMATOLOGIE COMPLÈTE
-            ─────────────────────────────────────────────────────────────
-            Hémoglobine      : {RandomDecimal(8.0, 16.0)} g/dL    (N: 12-16)
-            Hématocrite      : {RandomDecimal(30.0, 50.0)} %       (N: 36-46)
-            Globules blancs  : {RandomDecimal(3.5, 12.0)} x10³/µL  (N: 4.0-10.0)
-            Plaquettes       : {RandomInt(100, 400)} x10³/µL       (N: 150-400)
-            VGM              : {RandomDecimal(75.0, 100.0)} fL     (N: 80-100)
+            ----------------------------------------------------------------
+            FULL BLOOD COUNT
+            ----------------------------------------------------------------
+            Haemoglobin        : {RandomDecimal(7.0, 16.0)} g/dL      (ref 12.0 - 16.0)
+            White cells        : {RandomDecimal(3.0, 15.0)} x10^9/L   (ref 4.0 - 10.0)
+            Platelets          : {RandomInt(80, 450)} x10^9/L         (ref 150 - 400)
+            Haematocrit        : {RandomDecimal(25.0, 48.0)} %        (ref 36 - 46)
 
-            ─────────────────────────────────────────────────────────────
-            BIOCHIMIE
-            ─────────────────────────────────────────────────────────────
-            Glycémie à jeun  : {RandomDecimal(0.7, 2.5)} g/L       (N: 0.7-1.1)
-            Créatinine       : {RandomDecimal(6.0, 25.0)} mg/L     (N: 6-13)
-            Urée             : {RandomDecimal(0.15, 0.60)} g/L     (N: 0.15-0.45)
-            ASAT             : {RandomInt(10, 80)} UI/L             (N: 10-40)
-            ALAT             : {RandomInt(10, 70)} UI/L             (N: 10-40)
+            ----------------------------------------------------------------
+            BIOCHEMISTRY
+            ----------------------------------------------------------------
+            Fasting glucose    : {RandomDecimal(0.7, 2.5)} g/L        (ref 0.70 - 1.10)
+            Creatinine         : {RandomInt(6, 25)} mg/L              (ref 7 - 13)
+            Urea               : {RandomDecimal(0.15, 0.80)} g/L      (ref 0.15 - 0.45)
+            ALT                : {RandomInt(10, 90)} IU/L             (ref 10 - 40)
 
-            ─────────────────────────────────────────────────────────────
-            PARASITOLOGIE
-            ─────────────────────────────────────────────────────────────
-            Goutte épaisse   : {(RandomInt(0, 1) == 1 ? "Positive — P. falciparum, densité parasitaire 2500/µL" : "Négative")}
-            TDR Paludisme    : {(RandomInt(0, 1) == 1 ? "Positif (Pf)" : "Négatif")}
+            ----------------------------------------------------------------
+            PARASITOLOGY
+            ----------------------------------------------------------------
+            Thick blood film   : {Pick(["Negative", "Positive, P. falciparum", "Positive, low parasitaemia"])}
+            Rapid malaria test : {Pick(["Negative", "Positive"])}
 
-            Biologiste responsable : Dr. {Pick(CameroonianLastNames)} {Pick(CameroonianFirstNames)[..1]}.
-            Date validation : {RandomRecentDate()}
+            Validated by : {Pick(DoctorNames)}
+            Issued on    : {RandomRecentDate()}
+
+            -- Results to be interpreted by the requesting clinician. --
             """;
     }
 
@@ -183,37 +223,41 @@ public static class CanaryContentGenerator
         string lastName = Pick(CameroonianLastNames);
 
         return $"""
-            ╔══════════════════════════════════════════════════════════════╗
-            ║          COMPTE-RENDU D'IMAGERIE MÉDICALE                   ║
-            ║          SERVICE DE RADIOLOGIE — HÔPITAL DE YAOUNDÉ         ║
-            ╚══════════════════════════════════════════════════════════════╝
+            ================================================================
+                      MEDICAL IMAGING REPORT
+                      RADIOLOGY DEPARTMENT - YAOUNDE CENTRAL HOSPITAL
+            ================================================================
 
-            Patient      : {lastName} {firstName}
-            N° Examen    : RAD-{RandomInt(10000, 99999)}
-            Date examen  : {RandomRecentDate()}
-            Prescripteur : {Pick(DoctorNames)}
-            Type examen  : Radiographie thoracique (Face + Profil)
+            Patient       : {lastName} {firstName}
+            Examination   : {Pick(["Chest X-ray (PA)", "Abdominal ultrasound", "Obstetric ultrasound", "Knee X-ray", "Head CT scan"])}
+            Performed on  : {RandomRecentDate()}
+            Radiologist   : {Pick(DoctorNames)}
+            Reference     : IMG-{RandomInt(2025, 2026)}-{RandomInt(10000, 99999)}
 
-            ─────────────────────────────────────────────────────────────
-            RÉSULTATS
-            ─────────────────────────────────────────────────────────────
-            Parenchyme pulmonaire :
-              - Transparence pulmonaire conservée bilatéralement
-              - Pas d'opacité alvéolaire ni interstitielle
-              - Culs-de-sac costo-diaphragmatiques libres
+            ----------------------------------------------------------------
+            FINDINGS
+            ----------------------------------------------------------------
+            - Clear lung fields, no focal consolidation
+            - No mediastinal widening
+            - Cardiac silhouette within normal limits
+            - Costophrenic angles clear
+            - No visible bone lesion
+            - Rib arches intact
 
-            Médiastin :
-              - Silhouette cardiaque de taille normale (ICT = 0.{RandomInt(42, 55)})
-              - Pas d'élargissement médiastinal
+            ----------------------------------------------------------------
+            CONCLUSION
+            ----------------------------------------------------------------
+            {Pick([
+                "Unremarkable examination.",
+                "No abnormality of clinical significance.",
+                "Appearances stable compared with the previous study.",
+                "Clinical correlation recommended."
+            ])}
 
-            Structures osseuses :
-              - Pas de lésion osseuse visible
-              - Intégrité des arcs costaux
+            Reported by : {Pick(DoctorNames)}
+            Date        : {RandomRecentDate()}
 
-            CONCLUSION : Radiographie thoracique sans anomalie significative.
-
-            Radiologue : {Pick(DoctorNames)}
-            Date compte-rendu : {RandomRecentDate()}
+            -- Confidential. Part of the patient's medical record. --
             """;
     }
 
@@ -223,38 +267,34 @@ public static class CanaryContentGenerator
         string lastName = Pick(CameroonianLastNames);
 
         return $"""
-            ╔══════════════════════════════════════════════════════════════╗
-            ║          ORDONNANCE MÉDICALE                                ║
-            ║          HÔPITAL CENTRAL DE YAOUNDÉ                          ║
-            ╚══════════════════════════════════════════════════════════════╝
+            ================================================================
+                      MEDICAL PRESCRIPTION
+                      YAOUNDE CENTRAL HOSPITAL
+            ================================================================
 
-            Patient      : {lastName} {firstName}
-            Âge          : {RandomInt(18, 85)} ans
-            Poids        : {RandomInt(45, 100)} kg
-            Date         : {RandomRecentDate()}
+            Patient : {lastName} {firstName}
+            Age     : {RandomInt(18, 85)} years
+            Date    : {RandomRecentDate()}
 
-            ─────────────────────────────────────────────────────────────
-            PRESCRIPTION
-            ─────────────────────────────────────────────────────────────
-
+            ----------------------------------------------------------------
+            PRESCRIBED
+            ----------------------------------------------------------------
             1. {Pick(Treatments)}
-
             2. {Pick(Treatments)}
+            3. Paracetamol 1000 mg - 1 tablet every 6 hours
+               if pain or fever above 38.5 C (maximum 4 g per day)
 
-            3. Paracétamol 1000mg — 1 comprimé toutes les 6 heures
-               si douleur ou fièvre > 38.5°C (max 4g/jour)
+            ----------------------------------------------------------------
+            ADVICE
+            ----------------------------------------------------------------
+            - Take the full course even if symptoms improve
+            - Return to clinic if symptoms worsen
+            - Repeat blood tests in 2 weeks
 
-            ─────────────────────────────────────────────────────────────
-            RECOMMANDATIONS
-            ─────────────────────────────────────────────────────────────
-            - Respecter les horaires de prise
-            - Revenir en consultation si aggravation des symptômes
-            - Contrôle biologique dans 2 semaines
+            Prescriber     : {Pick(DoctorNames)}
+            Medical council: CNOM/{RandomInt(1000, 9999)}
 
-            Prescripteur : {Pick(DoctorNames)}
-            N° Ordre médecins : CNOM/{RandomInt(1000, 9999)}
-
-            ── Ne pas renouveler sans consultation médicale ──
+            -- Not to be repeated without a medical consultation. --
             """;
     }
 
@@ -264,70 +304,64 @@ public static class CanaryContentGenerator
         string lastName = Pick(CameroonianLastNames);
 
         return $"""
-            ╔══════════════════════════════════════════════════════════════╗
-            ║          RAPPORT DE CONSULTATION                            ║
-            ║          HÔPITAL CENTRAL DE YAOUNDÉ                          ║
-            ╚══════════════════════════════════════════════════════════════╝
+            ================================================================
+                      CONSULTATION REPORT
+                      YAOUNDE CENTRAL HOSPITAL
+            ================================================================
 
             Patient      : {lastName} {firstName}
-            N° Dossier   : DM-{RandomInt(10000, 99999)}-{RandomInt(100, 999)}
-            Date consult.: {RandomRecentDate()}
-            Motif        : {Pick(["Fièvre persistante depuis 5 jours", "Douleur abdominale aiguë", "Contrôle de routine post-traitement", "Céphalées et vertiges récurrents", "Toux productive depuis 3 semaines"])}
+            Date         : {RandomRecentDate()}
+            Seen by      : {Pick(DoctorNames)}
+            Presenting   : {Pick([
+                "Fever for 5 days",
+                "Acute abdominal pain",
+                "Routine review after treatment",
+                "Recurrent headache and dizziness"
+            ])}
 
-            ─────────────────────────────────────────────────────────────
-            EXAMEN CLINIQUE
-            ─────────────────────────────────────────────────────────────
-            État général : {Pick(["Bon", "Altéré", "Conservé", "Légèrement altéré"])}
-            Température  : {RandomDecimal(36.0, 39.5)}°C
-            TA           : {RandomInt(100, 170)}/{RandomInt(60, 100)} mmHg
-            FC           : {RandomInt(55, 110)} bpm
-            FR           : {RandomInt(14, 28)} cycles/min
-            SpO2         : {RandomInt(90, 99)} %
+            ----------------------------------------------------------------
+            EXAMINATION
+            ----------------------------------------------------------------
+            General condition : {Pick(["Good", "Reduced", "Preserved", "Slightly reduced"])}
+            Temperature       : {RandomDecimal(36.0, 39.5)} C
+            Blood pressure    : {RandomInt(100, 170)}/{RandomInt(55, 105)} mmHg
+            Pulse             : {RandomInt(55, 115)} bpm
+            Weight            : {RandomInt(45, 100)} kg
 
-            ─────────────────────────────────────────────────────────────
-            HYPOTHÈSE DIAGNOSTIQUE
-            ─────────────────────────────────────────────────────────────
-              - {Pick(MedicalConditions)}
+            ----------------------------------------------------------------
+            WORKING DIAGNOSIS
+            ----------------------------------------------------------------
+            {Pick(MedicalConditions)}
 
-            ─────────────────────────────────────────────────────────────
-            CONDUITE À TENIR
-            ─────────────────────────────────────────────────────────────
-              - Bilan biologique demandé (NFS, CRP, goutte épaisse)
-              - Traitement symptomatique instauré
-              - Rendez-vous de contrôle dans 1 semaine
+            ----------------------------------------------------------------
+            PLAN
+            ----------------------------------------------------------------
+            - Blood tests requested (FBC, CRP, thick film)
+            - Symptomatic treatment started
+            - Review in 1 week
 
-            Médecin : {Pick(DoctorNames)}
-            Signature : ____________________
+            Doctor : {Pick(DoctorNames)}
+
+            -- Confidential. Part of the patient's medical record. --
             """;
     }
 
-    private static string Pick(string[] array)
-    {
-        return array[RandomNumberGenerator.GetInt32(array.Length)];
-    }
+    private static string Pick(string[] options) =>
+        options[RandomNumberGenerator.GetInt32(options.Length)];
 
-    private static int RandomInt(int min, int max)
-    {
-        return RandomNumberGenerator.GetInt32(min, max + 1);
-    }
+    private static int RandomInt(int minInclusive, int maxInclusive) =>
+        RandomNumberGenerator.GetInt32(minInclusive, maxInclusive + 1);
 
     private static string RandomDecimal(double min, double max)
     {
-        double value = min + (max - min) * RandomNumberGenerator.GetInt32(0, 1000) / 1000.0;
-        return value.ToString("F1");
+        int scaled = RandomNumberGenerator.GetInt32((int)(min * 10), (int)(max * 10) + 1);
+        return (scaled / 10.0).ToString("F1", System.Globalization.CultureInfo.InvariantCulture);
     }
 
-    private static string RandomDate(int minYear, int maxYear)
-    {
-        int year = RandomInt(minYear, maxYear);
-        int month = RandomInt(1, 12);
-        int day = RandomInt(1, 28);
-        return $"{day:D2}/{month:D2}/{year}";
-    }
+    private static string RandomRecentDate() =>
+        DateTime.UtcNow.AddDays(-RandomNumberGenerator.GetInt32(1, 400)).ToString("yyyy-MM-dd");
 
-    private static string RandomRecentDate()
-    {
-        DateTime recent = DateTime.Now.AddDays(-RandomInt(1, 90));
-        return recent.ToString("dd/MM/yyyy");
-    }
+    private static string RandomBirthDate() =>
+        DateTime.UtcNow.AddYears(-RandomNumberGenerator.GetInt32(18, 86))
+            .AddDays(-RandomNumberGenerator.GetInt32(0, 365)).ToString("yyyy-MM-dd");
 }

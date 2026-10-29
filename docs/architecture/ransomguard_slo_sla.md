@@ -226,6 +226,8 @@ These SLOs are **non-negotiable** — they protect the integrity of the entire p
 
 **SLO Target:** 100% of admin actions logged with MFA verification flag = true.
 
+> **Not implemented** — no MFA in the GRID, the console or the database; see `docs/console/INVENTAIRE_CONSOLE.md` (MFA); decided: mandatory TOTP for tenant_admin, after Sprint 8. The SLO cannot be measured: no action carries an MFA verification flag.
+
 ---
 
 ### SLO-S3: Audit Log Integrity

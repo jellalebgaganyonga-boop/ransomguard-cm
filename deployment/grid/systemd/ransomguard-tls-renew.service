@@ -1,0 +1,13 @@
+[Unit]
+Description=RansomGuard GRID - renew dashboard TLS certificate
+After=network-online.target tailscaled.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/opt/ransomguard/app/deployment/grid
+ExecStart=/opt/ransomguard/app/deployment/grid/refresh-tls.sh
+# Certificates are mounted read-only into nginx; a reload is enough to pick up
+# the new file, and it never drops a connection.
+ExecStartPost=/usr/bin/docker exec grid-nginx nginx -s reload

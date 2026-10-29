@@ -1,0 +1,563 @@
+# RansomGuard-CM — the full agent validation, independent of any developer machine.
+#
+# The CI gates every push with the agent suite minus the Stress category. This workflow
+# runs what the CI leaves out, on a clean Windows runner:
+#   * every test category: the main suite, then the Stress category on its own (it measures
+#     process-wide handle counts and durations), with the TRX results as an artifact;
+#   * the agent installed as a real Windows service (LocalSystem, started by the Service
+#     Control Manager from C:\Windows\System32): it must start, read its configuration from
+#     its own directory (AGT-SVC-001), deploy its canaries, write its signed audit chain on a
+#     canary modification, and pass --verify-audit-log once stopped. Then it is uninstalled.
+#
+# A developer machine with a third-party antivirus (R12) can no longer block a validation.
+name: Agent full
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+  # A review branch is validated in full before sprint8/recovery fast-forwards onto it.
+  # Every push of every branch, like the E2E: a branch about to be merged never depends on
+  # a manual run (fix/** branches used to need workflow_dispatch).
+  push:
+    branches: ['**']
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_VERSION: '8.0.x'
+
+jobs:
+  all-tests:
+    name: Agent — all test categories (Stress included)
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: agent/src
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Build
+        run: dotnet build RansomGuard.Agent.sln -c Release
+
+      - name: Main suite (what the CI runs)
+        run: dotnet test RansomGuard.Agent.sln -c Release --no-build --filter "Category!=Stress" --logger "trx;LogFileName=agent-main.trx"
+
+      # The Stress tests measure process-wide quantities (handle counts, durations): run them
+      # on their own, never next to 670 tests executing in parallel in the same process.
+      - name: Stress category, alone
+        if: always()
+        run: dotnet test RansomGuard.Agent.sln -c Release --no-build --filter "Category=Stress" --logger "trx;LogFileName=agent-stress.trx"
+
+      - name: Count
+        if: always()
+        shell: pwsh
+        run: |
+          $ns = @{t='http://microsoft.com/schemas/VisualStudio/TeamTest/2010'}
+          $summary = "### Agent tests, all categories`n"
+          $total = 0; $passed = 0; $failed = 0
+          foreach ($name in 'agent-main.trx', 'agent-stress.trx') {
+            $trx = Get-ChildItem -Recurse -Filter $name -Path . | Select-Object -First 1
+            if (-not $trx) { Write-Host "::error::$name missing"; $failed++; continue }
+            [xml]$doc = Get-Content $trx.FullName
+            $c = $doc.TestRun.ResultSummary.Counters
+            $line = "${name}: total=$($c.total) passed=$($c.passed) failed=$($c.failed) notExecuted=$($c.notExecuted)"
+            Write-Host "::notice title=Agent tests::$line"
+            $summary += "`n- $line"
+            $total += [int]$c.total; $passed += [int]$c.passed; $failed += [int]$c.failed
+            foreach ($f in (Select-Xml -Xml $doc -Namespace $ns -XPath "//t:UnitTestResult[@outcome='Failed']")) {
+              Write-Host "::error title=$($f.Node.testName)::$(($f.Node.Output.ErrorInfo.Message -replace "`r?`n", ' '))"
+            }
+          }
+          $all = "all categories: total=$total passed=$passed failed=$failed"
+          Write-Host "::notice title=Agent tests (all categories)::$all"
+          $summary += "`n- **$all**"
+          $summary >> $env:GITHUB_STEP_SUMMARY
+          if ($failed -gt 0) { exit 1 }
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agent-all-tests
+          path: agent/src/**/TestResults/*.trx
+          retention-days: 14
+
+  service:
+    name: Agent — installed as a real Windows service
+    runs-on: windows-latest
+    env:
+      INSTALL_DIR: C:\RGAgentCI
+      WATCH_DIR: C:\rg-ci-watch
+      SERVICE_NAME: RansomGuardAgentCI
+      DATA_ROOT: C:\ProgramData\RansomGuard-CM
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Publish the service (Release)
+        working-directory: agent/src
+        run: dotnet publish RansomGuard.Agent.Service/RansomGuard.Agent.Service.csproj -c Release -o ${{ env.INSTALL_DIR }}
+
+      - name: Installed configuration
+        shell: pwsh
+        run: |
+          # What install.ps1 writes on a real machine (the GRID address), plus a watch directory
+          # that exists for LocalSystem. Unreachable GRID on purpose: the agent must run without it.
+          New-Item -ItemType Directory -Force -Path $env:WATCH_DIR | Out-Null
+          $path = Join-Path $env:INSTALL_DIR 'appsettings.json'
+          $cfg = Get-Content $path -Raw | ConvertFrom-Json
+          $cfg.Agent.Server | Add-Member -NotePropertyName BaseUrl -NotePropertyValue 'https://grid.ci.invalid' -Force
+          $cfg.Agent.Detection.WatchPaths = @($env:WATCH_DIR)
+          $cfg.Agent.Sentinel.WatchDirectories = @($env:WATCH_DIR)
+          $cfg | ConvertTo-Json -Depth 32 | Set-Content -Path $path -Encoding utf8
+          Get-Content $path | Select-String -Pattern 'BaseUrl|rg-ci-watch|TrustAny'
+
+      - name: An existing installation, left open (AGT-KEY-001, before)
+        shell: pwsh
+        run: |
+          # What every installation had before AGT-KEY-001: the data root inheriting
+          # BUILTIN\Users read from C:\ProgramData, with a key file in it.
+          New-Item -ItemType Directory -Force -Path "$env:DATA_ROOT\keys" | Out-Null
+          Set-Content -Path "$env:DATA_ROOT\keys\legacy.key" -Value 'legacy key material'
+          icacls $env:DATA_ROOT
+          icacls "$env:DATA_ROOT\keys"
+          icacls "$env:DATA_ROOT\keys\legacy.key"
+
+      - name: Install and start as LocalSystem
+        shell: pwsh
+        run: |
+          $exe = Join-Path $env:INSTALL_DIR 'RansomGuard.Agent.Service.exe'
+          sc.exe create $env:SERVICE_NAME binPath= "`"$exe`"" start= demand obj= LocalSystem
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          sc.exe start $env:SERVICE_NAME
+          $deadline = (Get-Date).AddSeconds(60)
+          do { Start-Sleep 2; $svc = Get-Service $env:SERVICE_NAME } while ($svc.Status -ne 'Running' -and (Get-Date) -lt $deadline)
+          Write-Host "Service status: $($svc.Status)"
+          if ($svc.Status -ne 'Running') { Write-Host '::error::the service did not reach Running'; exit 1 }
+
+      - name: Its data directories are closed to SYSTEM and Administrators (AGT-KEY-001, after)
+        shell: pwsh
+        run: |
+          icacls $env:DATA_ROOT
+          foreach ($sub in 'keys', 'data', 'logs') { if (Test-Path "$env:DATA_ROOT\$sub") { icacls "$env:DATA_ROOT\$sub" } }
+          icacls "$env:DATA_ROOT\keys\legacy.key"
+
+          # Production: nobody but SYSTEM (S-1-5-18) and Administrators (S-1-5-32-544), on every entry.
+          $allowed = 'S-1-5-18', 'S-1-5-32-544'
+          $bad = @()
+          if (-not (Get-Acl $env:DATA_ROOT).AreAccessRulesProtected) { $bad += "$env:DATA_ROOT still inherits from C:\ProgramData" }
+          foreach ($item in @(Get-Item $env:DATA_ROOT -Force) + @(Get-ChildItem $env:DATA_ROOT -Recurse -Force)) {
+            $acl = Get-Acl $item.FullName
+            foreach ($rule in $acl.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])) {
+              if ($rule.AccessControlType -eq 'Allow' -and $allowed -notcontains $rule.IdentityReference.Value) {
+                $bad += "$($item.FullName): grants $($rule.IdentityReference.Value) $($rule.FileSystemRights)"
+              }
+            }
+            $owner = $acl.GetOwner([System.Security.Principal.SecurityIdentifier]).Value
+            if ($allowed -notcontains $owner) { $bad += "$($item.FullName): owned by $owner" }
+          }
+          if ($bad.Count -gt 0) { $bad | ForEach-Object { Write-Host "::error::$_" }; exit 1 }
+          Write-Host "Closed: every entry under $env:DATA_ROOT grants SYSTEM and Administrators only."
+
+      - name: It read its configuration (canaries deployed in the configured directory)
+        shell: pwsh
+        run: |
+          $deadline = (Get-Date).AddSeconds(120)
+          do {
+            Start-Sleep 3
+            if ((Get-Service $env:SERVICE_NAME).Status -ne 'Running') { Write-Host '::error::the service stopped'; exit 1 }
+            # Canaries are Hidden | System (CanaryFileService): -Force lists them.
+            $canaries = @(Get-ChildItem $env:WATCH_DIR -File -Force -Filter '0001_*' -ErrorAction SilentlyContinue)
+          } while ($canaries.Count -eq 0 -and (Get-Date) -lt $deadline)
+          $canaries | Format-Table Name, Length, Attributes -AutoSize | Out-String | Write-Host
+          if ($canaries.Count -eq 0) { Write-Host '::error::no canary in the configured directory'; exit 1 }
+
+      - name: A canary modification writes the signed audit chain, and its writer is suspended (ADR-026)
+        shell: pwsh
+        run: |
+          $canary = Get-ChildItem $env:WATCH_DIR -File -Force -Filter '0001_*' | Select-Object -First 1
+          # The write comes from a throwaway child, not from this shell: with the response engine on,
+          # the writer of a canary is suspended (ETW names it), and this step must stay alive.
+          $writer = Start-Process cmd.exe -ArgumentList "/c echo modified by the CI service check>>`"$($canary.FullName)`" & ping -n 90 127.0.0.1 >nul" -PassThru -WindowStyle Hidden
+          Write-Host "writer: cmd.exe PID $($writer.Id)"
+          $deadline = (Get-Date).AddSeconds(15)
+          do {
+            Start-Sleep 1
+            $p = Get-Process -Id $writer.Id -ErrorAction SilentlyContinue
+            $threads = @($p.Threads)
+            $suspended = $threads.Count -gt 0 -and @($threads | Where-Object { $_.ThreadState -eq 'Wait' -and $_.WaitReason -eq 'Suspended' }).Count -eq $threads.Count
+          } while (-not $suspended -and (Get-Date) -lt $deadline)
+          Write-Host "writer threads: $($threads.Count), all suspended: $suspended"
+          if (-not $suspended) { Write-Host '::error::ADR-026: the canary writer was not suspended within 15 s'; Stop-Process -Id $writer.Id -Force -ErrorAction SilentlyContinue; exit 1 }
+          Write-Host "::notice title=ADR-026 real suspension::cmd.exe PID $($writer.Id) wrote a canary and was suspended by the installed service"
+          "`n- **ADR-026 real suspension**: cmd.exe PID $($writer.Id) wrote a canary and was suspended by the installed service" >> $env:GITHUB_STEP_SUMMARY
+          Stop-Process -Id $writer.Id -Force
+          Start-Sleep 10
+          Stop-Service $env:SERVICE_NAME -Force
+          $exe = Join-Path $env:INSTALL_DIR 'RansomGuard.Agent.Service.exe'
+          # Run from System32 too: the CLI must also read the configuration of its own directory.
+          Push-Location C:\Windows\System32
+          $out = & $exe --verify-audit-log 2>&1 | Out-String
+          $code = $LASTEXITCODE
+          Pop-Location
+          Write-Host $out
+          Write-Host "exit code: $code"
+          if ($code -ne 0 -or $out -notmatch 'RESULT: PASS' -or $out -notmatch 'Audit log entries read: [1-9]') {
+            Write-Host '::error::the audit chain was not written or does not verify'; exit 1
+          }
+          "### Agent installed as a service`n`n$($out -split "`n" | Select-String 'Database examined|entries read|RESULT')" >> $env:GITHUB_STEP_SUMMARY
+
+      # Known limit: the chain writer links an entry within milliseconds, faster than this burst
+      # records them, so the kill has so far landed with 0 entries waiting (2026-10-15: twice 0,
+      # with 23 and 26 entries chained). This step proves an abrupt kill loses nothing and leaves a
+      # chain that verifies; the case "entries waiting at the moment of the crash" is proven by
+      # the in-process tests (AuditPipelineTests: 300 entries recorded, process gone before
+      # chaining, all chained first at the next start; and a chaining transaction never committed).
+      - name: A process killed during an audit burst loses no entry (AGT-AUD-002)
+        shell: pwsh
+        run: |
+          $exe = Join-Path $env:INSTALL_DIR 'RansomGuard.Agent.Service.exe'
+          function Verify {
+            Push-Location C:\Windows\System32
+            $o = & $exe --verify-audit-log 2>&1 | Out-String
+            $c = $LASTEXITCODE
+            Pop-Location
+            return @{ Out = $o; Code = $c;
+                      Read = [int]([regex]::Match($o, 'Audit log entries read: (\d+)').Groups[1].Value);
+                      Waiting = [regex]::Match($o, 'waiting to be chained: (\d+)').Groups[1].Value }
+          }
+          function WaitRunning {
+            $deadline = (Get-Date).AddSeconds(60)
+            do { Start-Sleep 2; $s = (Get-Service $env:SERVICE_NAME).Status } while ($s -ne 'Running' -and (Get-Date) -lt $deadline)
+            if ($s -ne 'Running') { Write-Host '::error::the service did not reach Running'; exit 1 }
+          }
+
+          $before = Verify
+          Write-Host "before: $($before.Read) entries chained"
+
+          sc.exe start $env:SERVICE_NAME | Out-Null
+          WaitRunning
+          Start-Sleep 10 # canaries deployed and watched
+          $agentPid = (Get-CimInstance Win32_Service -Filter "Name='$env:SERVICE_NAME'").ProcessId
+
+          # The burst: every deletion of an active canary records CanaryAlert, then CanaryRegenerated
+          # (or SustainedAttack past 10 an hour); the regenerated canary is active again.
+          $deleted = 0
+          $end = (Get-Date).AddSeconds(8)
+          $killAt = (Get-Date).AddSeconds(5)
+          $killed = $false
+          while ((Get-Date) -lt $end) {
+            foreach ($c in @(Get-ChildItem $env:WATCH_DIR -File -Force -Filter '0001_*' -ErrorAction SilentlyContinue)) {
+              # From a throwaway child, never from this shell: with the response engine (ADR-026) the
+              # process that deletes a canary is suspended once attributed. A Remove-Item here got this
+              # very step suspended, and the job never ended (2026-10-21). cmd.exe exits right after
+              # the deletion, so the attribution finds it gone and suspends nobody.
+              Start-Process cmd.exe -ArgumentList "/c del /f /q `"$($c.FullName)`"" -WindowStyle Hidden -Wait
+              $deleted++
+            }
+            if (-not $killed -and (Get-Date) -ge $killAt) {
+              taskkill /F /PID $agentPid | Out-Host   # mid-burst: no shutdown, no last chaining pass
+              $killed = $true
+              break
+            }
+            Start-Sleep -Milliseconds 250
+          }
+          Write-Host "canary deletions during the burst: $deleted ; process $agentPid killed: $killed"
+          Start-Sleep 3
+
+          $afterKill = Verify
+          Write-Host "right after the kill: $($afterKill.Read) chained, $($afterKill.Waiting) recorded and waiting"
+
+          # Restart: Program chains what is waiting first.
+          sc.exe start $env:SERVICE_NAME | Out-Null
+          WaitRunning
+          Start-Sleep 10
+          Stop-Service $env:SERVICE_NAME -Force
+
+          $after = Verify
+          Write-Host $after.Out
+          $first = Select-String -Path "$env:DATA_ROOT\logs\*.log" -Pattern 'chained first' -ErrorAction SilentlyContinue | Select-Object -Last 1
+          Write-Host "startup: $(if ($first) { $first.Line } else { 'no entry was waiting at restart' })"
+
+          $bad = @()
+          if (-not $killed) { $bad += 'the process was not killed' }
+          if ($after.Code -ne 0 -or $after.Out -notmatch 'RESULT: PASS') { $bad += 'the chain does not verify' }
+          if ($after.Waiting -ne '0') { $bad += "entries still waiting after the restart: $($after.Waiting)" }
+          if ($after.Read -lt ($afterKill.Read + [int]$afterKill.Waiting)) { $bad += 'an entry recorded before the kill is missing from the chain' }
+          if ($after.Read -le $before.Read) { $bad += 'the burst left no entry' }
+          if ($bad.Count -gt 0) { $bad | ForEach-Object { Write-Host "::error::$_" }; exit 1 }
+          $line = "killed mid-burst: $($afterKill.Waiting) recorded entries waiting after the kill, all chained at restart; $($after.Read) entries, RESULT: PASS"
+          Write-Host "::notice title=AGT-AUD-002 real kill::$line"
+          "`n- **AGT-AUD-002 real kill**: $line" >> $env:GITHUB_STEP_SUMMARY
+
+      - name: Diagnostics
+        if: always()
+        shell: pwsh
+        run: |
+          Get-Service $env:SERVICE_NAME -ErrorAction SilentlyContinue | Format-List Name, Status, StartType | Out-String | Write-Host
+          Get-EventLog -LogName Application -Newest 30 -ErrorAction SilentlyContinue |
+            Where-Object { $_.Source -match 'RansomGuard|\.NET Runtime|Application Error' } |
+            Format-List TimeGenerated, Source, EntryType, Message | Out-String | Write-Host
+          New-Item -ItemType Directory -Force -Path diag | Out-Null
+          Copy-Item "$env:DATA_ROOT\logs\*" diag -ErrorAction SilentlyContinue
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agent-service-logs
+          path: diag
+          retention-days: 14
+
+      - name: Uninstall
+        if: always()
+        shell: pwsh
+        run: |
+          Stop-Service $env:SERVICE_NAME -Force -ErrorAction SilentlyContinue
+          sc.exe delete $env:SERVICE_NAME
+
+  installer-exe:
+    # ADR-027, acceptance on a clean runner: an installer built like the GRID builds it (stub +
+    # package + configuration + trailer) is run with no argument, as a double-click (the runner is
+    # already administrator, so no UAC; SmartScreen does not apply to a file without an Internet
+    # mark). It must install the service under Program Files, write the configuration, trust the
+    # GRID CA in the machine root store, deploy the canaries in the real user's folders, and -- the
+    # GRID being unreachable here on purpose -- say honestly that the endpoint is NOT enrolled (exit
+    # 4), service running. Enrollment and the green verdict are proven on the two-machine bench.
+    name: Agent — double-click installer (ADR-027)
+    runs-on: windows-latest
+    env:
+      SERVICE_NAME: RansomGuardAgent
+      DATA_ROOT: C:\ProgramData\RansomGuard-CM
+      WORK: C:\rg-installer
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Build the stub and the package as the CD does
+        shell: pwsh
+        run: |
+          dotnet publish agent/src/RansomGuard.Agent.Service/RansomGuard.Agent.Service.csproj -c Release -r win-x64 --self-contained true -o $env:WORK/agent
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          dotnet publish agent/src/RansomGuard.Agent.Installer/RansomGuard.Agent.Installer.csproj -c Release -r win-x64 --self-contained true `
+            -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -o $env:WORK/stub
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Compress-Archive -Path "$env:WORK/agent/*" -DestinationPath "$env:WORK/RansomGuard-Agent-win-x64.zip" -Force
+
+      - name: Build the installer as the GRID does (a throwaway CA, installed nowhere by this step)
+        shell: pwsh
+        run: |
+          $openssl = 'C:\Program Files\Git\usr\bin\openssl.exe'
+          & $openssl req -x509 -newkey rsa:2048 -nodes -subj '/CN=RansomGuard-CM CI test CA' -days 1 -keyout "$env:WORK\ca.key" -out "$env:WORK\ca.crt" 2>&1 | Out-Null
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          $thumb = (New-Object System.Security.Cryptography.X509Certificates.X509Certificate2("$env:WORK\ca.crt")).Thumbprint
+          "CA_THUMBPRINT=$thumb" >> $env:GITHUB_ENV
+          $sha = (Get-FileHash "$env:WORK\RansomGuard-Agent-win-x64.zip" -Algorithm SHA256).Hash.ToLower()
+          $expires = (Get-Date).ToUniversalTime().AddMinutes(30).ToString('o')
+          @{ grid_base_url = 'https://grid.ci.invalid:8443'; otp = 'RG-CAM-2026-CITEST'; otp_expires_at = $expires; tenant_code = 'ci';
+             agent_package_sha256 = $sha; grid_ca_pem = (Get-Content "$env:WORK\ca.crt" -Raw) } |
+            ConvertTo-Json -Compress | Set-Content "$env:WORK\config.json" -Encoding utf8
+          & "$env:WORK\stub\RansomGuard-Installer.exe" --append "$env:WORK\stub\RansomGuard-Installer.exe" "$env:WORK\RansomGuard-Agent-win-x64.zip" "$env:WORK\config.json" "$env:WORK\RansomGuard-CM-Installer-grid.ci.invalid.exe"
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Write-Host "installer: $((Get-Item "$env:WORK\RansomGuard-CM-Installer-grid.ci.invalid.exe").Length) bytes"
+
+      - name: Double-click (no argument, no command typed)
+        shell: pwsh
+        run: |
+          $desktop = [Environment]::GetFolderPath('Desktop'); $documents = [Environment]::GetFolderPath('MyDocuments')
+          "USER_DESKTOP=$desktop" >> $env:GITHUB_ENV
+          "USER_DOCUMENTS=$documents" >> $env:GITHUB_ENV
+          $out = & "$env:WORK\RansomGuard-CM-Installer-grid.ci.invalid.exe" 2>&1 | Out-String
+          $code = $LASTEXITCODE
+          Write-Host $out
+          Write-Host "exit code: $code"
+          "INSTALLER_EXIT=$code" >> $env:GITHUB_ENV
+          # The GRID is unreachable on purpose: 4, said honestly, never 0.
+          # ASCII only in the match: the captured output goes through the runner console code page,
+          # and an accented character in the message did not survive it (run 39659654794). The
+          # installer speaks English now, but the rule still holds for anything it prints.
+          if ($code -ne 4 -or $out -notmatch "120 s") { Write-Host "::error::ADR-027: expected exit 4 with the 'not enrolled after 120 s' message (GRID unreachable), got $code"; exit 1 }
+          # The runner ends a pwsh step with `exit $LASTEXITCODE`, still the installer's 4 here, and
+          # `pwsh -command` reports any non-zero exit as 1 (run 39665349132: "exit code: 4", step red,
+          # no message). The checks above are the verdict of this step: say so.
+          exit 0
+
+      - name: Installed, trusted, configured, watching the user's folders
+        shell: pwsh
+        run: |
+          $bad = @()
+          $svc = Get-Service $env:SERVICE_NAME -ErrorAction SilentlyContinue
+          if (-not $svc) { $bad += 'service not installed' } elseif ($svc.Status -ne 'Running') { $bad += "service $($svc.Status), not Running" }
+          if (-not (Test-Path 'C:\Program Files\RansomGuard-CM\RansomGuard.Agent.Service.exe')) { $bad += 'agent not under Program Files' }
+          $cfg = Get-Content 'C:\Program Files\RansomGuard-CM\appsettings.json' -Raw | ConvertFrom-Json
+          if ($cfg.Agent.Server.BaseUrl -ne 'https://grid.ci.invalid:8443') { $bad += "BaseUrl $($cfg.Agent.Server.BaseUrl)" }
+          if ($cfg.Agent.Server.EnrollmentOtp -ne 'RG-CAM-2026-CITEST') { $bad += 'enrollment code not written' }
+          if ($cfg.Agent.Sentinel.WatchDirectories[0] -notlike '%EACHUSERPROFILE%*') { $bad += 'watched folders changed (AGT-PATH-001)' }
+          $trusted = Get-ChildItem Cert:\LocalMachine\Root | Where-Object Thumbprint -eq $env:CA_THUMBPRINT
+          if (-not $trusted) { $bad += 'GRID CA not in the machine root store' }
+          $installLog = Get-Content "$env:DATA_ROOT\logs\install.log" -Raw
+          if ($installLog -notmatch 'added to the machine root store') { $bad += 'install.log does not record the CA addition' }
+          $deadline = (Get-Date).AddSeconds(90)
+          do { Start-Sleep 3
+            $onDesktop = @(Get-ChildItem $env:USER_DESKTOP -File -Force -Filter '0001_*' -ErrorAction SilentlyContinue)
+            $inDocuments = @(Get-ChildItem $env:USER_DOCUMENTS -File -Force -Filter '0001_*' -ErrorAction SilentlyContinue)
+          } while (($onDesktop.Count -eq 0 -or $inDocuments.Count -eq 0) -and (Get-Date) -lt $deadline)
+          if ($onDesktop.Count -eq 0 -or $inDocuments.Count -eq 0) { $bad += "canaries: Desktop $($onDesktop.Count), Documents $($inDocuments.Count)" }
+          if ($bad.Count -gt 0) { $bad | ForEach-Object { Write-Host "::error::ADR-027: $_" }; exit 1 }
+          Write-Host "::notice title=ADR-027 double-click::installed under Program Files, CA $env:CA_THUMBPRINT trusted, service Running, canaries Desktop $($onDesktop.Count) Documents $($inDocuments.Count); not enrolled (GRID unreachable), said as such"
+
+      - name: Diagnostics
+        if: always()
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path diag | Out-Null
+          Copy-Item "$env:DATA_ROOT\logs\*" diag -ErrorAction SilentlyContinue
+          Get-Content diag\install.log -ErrorAction SilentlyContinue | Write-Host
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agent-installer-exe-logs
+          path: diag
+          retention-days: 14
+
+      - name: Uninstall, and remove the throwaway CA from the root store
+        if: always()
+        shell: pwsh
+        run: |
+          Stop-Service $env:SERVICE_NAME -Force -ErrorAction SilentlyContinue
+          sc.exe delete $env:SERVICE_NAME
+          if ($env:CA_THUMBPRINT) { Get-ChildItem Cert:\LocalMachine\Root | Where-Object Thumbprint -eq $env:CA_THUMBPRINT | Remove-Item }
+
+  install-script:
+    # AGT-PATH-001: the agent installed by the real install.ps1, its shipped watch paths left as they
+    # are. The service runs as LocalSystem, where %USERPROFILE% is the system profile: the canaries
+    # must still land in the Desktop and Documents of the person who uses the machine, and nothing
+    # may be watched (or created) in a system or service profile. The job above replaces the paths
+    # with C:\rg-ci-watch, which is why it never saw this.
+    name: Agent — installed by install.ps1, real user folders (AGT-PATH-001)
+    runs-on: windows-latest
+    env:
+      SERVICE_NAME: RansomGuardAgent
+      DATA_ROOT: C:\ProgramData\RansomGuard-CM
+      PKG_DIR: C:\rg-pkg
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Build the package the GRID serves (as cd.yml)
+        shell: pwsh
+        run: |
+          dotnet publish agent/src/RansomGuard.Agent.Service/RansomGuard.Agent.Service.csproj -c Release -r win-x64 --self-contained true -o publish/agent
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          New-Item -ItemType Directory -Force -Path "$env:PKG_DIR\agent" | Out-Null
+          Compress-Archive -Path publish/agent/* -DestinationPath "$env:PKG_DIR\agent\RansomGuard-Agent-win-x64.zip" -Force
+
+      - name: Serve it on https://127.0.0.1:8443 (a local GRID, as in development)
+        shell: pwsh
+        run: |
+          # A throwaway certificate for the local server only: it is not added to any store.
+          # install.ps1 skips certificate validation for a GRID on this machine and never otherwise.
+          $openssl = 'C:\Program Files\Git\usr\bin\openssl.exe'
+          & $openssl req -x509 -newkey rsa:2048 -nodes -subj '/CN=localhost' -days 1 -keyout "$env:PKG_DIR\key.pem" -out "$env:PKG_DIR\cert.pem" 2>&1 | Out-Null
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Set-Content -Path "$env:PKG_DIR\serve.py" -Encoding utf8 -Value @'
+          import http.server, ssl, sys
+          root, cert, key = sys.argv[1], sys.argv[2], sys.argv[3]
+          handler = lambda *a, **k: http.server.SimpleHTTPRequestHandler(*a, directory=root, **k)
+          server = http.server.ThreadingHTTPServer(("127.0.0.1", 8443), handler)
+          context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+          context.load_cert_chain(cert, key)
+          server.socket = context.wrap_socket(server.socket, server_side=True)
+          server.serve_forever()
+          '@
+          Start-Process python -ArgumentList "$env:PKG_DIR\serve.py", $env:PKG_DIR, "$env:PKG_DIR\cert.pem", "$env:PKG_DIR\key.pem" -WindowStyle Hidden
+          Start-Sleep 3
+
+      - name: The user who uses this machine
+        shell: pwsh
+        run: |
+          $desktop = [Environment]::GetFolderPath('Desktop')
+          $documents = [Environment]::GetFolderPath('MyDocuments')
+          Write-Host "user: $env:USERNAME ; Desktop: $desktop ; Documents: $documents"
+          "USER_DESKTOP=$desktop" >> $env:GITHUB_ENV
+          "USER_DOCUMENTS=$documents" >> $env:GITHUB_ENV
+          $sys = Join-Path $env:WINDIR 'System32\config\systemprofile'
+          "SYSTEM_PROFILE=$sys" >> $env:GITHUB_ENV
+          # What exists in the system profile before the install, to tell what the agent created.
+          Get-ChildItem $sys -Directory -Force -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name | Out-String | Write-Host
+
+      - name: Install with install.ps1, shipped configuration untouched
+        # Windows PowerShell 5.1, as the console's one-liner runs it (dashboard/src/lib/install-command.ts).
+        # Under pwsh 7 the script's local-GRID certificate callback (a scriptblock) cannot run on the
+        # download thread, and the download fails before anything is installed.
+        shell: powershell
+        run: |
+          # Unreachable enrollment on purpose (no GRID API here): the agent must run without it.
+          powershell -NoProfile -ExecutionPolicy Bypass -File .\agent\install.ps1 -OTP ci-otp-not-enrolled -GridServer 127.0.0.1
+          if ($LASTEXITCODE -ne 0) { Write-Host '::error::install.ps1 failed'; exit 1 }
+          if ((Get-Service $env:SERVICE_NAME).Status -ne 'Running') { Write-Host '::error::the service is not running'; exit 1 }
+          Get-Content 'C:\Program Files\RansomGuard-CM\appsettings.json' | Select-String -Pattern 'USERPROFILE|WatchDirectories|WatchPaths' | Out-String | Write-Host
+
+      - name: Canaries in the real user's Desktop and Documents, none in a system profile
+        shell: pwsh
+        run: |
+          $deadline = (Get-Date).AddSeconds(120)
+          do {
+            Start-Sleep 3
+            if ((Get-Service $env:SERVICE_NAME).Status -ne 'Running') { Write-Host '::error::the service stopped'; exit 1 }
+            $inSystem = @(Get-ChildItem $env:SYSTEM_PROFILE -Recurse -File -Force -Filter '0001_*' -ErrorAction SilentlyContinue)
+            $onDesktop = @(Get-ChildItem $env:USER_DESKTOP -File -Force -Filter '0001_*' -ErrorAction SilentlyContinue)
+            $inDocuments = @(Get-ChildItem $env:USER_DOCUMENTS -File -Force -Filter '0001_*' -ErrorAction SilentlyContinue)
+          } while ($inSystem.Count -eq 0 -and ($onDesktop.Count -eq 0 -or $inDocuments.Count -eq 0) -and (Get-Date) -lt $deadline)
+
+          Write-Host "canaries -- system profile: $($inSystem.Count) ; user Desktop: $($onDesktop.Count) ; user Documents: $($inDocuments.Count)"
+          $inSystem | ForEach-Object { Write-Host "  in a system profile: $($_.FullName)" }
+          $created = @(Get-ChildItem $env:SYSTEM_PROFILE -Recurse -Directory -Force -Filter 'RansomGuard-TestZone' -ErrorAction SilentlyContinue)
+          $created | ForEach-Object { Write-Host "  folder created in a system profile: $($_.FullName)" }
+
+          $bad = @()
+          if ($inSystem.Count -gt 0) { $bad += "$($inSystem.Count) canaries in the system profile" }
+          if ($created.Count -gt 0) { $bad += "the agent created RansomGuard-TestZone in the system profile" }
+          if ($onDesktop.Count -eq 0) { $bad += "no canary in the user's Desktop ($env:USER_DESKTOP)" }
+          if ($inDocuments.Count -eq 0) { $bad += "no canary in the user's Documents ($env:USER_DOCUMENTS)" }
+          if ($bad.Count -gt 0) { $bad | ForEach-Object { Write-Host "::error::AGT-PATH-001: $_" }; exit 1 }
+          Write-Host "::notice title=AGT-PATH-001::canaries in the user's Desktop ($($onDesktop.Count)) and Documents ($($inDocuments.Count)), none in a system profile"
+
+      - name: Diagnostics
+        if: always()
+        shell: pwsh
+        run: |
+          Get-Service $env:SERVICE_NAME -ErrorAction SilentlyContinue | Format-List Name, Status, StartType | Out-String | Write-Host
+          New-Item -ItemType Directory -Force -Path diag | Out-Null
+          Copy-Item "$env:DATA_ROOT\logs\*" diag -ErrorAction SilentlyContinue
+          Get-ChildItem diag -ErrorAction SilentlyContinue | ForEach-Object {
+            Select-String -Path $_.FullName -Pattern 'SENTINEL|ENTROPY|watch|canar' | Select-Object -First 40 | ForEach-Object { $_.Line } | Write-Host
+          }
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agent-install-script-logs
+          path: diag
+          retention-days: 14
+
+      - name: Uninstall
+        if: always()
+        shell: pwsh
+        run: |
+          Stop-Service $env:SERVICE_NAME -Force -ErrorAction SilentlyContinue
+          sc.exe delete $env:SERVICE_NAME

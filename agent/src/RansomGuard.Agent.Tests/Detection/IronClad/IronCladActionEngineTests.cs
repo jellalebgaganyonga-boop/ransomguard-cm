@@ -34,7 +34,9 @@ public sealed class IronCladActionEngineTests : IDisposable
     private IronCladActionEngine CreateEngine(
         bool enabled = true,
         bool connected = true,
-        IronCladResponse? mockResponse = null)
+        IronCladResponse? mockResponse = null,
+        List<string>? journal = null,
+        IAuditLogRepository? auditLogOverride = null)
     {
         var options = Options.Create(new IronCladOptions
         {
@@ -43,9 +45,9 @@ public sealed class IronCladActionEngineTests : IDisposable
             CommandTimeoutSeconds = 5
         });
 
-        var comm = new FakeCommunicator(connected, mockResponse);
+        var comm = new FakeCommunicator(connected, mockResponse, journal);
 
-        var auditLog = new FakeAuditLogRepository();
+        IAuditLogRepository auditLog = auditLogOverride ?? new FakeAuditLogRepository(journal);
 
         return new IronCladActionEngine(comm, options, auditLog, _eventRepo, _stateRepo, _logger);
     }
@@ -201,15 +203,57 @@ public sealed class IronCladActionEngineTests : IDisposable
     }
 
     /// <summary>Fake communicator for unit tests.</summary>
+    // ── AGT-AUD-002: trace before the command, without blocking it ──
+
+    private static IronCladResponse Ack() => new()
+    {
+        CommandId = Guid.Empty,
+        Type = IronCladResponseType.Ack,
+        RawPayload = "ACK:PORT_2_CUT",
+        ReceivedAt = DateTime.UtcNow,
+        IsAcknowledgement = true
+    };
+
+    [Fact]
+    public async Task CutUsbPort_Records_The_Intent_Before_The_Command_And_The_Result_After()
+    {
+        var journal = new List<string>();
+        var engine = CreateEngine(mockResponse: Ack(), journal: journal);
+
+        var result = await engine.CutUsbPortAsync(2, "USB Critical threat", Guid.NewGuid());
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(new[] { "audit:IronClad:CutPort", "command:CutPort", "audit:IronClad:CutPort:Result" }, journal);
+    }
+
+    [Fact]
+    public async Task CutUsbPort_Goes_Ahead_When_The_Audit_Cannot_Record()
+    {
+        // The real repository, its waiting table gone: as unwritable as a full disk.
+        _db.Database.ExecuteSqlRaw("DROP TABLE PendingAuditEntries");
+        var health = new AuditHealth();
+        var journal = new List<string>();
+        var engine = CreateEngine(mockResponse: Ack(), journal: journal,
+            auditLogOverride: new AuditLogRepository(_db, health: health));
+
+        var result = await engine.CutUsbPortAsync(2, "USB Critical threat", Guid.NewGuid());
+
+        Assert.True(result.IsSuccess); // used to be AuditLogFailure, the port left open
+        Assert.Contains("command:CutPort", journal);
+        Assert.Equal(2, health.Failures); // the intent and the result, both counted
+    }
+
     private sealed class FakeCommunicator : IIronCladCommunicator
     {
         private readonly bool _connected;
         private readonly IronCladResponse? _response;
+        private readonly List<string>? _journal;
 
-        public FakeCommunicator(bool connected, IronCladResponse? response)
+        public FakeCommunicator(bool connected, IronCladResponse? response, List<string>? journal = null)
         {
             _connected = connected;
             _response = response;
+            _journal = journal;
         }
 
         public bool IsConnected => _connected;
@@ -223,6 +267,7 @@ public sealed class IronCladActionEngineTests : IDisposable
 
         public Task<IronCladResponse> SendCommandAsync(IronCladCommand command, CancellationToken ct = default)
         {
+            _journal?.Add($"command:{command.Action}");
             var resp = _response ?? new IronCladResponse
             {
                 CommandId = command.Id,
@@ -253,10 +298,19 @@ public sealed class IronCladActionEngineTests : IDisposable
     }
 
     /// <summary>Fake audit log for unit tests.</summary>
-    private sealed class FakeAuditLogRepository : IAuditLogRepository
+    private sealed class FakeAuditLogRepository(List<string>? journal = null) : IAuditLogRepository
     {
+
+        public Task<IReadOnlyList<RansomGuard.Agent.Core.Persistence.Entities.AuditLog>> GetPendingUploadAsync(int max, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<RansomGuard.Agent.Core.Persistence.Entities.AuditLog>>([]);
+
+        public Task MarkUploadedAsync(IReadOnlyCollection<Guid> ids, DateTime uploadedAt, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
         public Task AppendAsync(string action, string details, string? entityType = null, Guid? entityId = null, CancellationToken cancellationToken = default)
-            => Task.CompletedTask;
+        {
+            journal?.Add($"audit:{action}");
+            return Task.CompletedTask;
+        }
 
         public Task<RansomGuard.Agent.Core.Persistence.Entities.AuditLog?> GetLatestAsync(CancellationToken cancellationToken = default)
             => Task.FromResult<RansomGuard.Agent.Core.Persistence.Entities.AuditLog?>(null);
@@ -266,5 +320,8 @@ public sealed class IronCladActionEngineTests : IDisposable
 
         public Task<bool> VerifyChainIntegrityAsync(CancellationToken cancellationToken = default)
             => Task.FromResult(true);
+
+        public Task<int> ChainPendingAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult(0);
     }
 }

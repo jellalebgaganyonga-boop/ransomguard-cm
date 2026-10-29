@@ -25,12 +25,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from ransomguard_grid.services.grid_signing_key_service import GridSigningKeyService
     from ransomguard_grid.services.threat_intel_aggregator import ThreatIntelAggregator
     from ransomguard_grid.services.threat_intel_package_builder import ThreatIntelPackageBuilder
-    from ransomguard_grid.services.threat_intel_sources import ThreatIntelSource
-    from ransomguard_grid.services.threat_intel_sources.alienvault_otx import AlienVaultOtxSource
-    from ransomguard_grid.services.threat_intel_sources.aws import AwsIpRangesSource
-    from ransomguard_grid.services.threat_intel_sources.gcp import GcpIpRangesSource
-    from ransomguard_grid.services.threat_intel_sources.threatfox import ThreatFoxSource
-    from ransomguard_grid.services.threat_intel_sources.tor_project import TorProjectSource
+    from ransomguard_grid.services.threat_intel_sources.catalog import build_sources
+    from ransomguard_grid.workers.agent_disconnect_worker import AgentDisconnectWorker
     from ransomguard_grid.workers.threat_intel_updater_worker import ThreatIntelUpdaterWorker
 
     settings = get_settings()
@@ -42,19 +38,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Initialize GRID Ed25519 signing service
     signing_service = GridSigningKeyService(settings.threat_intel_signing_key_path)
-    signing_service.initialize()
+    signing_service.initialize(allow_generate=settings.environment == "development")
     app.state.grid_signing_service = signing_service
 
     # Initialize threat intel worker
     http_client = httpx.AsyncClient(timeout=30.0)
-    sources: list[ThreatIntelSource] = [
-        TorProjectSource(http_client),
-        ThreatFoxSource(http_client),
-        AwsIpRangesSource(http_client),
-        GcpIpRangesSource(http_client),
-    ]
-    if settings.alienvault_otx_api_key:
-        sources.append(AlienVaultOtxSource(http_client, settings.alienvault_otx_api_key))
+    sources = build_sources(settings, http_client)
 
     aggregator = ThreatIntelAggregator(sources)
     builder = ThreatIntelPackageBuilder(signing_service, settings.threat_intel_packages_dir)
@@ -67,13 +56,24 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     app.state.threat_intel_worker = worker
     app.state.threat_intel_http_client = http_client
 
-    # Skip auto-start in test/debug (worker runs real HTTP calls)
+    # Agent disconnect worker
+    disconnect_worker = AgentDisconnectWorker(
+        session_factory=AsyncSessionLocal,
+        check_interval_seconds=60,
+    )
+    app.state.disconnect_worker = disconnect_worker
+
+    # Threat intel worker: skip in development (makes external HTTP calls)
     if settings.environment != "development":
         await worker.start()
+    # Disconnect worker: always start (marks stale agents as disconnected)
+    await disconnect_worker.start()
 
     yield
 
     # Shutdown
+    if disconnect_worker._task is not None:
+        await disconnect_worker.stop()
     if worker._task is not None:
         await worker.stop()
     await http_client.aclose()
@@ -140,6 +140,7 @@ def create_app() -> FastAPI:
     # Agent API routes (mTLS authenticated except enrollment)
     from ransomguard_grid.api.v1.routes.alerts import router as alerts_router
     from ransomguard_grid.api.v1.routes.audit_log import router as audit_log_router
+    from ransomguard_grid.api.v1.routes.commands import router as commands_router
     from ransomguard_grid.api.v1.routes.enrollment import router as enrollment_router
     from ransomguard_grid.api.v1.routes.heartbeat import router as heartbeat_router
 
@@ -147,6 +148,7 @@ def create_app() -> FastAPI:
     app.include_router(alerts_router, prefix="/api/v1")
     app.include_router(audit_log_router, prefix="/api/v1")
     app.include_router(heartbeat_router, prefix="/api/v1")
+    app.include_router(commands_router, prefix="/api/v1")
 
     # Threat intel endpoints (mTLS authenticated)
     from ransomguard_grid.api.v1.routes.threat_intel import router as threat_intel_router

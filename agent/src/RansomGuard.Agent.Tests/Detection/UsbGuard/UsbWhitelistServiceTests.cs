@@ -134,6 +134,23 @@ public sealed class UsbWhitelistServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Lookup_Finds_Entry_Among_100()
+    {
+        // Add 100 entries
+        for (int i = 0; i < 100; i++)
+        {
+            await _service.AddAsync($"SERIAL_{i:D4}", $"Device {i}", UsbPolicyLevel.StandardScan);
+        }
+
+        var (found, _) = await _service.IsWhitelistedAsync("SERIAL_0050");
+
+        found.ShouldBeTrue();
+    }
+
+    // Wall-clock assertion: it measures performance, not correctness, and fails on a loaded shared CI runner
+    // It runs in the nightly Stress job; the functional check is Lookup_Finds_Entry_Among_100.
+    [Fact]
+    [Trait("Category", "Stress")]
     public async Task Query_Performance_With_100_Entries()
     {
         // Add 100 entries

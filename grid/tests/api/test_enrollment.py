@@ -1,15 +1,29 @@
 """Tests for agent enrollment endpoint."""
 
+import asyncio
+import base64
+
 import pytest
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from ransomguard_grid.core.session_store import SessionStore
+from ransomguard_grid.db.models.agent import Agent
+from ransomguard_grid.db.models.enums import AgentStatus
+from ransomguard_grid.services.enrollment_otp_service import EnrollmentOtpService
+
+# The agent's own audit-signing public key, sent at enrollment (GRID-SEC-003).
+_PUBLIC_KEY = base64.b64encode(
+    Ed25519PrivateKey.generate().public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
+).decode()
 
 
 @pytest.mark.asyncio
-async def test_enrollment_with_valid_otp(client: AsyncClient) -> None:
+async def test_enrollment_with_valid_otp(client: AsyncClient, session_store: SessionStore) -> None:
     """Successful enrollment with valid OTP should return agent_id."""
-    from ransomguard_grid.api.v1.routes.enrollment import _otp_service
-
-    otp = _otp_service.generate("default", validity_minutes=5)
+    otp = await EnrollmentOtpService(session_store).generate("default", validity_minutes=5)
 
     response = await client.post("/api/v1/agents/enroll", json={
         "otp": otp,
@@ -18,6 +32,7 @@ async def test_enrollment_with_valid_otp(client: AsyncClient) -> None:
         "os_version": "Windows 10 Pro 10.0.19045",
         "agent_version": "0.7.0",
         "hardware_fingerprint": "a" * 64,
+        "ed25519_public_key_b64": _PUBLIC_KEY,
     })
     assert response.status_code == 200
     data = response.json()
@@ -26,15 +41,11 @@ async def test_enrollment_with_valid_otp(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_enrollment_with_expired_otp(client: AsyncClient) -> None:
-    """Expired OTP should return 401."""
-    from ransomguard_grid.api.v1.routes.enrollment import _otp_service
-
-    otp = _otp_service.generate("default", validity_minutes=0)
-    # OTP expires immediately (0 minutes)
-
-    import asyncio
-    await asyncio.sleep(0.1)
+async def test_enrollment_with_expired_otp(client: AsyncClient, session_store: SessionStore) -> None:
+    """Expired OTP should return 401 (Redis TTL)."""
+    otp = "RG-CAM-2026-EXPIRD"
+    await session_store.store_otp(otp, "default", ttl_seconds=1)
+    await asyncio.sleep(1.2)
 
     response = await client.post("/api/v1/agents/enroll", json={
         "otp": otp,
@@ -43,6 +54,7 @@ async def test_enrollment_with_expired_otp(client: AsyncClient) -> None:
         "os_version": "10",
         "agent_version": "1.0.0",
         "hardware_fingerprint": "b" * 64,
+        "ed25519_public_key_b64": _PUBLIC_KEY,
     })
     assert response.status_code == 401
 
@@ -57,30 +69,74 @@ async def test_enrollment_with_invalid_otp(client: AsyncClient) -> None:
         "os_version": "10",
         "agent_version": "1.0.0",
         "hardware_fingerprint": "c" * 64,
+        "ed25519_public_key_b64": _PUBLIC_KEY,
     })
     assert response.status_code == 401
 
 
 @pytest.mark.asyncio
-async def test_enrollment_duplicate_fingerprint_rejected(client: AsyncClient) -> None:
+async def test_enrollment_duplicate_fingerprint_rejected(client: AsyncClient, session_store: SessionStore) -> None:
     """Re-enrolling same fingerprint should return 409."""
-    from ransomguard_grid.api.v1.routes.enrollment import _otp_service
+    _otp_service = EnrollmentOtpService(session_store)
 
-    otp1 = _otp_service.generate("default", validity_minutes=5)
+    otp1 = await _otp_service.generate("default", validity_minutes=5)
     fp = "d" * 64
 
     r1 = await client.post("/api/v1/agents/enroll", json={
         "otp": otp1, "hostname": "h1", "fqdn": "h1.local",
         "os_version": "10", "agent_version": "1.0.0", "hardware_fingerprint": fp,
+        "ed25519_public_key_b64": _PUBLIC_KEY,
     })
     assert r1.status_code == 200
 
-    otp2 = _otp_service.generate("default", validity_minutes=5)
+    otp2 = await _otp_service.generate("default", validity_minutes=5)
     r2 = await client.post("/api/v1/agents/enroll", json={
         "otp": otp2, "hostname": "h2", "fqdn": "h2.local",
         "os_version": "10", "agent_version": "1.0.0", "hardware_fingerprint": fp,
+        "ed25519_public_key_b64": _PUBLIC_KEY,
     })
     assert r2.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_a_decommissioned_workstation_can_enrol_again(
+    client: AsyncClient, session_store: SessionStore, db_session: AsyncSession
+) -> None:
+    """A decommissioned agent does not keep holding its machine's fingerprint.
+
+    The fingerprint check used to ignore status, so a workstation could be enrolled exactly once
+    in its life: reinstall the agent, rebuild the machine, or decommission it on purpose, and the
+    GRID answered 409 for ever. The console offered a decommission button and no way to undo what
+    it caused. Seen on the bench on 2026-10-25, reinstalling the agent on PC-LAB.
+    """
+    otp_service = EnrollmentOtpService(session_store)
+    fp = "e" * 64
+    body = {
+        "hostname": "pc-labo", "fqdn": "pc-labo.local",
+        "os_version": "10", "agent_version": "1.0.0", "hardware_fingerprint": fp,
+        "ed25519_public_key_b64": _PUBLIC_KEY,
+    }
+
+    first = await client.post("/api/v1/agents/enroll", json={
+        "otp": await otp_service.generate("default", validity_minutes=5), **body})
+    assert first.status_code == 200
+    agent_id = first.json()["agent_id"]
+
+    # While it is still live, the machine is still taken.
+    blocked = await client.post("/api/v1/agents/enroll", json={
+        "otp": await otp_service.generate("default", validity_minutes=5), **body})
+    assert blocked.status_code == 409
+
+    agent = await db_session.get(Agent, agent_id)
+    assert agent is not None
+    agent.status = AgentStatus.decommissioned
+    # Committed, not flushed: the request below runs on its own session and would not see it.
+    await db_session.commit()
+
+    again = await client.post("/api/v1/agents/enroll", json={
+        "otp": await otp_service.generate("default", validity_minutes=5), **body})
+    assert again.status_code == 200, "a decommissioned workstation must be able to enrol again"
+    assert again.json()["agent_id"] != agent_id, "it comes back as a new agent, not the old row"
 
 
 @pytest.mark.asyncio

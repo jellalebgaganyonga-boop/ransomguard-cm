@@ -1,8 +1,9 @@
 """Role and UserRole repositories — system-level shared across tenants."""
 
 from collections.abc import Sequence
+from typing import Any, cast
 
-from sqlalchemy import delete, select
+from sqlalchemy import CursorResult, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ransomguard_grid.db.models.tenant_user import Role, UserRole
@@ -55,4 +56,7 @@ class UserRoleRepository:
         stmt = delete(UserRole).where(UserRole.user_id == user_id)
         result = await self.session.execute(stmt)
         await self.session.flush()
-        return result.rowcount  # type: ignore[return-value]
+        # execute() is declared to return Result; a DELETE actually returns a CursorResult, and
+        # rowcount only exists there. The cast says which one it is instead of silencing the
+        # question with an ignore.
+        return cast(CursorResult[Any], result).rowcount

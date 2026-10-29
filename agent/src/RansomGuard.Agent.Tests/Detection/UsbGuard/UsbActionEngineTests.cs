@@ -4,6 +4,7 @@ using RansomGuard.Agent.Core.Detection.UsbGuard.Actions;
 using RansomGuard.Agent.Core.Detection.UsbGuard.Models;
 using RansomGuard.Agent.Core.Detection.UsbGuard.Scanning;
 using RansomGuard.Agent.Core.Persistence.Entities;
+using RansomGuard.Agent.Core.Persistence.Repositories;
 using Shouldly;
 
 namespace RansomGuard.Agent.Tests.Detection.UsbGuard;
@@ -13,11 +14,12 @@ namespace RansomGuard.Agent.Tests.Detection.UsbGuard;
 /// </summary>
 public sealed class UsbActionEngineTests
 {
+    private readonly Mock<IAuditLogRepository> _audit = new();
     private readonly UsbActionEngine _engine;
 
     public UsbActionEngineTests()
     {
-        _engine = new UsbActionEngine(new Mock<ILogger<UsbActionEngine>>().Object);
+        _engine = new UsbActionEngine(new Mock<ILogger<UsbActionEngine>>().Object, _audit.Object);
     }
 
     [Theory]
@@ -37,53 +39,49 @@ public sealed class UsbActionEngineTests
     }
 
     [Fact]
-    public async Task AlertOnly_Always_Succeeds()
+    public async Task AlertOnly_Succeeds_And_Is_Audited_As_Executed()
     {
         var device = CreateDevice();
         var result = await _engine.ExecuteAsync(device, ScanSeverity.Low, UsbOperatingMode.Audit, "Test alert");
 
         result.ActionType.ShouldBe(UsbActionType.AlertOnly);
         result.Success.ShouldBeTrue();
+        result.ReasonCode.ShouldBeNull();
         result.Description.ShouldContain("Alert");
+        VerifyAudited("action=AlertOnly outcome=executed");
+    }
+
+    // An engine built without the device calls or the quarantine store (this one) does nothing to
+    // the device: the result and the signed audit entry both say what is missing, never claim the
+    // action. The actions themselves are in UsbRealActionsTests.
+    [Theory]
+    [InlineData(UsbOperatingMode.Permissive, ScanSeverity.Critical, UsbActionType.ReadOnlyUsb, UsbActionReasonCode.NoDeviceControl)]
+    [InlineData(UsbOperatingMode.Permissive, ScanSeverity.High, UsbActionType.QuarantineFile, UsbActionReasonCode.NoQuarantineService)]
+    [InlineData(UsbOperatingMode.Strict, ScanSeverity.Medium, UsbActionType.EjectUsb, UsbActionReasonCode.NoDeviceControl)]
+    [InlineData(UsbOperatingMode.Strict, ScanSeverity.High, UsbActionType.EjectUsb, UsbActionReasonCode.NoDeviceControl)]
+    [InlineData(UsbOperatingMode.Strict, ScanSeverity.Critical, UsbActionType.BlockAndEject, UsbActionReasonCode.NoDeviceControl)]
+    public async Task Without_The_Device_Calls_Nothing_Is_Claimed_In_Result_Or_Audit(
+        UsbOperatingMode mode, ScanSeverity severity, UsbActionType expected, string reasonCode)
+    {
+        var result = await _engine.ExecuteAsync(CreateDevice(), severity, mode, "Suspicious content");
+
+        result.ActionType.ShouldBe(expected);
+        result.Success.ShouldBeFalse();
+        result.ReasonCode.ShouldBe(reasonCode);
+        result.Description.ShouldContain("NOT executed");
+        VerifyAudited($"action={expected} outcome={reasonCode}");
     }
 
     [Fact]
-    public async Task Eject_Action_Executed_In_Strict_Mode()
+    public async Task Audit_Failure_Does_Not_Lose_The_Result()
     {
-        var device = CreateDevice();
-        var result = await _engine.ExecuteAsync(device, ScanSeverity.Medium, UsbOperatingMode.Strict, "Suspicious file");
+        _audit.Setup(a => a.AppendAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(),
+                It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("audit store unavailable"));
 
-        result.ActionType.ShouldBe(UsbActionType.EjectUsb);
-        result.Success.ShouldBeTrue();
-    }
+        var result = await _engine.ExecuteAsync(CreateDevice(), ScanSeverity.Low, UsbOperatingMode.Audit, "Test alert");
 
-    [Fact]
-    public async Task ReadOnly_Action_Executed_In_Permissive_Critical()
-    {
-        var device = CreateDevice();
-        var result = await _engine.ExecuteAsync(device, ScanSeverity.Critical, UsbOperatingMode.Permissive, "PE disguised as PDF");
-
-        result.ActionType.ShouldBe(UsbActionType.ReadOnlyUsb);
-        result.Success.ShouldBeTrue();
-    }
-
-    [Fact]
-    public async Task BlockAndEject_In_Strict_Critical()
-    {
-        var device = CreateDevice();
-        var result = await _engine.ExecuteAsync(device, ScanSeverity.Critical, UsbOperatingMode.Strict, "Bootable USB with malware");
-
-        result.ActionType.ShouldBe(UsbActionType.BlockAndEject);
-        result.Success.ShouldBeTrue();
-    }
-
-    [Fact]
-    public async Task Quarantine_Action_In_Permissive_High()
-    {
-        var device = CreateDevice();
-        var result = await _engine.ExecuteAsync(device, ScanSeverity.High, UsbOperatingMode.Permissive, "Exe in archive");
-
-        result.ActionType.ShouldBe(UsbActionType.QuarantineFile);
+        result.ActionType.ShouldBe(UsbActionType.AlertOnly);
         result.Success.ShouldBeTrue();
     }
 
@@ -98,15 +96,16 @@ public sealed class UsbActionEngineTests
 
         var results = await Task.WhenAll(tasks);
         results.Length.ShouldBe(10);
-        results.All(r => r.Success).ShouldBeTrue();
+        results.All(r => !r.Success && r.ReasonCode == UsbActionReasonCode.NoQuarantineService).ShouldBeTrue();
+        _audit.Verify(a => a.AppendAsync("UsbAction", It.IsAny<string>(), "UsbDevice",
+            It.IsAny<Guid?>(), It.IsAny<CancellationToken>()), Times.Exactly(10));
     }
 
     [Fact]
     public void Action_Timeout_10_Seconds_Configured()
     {
-        // Verify the action engine has a 10-second timeout per the spec.
-        // Since actual actions use Task.CompletedTask (P/Invoke not wired in test),
-        // verify the timeout configuration is correct via the constant.
+        // Verify the action engine has a 10-second timeout per the spec. It bounds the IronClad
+        // port cut, each device call (read-only, eject) and each file quarantined.
         var engineType = typeof(UsbActionEngine);
         var field = engineType.GetField("ActionTimeout",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
@@ -114,6 +113,15 @@ public sealed class UsbActionEngineTests
         var timeout = (TimeSpan)field.GetValue(null)!;
         timeout.TotalSeconds.ShouldBe(10);
     }
+
+    private void VerifyAudited(string expectedFragment) =>
+        _audit.Verify(a => a.AppendAsync(
+                "UsbAction",
+                It.Is<string>(d => d.Contains(expectedFragment)),
+                "UsbDevice",
+                It.IsAny<Guid?>(),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
 
     private static UsbDevice CreateDevice(string name = "TestDevice") => new()
     {

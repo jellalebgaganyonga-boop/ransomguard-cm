@@ -64,11 +64,14 @@ public sealed class RestartManagerHelper
                     return results;
                 }
 
-                uint needed = 0;
+                uint needed;
+                uint none = 0;
                 uint rebootReason = RmRebootReasonNone;
 
-                // First call to get the count
-                res = RmGetList(sessionHandle, out needed, ref needed, null, ref rebootReason);
+                // First call: no array, to learn the count. Two variables: the API writes both the
+                // count needed and the count filled; one variable passed as both (until ADR-025,
+                // commit 4) only worked because of the order Windows writes them in.
+                res = RmGetList(sessionHandle, out needed, ref none, null, ref rebootReason);
 
                 if (needed == 0)
                 {

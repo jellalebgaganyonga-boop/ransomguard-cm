@@ -16,7 +16,10 @@ public sealed class IronCladHeartbeatService : BackgroundService
     private readonly IIronCladCommunicator _communicator;
     private readonly IronCladOptions _options;
     private readonly ILogger<IronCladHeartbeatService> _logger;
-    private DateTime _lastHeartbeatAt;
+    private readonly TimeProvider _time;
+    // Monotonic, on this machine's clock, taken at reception: liveness must not depend on the
+    // device's timestamp nor jump with a wall-clock change.
+    private long _lastHeartbeatTimestamp;
     private long _consecutiveMissed;
     private bool _alertRaised;
 
@@ -24,15 +27,21 @@ public sealed class IronCladHeartbeatService : BackgroundService
     public long ConsecutiveMissed => _consecutiveMissed;
 
     /// <summary>Initializes the heartbeat monitor.</summary>
+    /// <param name="communicator">The IronClad device link.</param>
+    /// <param name="options">IronClad options.</param>
+    /// <param name="logger">Logger.</param>
+    /// <param name="time">Clock and timers; null uses the system clock. Tests drive it by hand.</param>
     public IronCladHeartbeatService(
         IIronCladCommunicator communicator,
         IOptions<IronCladOptions> options,
-        ILogger<IronCladHeartbeatService> logger)
+        ILogger<IronCladHeartbeatService> logger,
+        TimeProvider? time = null)
     {
         _communicator = communicator;
         _options = options.Value;
         _logger = logger;
-        _lastHeartbeatAt = DateTime.UtcNow;
+        _time = time ?? TimeProvider.System;
+        _lastHeartbeatTimestamp = _time.GetTimestamp();
     }
 
     /// <inheritdoc />
@@ -51,10 +60,10 @@ public sealed class IronCladHeartbeatService : BackgroundService
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            await Task.Delay(TimeSpan.FromSeconds(_options.HeartbeatIntervalSeconds), stoppingToken)
+            await Task.Delay(TimeSpan.FromSeconds(_options.HeartbeatIntervalSeconds), _time, stoppingToken)
                 .ConfigureAwait(false);
 
-            var elapsed = (DateTime.UtcNow - _lastHeartbeatAt).TotalSeconds;
+            var elapsed = _time.GetElapsedTime(Interlocked.Read(ref _lastHeartbeatTimestamp)).TotalSeconds;
             if (elapsed > _options.HeartbeatTimeoutSeconds && !_alertRaised)
             {
                 _alertRaised = true;
@@ -71,7 +80,7 @@ public sealed class IronCladHeartbeatService : BackgroundService
 
     private void OnHeartbeatReceived(object? sender, HeartbeatEventArgs e)
     {
-        _lastHeartbeatAt = e.Timestamp;
+        Interlocked.Exchange(ref _lastHeartbeatTimestamp, _time.GetTimestamp());
         var missed = Interlocked.Exchange(ref _consecutiveMissed, 0);
 
         if (_alertRaised)

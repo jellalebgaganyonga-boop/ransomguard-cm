@@ -97,12 +97,21 @@ public sealed class EntropyMonitorChannelSaturationTests
             }
         });
 
-        // Write 500 items with small delay (reader should keep up)
+        // Write 500 items in batches of 50, each batch only once the reader has consumed the
+        // previous one: that is what "the reader keeps up" means. A fixed Task.Delay(1) (about
+        // 15 ms on Windows) made the test depend on the machine's load: a starved reader
+        // dropped items and the test failed without any defect (seen in CI under load).
         for (int i = 0; i < 500; i++)
         {
             channel.Writer.TryWrite($"file_{i}.txt");
-            if (i % 50 == 0)
-                await Task.Delay(1);
+            if ((i + 1) % 50 == 0)
+            {
+                int written = i + 1;
+                while (Volatile.Read(ref consumed) < written)
+                {
+                    await Task.Delay(1);
+                }
+            }
         }
 
         channel.Writer.Complete();

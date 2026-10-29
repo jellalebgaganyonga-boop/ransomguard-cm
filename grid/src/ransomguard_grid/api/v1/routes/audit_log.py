@@ -80,8 +80,6 @@ async def ingest_audit_logs(
             )
             continue
 
-        sig_bytes = base64.b64decode(entry.ed25519_signature_base64)
-
         # Persist with sequence check
         audit_entry = AuditLog(
             id=str(uuid4()),
@@ -89,7 +87,7 @@ async def ingest_audit_logs(
             agent_id=agent.id,
             sequence_number=entry.sequence_number,
             payload_json=entry.payload,
-            ed25519_signature=sig_bytes,
+            ed25519_signature=entry.ed25519_signature_base64,
             signing_key_id=entry.signing_key_id,
         )
 

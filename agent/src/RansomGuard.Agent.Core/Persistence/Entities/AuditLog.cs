@@ -15,6 +15,14 @@ public sealed class AuditLog
     public Guid Id { get; init; } = Guid.NewGuid();
 
     /// <summary>
+    /// Position in the chain: 1 for the genesis entry, then strictly increasing by one.
+    /// The chain order is this sequence, never <see cref="CreatedAt"/> (two entries can share a
+    /// clock tick, and the system clock can move backwards). Unique in the database, so two
+    /// entries can never claim the same position.
+    /// </summary>
+    public long Sequence { get; init; }
+
+    /// <summary>
     /// Action performed (e.g., "AgentStarted", "FileDetected", "AlertCreated").
     /// </summary>
     public required string Action { get; init; }
@@ -59,6 +67,17 @@ public sealed class AuditLog
     /// UTC timestamp when the record was last updated (same as CreatedAt for immutable entries).
     /// </summary>
     public DateTime UpdatedAt { get; init; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// When this entry reached the GRID, or null while it is still only on this workstation.
+    /// </summary>
+    /// <remarks>
+    /// The one field on an otherwise immutable row that is written twice, and it has to be: the
+    /// entry is the record, and whether it has been handed over is a fact about the handover,
+    /// not about the entry. Keeping it here is what lets a workstation that was offline for a
+    /// day send exactly what the GRID is missing, in order, instead of everything or nothing.
+    /// </remarks>
+    public DateTime? UploadedAt { get; set; }
 
     /// <summary>
     /// Computes the SHA-256 hash for this audit entry given its content and the previous hash.

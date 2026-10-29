@@ -1,0 +1,58 @@
+using RansomGuard.Agent.Core.Communication.Models;
+
+namespace RansomGuard.Agent.Core.Communication;
+
+/// <summary>
+/// Client for the RansomGuard GRID management server API.
+/// Handles enrollment, heartbeat, alert forwarding, and audit log submission.
+/// </summary>
+public interface IGridApiClient
+{
+    /// <summary>Whether the agent is currently enrolled with the GRID server.</summary>
+    bool IsEnrolled { get; }
+
+    /// <summary>The agent ID assigned by the GRID server after enrollment.</summary>
+    string? AgentId { get; }
+
+    /// <summary>The tenant ID assigned by the GRID server after enrollment.</summary>
+    string? TenantId { get; }
+
+    /// <summary>
+    /// Enroll this agent with the GRID server using a one-time password.
+    /// </summary>
+    Task<EnrollmentResponse> EnrollAsync(EnrollmentRequest request, CancellationToken ct = default);
+
+    /// <summary>
+    /// Send a heartbeat to the GRID server.
+    /// Returns pending command IDs and the next heartbeat interval.
+    /// </summary>
+    Task<HeartbeatResponse> SendHeartbeatAsync(HeartbeatRequest request, CancellationToken ct = default);
+
+    /// <summary>
+    /// Forward a detection alert to the GRID server.
+    /// </summary>
+    Task<AlertIngestResponse> SendAlertAsync(AlertIngestRequest request, CancellationToken ct = default);
+
+    /// <summary>
+    /// Sends the attribution complement of an alert already sent (ADR-025): POST
+    /// /api/v1/agents/{id}/alerts/{clientMessageId}/attribution.
+    /// </summary>
+    Task SendAttributionAsync(string clientMessageId, AttributionComplementRequest request, CancellationToken ct = default);
+
+    /// <summary>
+    /// Sends the chain of processes behind an alert already ingested, identified by its
+    /// client_message_id.
+    /// </summary>
+    Task SendGenealogyAsync(string clientMessageId, GenealogyComplementRequest request, CancellationToken ct = default);
+
+    /// <summary>
+    /// Submit a batch of Ed25519-signed audit log entries.
+    /// </summary>
+    Task<AuditLogBatchResponse> SendAuditLogBatchAsync(AuditLogBatchRequest request, CancellationToken ct = default);
+
+    /// <summary>The open commands the console queued for this agent (J1 § 1.3); fetched again until answered.</summary>
+    Task<IReadOnlyList<AgentCommand>> FetchCommandsAsync(CancellationToken ct = default);
+
+    /// <summary>Reports what the agent did with a command: executed, or not, and why.</summary>
+    Task SendCommandResultAsync(string commandId, CommandResultRequest result, CancellationToken ct = default);
+}

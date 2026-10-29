@@ -1,0 +1,654 @@
+{
+  "app": {
+    "name": "RansomGuard-CM",
+    "tagline": "Console de sécurité"
+  },
+  "nav": {
+    "dashboard": "Tableau de bord",
+    "alerts": "Alertes",
+    "agents": "Agents",
+    "users": "Utilisateurs",
+    "audit": "Journal d'audit",
+    "userActions": "Actions utilisateur",
+    "notifications": "Notifications",
+    "settings": "Paramètres"
+  },
+  "header": {
+    "notifications": "Notifications",
+    "language": "Langue",
+    "userMenu": "Menu du compte",
+    "mySettings": "Mes paramètres",
+    "switchLanguage": "Passer en {language}",
+    "logout": "Se déconnecter",
+    "logoutAll": "Se déconnecter de tous les appareils",
+    "logoutAllTitle": "Se déconnecter de tous les appareils ?",
+    "logoutAllBody": "Toutes vos sessions ouvertes, sur ce poste et sur tous les autres, seront fermées immédiatement. Vous devrez vous reconnecter partout.",
+    "logoutAllConfirm": "Tout déconnecter",
+    "profileRole": "Rôle",
+    "profileTenant": "Hôpital",
+    "profileLanguage": "Langue",
+    "profileLastLogin": "Dernière connexion",
+    "profileNever": "première connexion",
+    "profileSystemDefault": "par défaut"
+  },
+  "auth": {
+    "login": {
+      "title": "Connexion",
+      "email": "Email",
+      "password": "Mot de passe",
+      "rememberMe": "Se souvenir de moi",
+      "submit": "Se connecter",
+      "showPassword": "Afficher le mot de passe",
+      "hidePassword": "Masquer le mot de passe",
+      "capsLockWarning": "Verrouillage majuscules activé",
+      "tenantCode": "Code établissement",
+      "errors": {
+        "invalidCredentials": "Email ou mot de passe incorrect",
+        "serverError": "Erreur serveur, veuillez réessayer",
+        "networkError": "Connexion perdue, vérifiez votre réseau",
+        "tenantCodeRequired": "Le code établissement est requis",
+        "emailRequired": "L'email est requis",
+        "emailInvalid": "Format d'email invalide",
+        "passwordRequired": "Le mot de passe est requis"
+      }
+    },
+    "sessionExpired": {
+      "title": "Votre session a expiré",
+      "body": "Vous avez été déconnecté après 30 minutes d'inactivité.",
+      "cta": "Se reconnecter"
+    }
+  },
+  "severity": {
+    "critical": "Critique",
+    "high": "Haut",
+    "medium": "Moyen",
+    "low": "Faible",
+    "info": "Info"
+  },
+  "status": {
+    "new": "Nouveau",
+    "in_progress": "En cours",
+    "acknowledged": "En cours",
+    "investigating": "En cours",
+    "resolved": "Résolu",
+    "closed": "Résolu",
+    "falsepositive": "Faux positif",
+    "suppressed": "Supprimé",
+    "isolated": "Isolé",
+    "online": "Actif",
+    "offline": "Hors ligne",
+    "stale": "Obsolète",
+    "provisioned": "Provisionné",
+    "active": "Actif",
+    "disconnected": "Déconnecté",
+    "decommissioned": "Désactivé"
+  },
+  "dashboard": {
+    "exec": {
+      "title": "Tableau de bord exécutif",
+      "subtitle": "Vue d'ensemble de la sécurité de l'hôpital",
+      "criticalStatus": "{count} incidents critiques requièrent votre attention",
+      "highStatus": "{count} alertes à examiner",
+      "allNormal": "Tous les systèmes normaux",
+      "viewDetails": "Voir les détails →",
+      "recentAlerts": "ALERTES RÉCENTES",
+      "noAlerts": "Aucune alerte récente",
+      "quickActions": "Actions rapides",
+      "manageUsers": "Gérer les utilisateurs",
+      "viewAudit": "Consulter les journaux d'audit",
+      "kpi": {
+        "agents": "Postes actifs",
+        "alerts24h": "Alertes 24h",
+        "critical24h": "Critiques 24h",
+        "daysSince": "Jours sans incident critique",
+        "offline": "hors ligne",
+        "todayReset": "Reset aujourd'hui"
+      }
+    },
+    "ops": {
+      "title": "Console opérationnelle",
+      "commandHint": "pour la palette de commandes",
+      "staleWarning": "{count} agents n'ont pas envoyé de heartbeat depuis plus d'1 heure",
+      "agents": {
+        "title": "AGENTS",
+        "active": "actifs",
+        "stale": "obsolètes",
+        "offline": "hors ligne"
+      },
+      "feed": {
+        "title": "FLUX D'ALERTES",
+        "refresh": "Toutes les 15s",
+        "lastHour": "Dernière heure"
+      }
+    },
+    "readonly": {
+      "title": "Vue auditeur",
+      "subtitle": "Accès en lecture seule",
+      "auditBtn": "Consulter les journaux d'audit",
+      "auditSub": "Recherche, filtres par date, exportation CSV",
+      "alertsBtn": "Consulter les alertes",
+      "alertsSub": "Lecture seule des alertes de sécurité",
+      "notice": "Vous êtes connectée en mode auditeur. Aucune modification n'est possible.",
+      "kpi": {
+        "alerts24h": "Alertes dernières 24h",
+        "critical": "dont",
+        "auditEntries": "Journal derniers 7 jours",
+        "auditSub": "entrées d'audit"
+      }
+    }
+  },
+  "alerts": {
+    "acknowledge": "Prendre en charge",
+    "backToList": "Retour aux alertes",
+    "notFound": "Alerte non trouvée",
+    "id": "Alerte",
+    "copyId": "Copier l'ID",
+    "detectedAt": "Détecté",
+    "agent": "Agent",
+    "module": "Module",
+    "close": "Fermer l'incident",
+    "markFalsePositive": "Marquer faux positif",
+    "readOnlyNotice": "Mode lecture seule — aucune action disponible",
+    "whatHappened": "QUE S'EST-IL PASSÉ ?",
+    "response": {
+      "title": "Réponse",
+      "suspended": "Processus suspendu : {who} — en attente de votre décision, rien ne reprend tout seul",
+      "resumed": "Processus repris sur votre demande : {who}",
+      "suspendFailed": "Suspension impossible : {who} tourne encore ({reason})",
+      "isolationRecommended": "Plusieurs canaris touchés sans processus désigné : isolez ce poste (l'agent ne le fait pas)",
+      "noneResolved": "Aucune réponse automatique sur cette alerte",
+      "noneUnresolved": "Aucune réponse possible : le processus n'est pas identifié, l'agent ne frappe pas au hasard",
+      "unnamedProcess": "processus sans nom connu",
+      "commandLine": "Commande « {command} » : {status}",
+      "command": {
+        "suspend": "Suspendre",
+        "resume": "Reprendre",
+        "isolate": "Isoler"
+      },
+      "status": {
+        "sent": "envoyée, en attente de l'agent",
+        "received": "reçue par l'agent, en cours",
+        "executed": "exécutée par l'agent",
+        "not_executed": "non exécutée par l'agent"
+      },
+      "reason": {
+        "not_implemented": "non implémenté sur l'agent",
+        "unsupported_command": "commande inconnue de l'agent",
+        "no_response_engine": "moteur de réponse absent",
+        "invalid_parameters": "paramètres invalides",
+        "not_resolved": "processus non identifié",
+        "system_pid": "processus système",
+        "agent_pid": "l'agent lui-même",
+        "pid_reused": "le numéro de processus a été réattribué",
+        "process_exited": "le processus s'est terminé",
+        "access_denied": "processus protégé, accès refusé",
+        "suspend_failed": "appel noyau en échec",
+        "disabled_by_config": "réponse désactivée dans la configuration de l'agent",
+        "unknown_alert": "alerte inconnue de l'agent",
+        "resume_failed": "reprise en échec",
+        "error": "erreur sur l'agent",
+        "unknown": "raison inconnue"
+      },
+      "suspendButton": "Suspendre le processus détecté",
+      "resumeButton": "Reprendre le processus",
+      "confirmSuspend": "Confirmer la suspension",
+      "confirmResume": "Confirmer la reprise",
+      "sendFailed": "La commande n'a pas pu être envoyée"
+    },
+    "attribution": {
+      "title": "Qui l'a fait ?",
+      "pending": "Attribution en cours…",
+      "notReceived": "Attribution non reçue",
+      "unnamed": "processus sans nom connu",
+      "startedAt": "démarré le {when}",
+      "ambiguous": "Plusieurs processus ont écrit ce fichier : aucun n'est désigné",
+      "unavailable": "Processus non identifié",
+      "reason": {
+        "no_write_event": "aucune écriture vue par la surveillance noyau",
+        "system_pid": "écriture faite par le système (écriture différée ou fichier mappé)",
+        "pid_reused": "le numéro de processus a été réattribué à un autre programme",
+        "process_exited": "le processus s'est terminé avant d'être vérifié",
+        "etw_unavailable": "surveillance noyau indisponible sur ce poste"
+      }
+    },
+    "confidence": "Confiance de détection",
+    "artifacts": "Artefacts associés",
+    "technicalDetails": "Détails techniques",
+    "timeline": "Chronologie",
+    "statusChange": "{from} → {to}",
+    "created": "Alerte créée",
+    "list": {
+      "searchPlaceholder": "Rechercher (hôte...)",
+      "allSeverities": "Toutes sévérités",
+      "allStatuses": "Tous statuts",
+      "empty": {
+        "title": "Aucune alerte ne correspond à vos filtres",
+        "body": "Essayez d'élargir votre recherche ou de réinitialiser les filtres."
+      },
+      "col": {
+        "id": "ID",
+        "score": "Score",
+        "detected": "Détecté",
+        "severity": "Sévérité",
+        "status": "Statut",
+        "agent": "Hôte",
+        "module": "Module",
+        "actions": "Actions"
+      }
+    },
+    "ackModal": {
+      "title": "Prendre en charge cette alerte ?",
+      "description": "Vous allez vous assigner cette alerte.",
+      "noteLabel": "Note (facultative, 0-500 caractères)",
+      "notePlaceholder": "Investigation en cours..."
+    },
+    "closeModal": {
+      "title": "Fermer l'incident",
+      "categoryLabel": "Catégorie de résolution",
+      "categoryPlaceholder": "Sélectionner...",
+      "category": {
+        "fp": "Faux positif",
+        "tpContained": "Vrai positif — Contenu",
+        "tpEscalated": "Vrai positif — Escaladé",
+        "inconclusive": "Non concluant"
+      },
+      "notesLabel": "Notes de résolution",
+      "notesHint": "20-2000 caractères",
+      "notesPlaceholder": "Détail de l'investigation et des actions prises...",
+      "minChars": "{count} caractères minimum",
+      "submit": "Fermer l'incident"
+    },
+    "genealogy": {
+      "title": "Ce qui l'a lancé",
+      "writer": "a écrit le fichier",
+      "absent": "Aucune chaîne de processus pour cette alerte. La chaîne part du processus qui a écrit le fichier : il n'y en a donc pas quand aucun processus n'a pu être nommé."
+    }
+  },
+  "users": {
+    "createUser": "Créer un utilisateur",
+    "email": "Email",
+    "fullName": "Nom complet",
+    "status": "Statut",
+    "lastLogin": "Dernière connexion",
+    "editRoles": "Rôles",
+    "never": "Jamais",
+    "active": "Actif",
+    "disabled": "Désactivé",
+    "enable": "Réactiver",
+    "disable": "Désactiver",
+    "list": {
+      "totalUsers": "utilisateurs enregistrés",
+      "empty": "Aucun utilisateur trouvé",
+      "you": "vous"
+    },
+    "createModal": {
+      "title": "Créer un utilisateur",
+      "password": "Mot de passe provisoire",
+      "passwordHint": "8 caractères minimum",
+      "roles": "Rôles initiaux (facultatif)",
+      "submit": "Créer"
+    },
+    "disableModal": {
+      "title": "Désactiver cet utilisateur ?",
+      "body": "sera immédiatement désactivé.",
+      "warning": "L'utilisateur ne pourra plus se connecter immédiatement.",
+      "submit": "Désactiver",
+      "selfErrorTitle": "Action impossible",
+      "selfErrorBody": "Vous ne pouvez pas désactiver votre propre compte. Cette action est bloquée pour éviter tout verrouillage accidentel."
+    },
+    "enableModal": {
+      "title": "Réactiver cet utilisateur ?",
+      "body": "pourra de nouveau se connecter.",
+      "submit": "Réactiver"
+    },
+    "roles": {
+      "title": "Attribuer des rôles",
+      "chooseRoles": "Sélectionnez les rôles :",
+      "submit": "Enregistrer les rôles",
+      "tenantAdmin": "Administrateur (tenant_admin)",
+      "securityAnalyst": "Analyste sécurité (security_analyst)",
+      "readOnlyAuditor": "Auditeur lecture seule (read_only_auditor)",
+      "selfDemotionError": "Vous ne pouvez pas retirer le rôle tenant_admin de votre propre compte.",
+      "replacesAll": "Ci-dessous, les rôles actuels de cet utilisateur. Enregistrer remplace tous ses rôles par ceux qui sont cochés.",
+      "currentUnavailable": "Les rôles actuels de cet utilisateur n'ont pas pu être lus.",
+      "loadingCurrent": "Lecture des rôles actuels...",
+      "column": "Rôles",
+      "none": "Aucun rôle",
+      "tenant_admin": "Administrateur",
+      "security_analyst": "Analyste sécurité",
+      "read_only_auditor": "Auditeur en lecture seule"
+    }
+  },
+  "agents": {
+    "hostname": "Hôte",
+    "os": "OS",
+    "heartbeat": "Heartbeat",
+    "status": "État",
+    "list": {
+      "totalEndpoints": "endpoints enregistrés",
+      "active": "Actif",
+      "disconnected": "Déconnecté",
+      "decommissioned": "Désactivé",
+      "version": "Version",
+      "empty": "Aucun agent enregistré",
+      "autoRefresh": "Actualisation auto toutes les 30 s",
+      "addAgent": "Ajouter un agent"
+    },
+    "provision": {
+      "title": "Ajouter un nouvel agent",
+      "subtitle": "Un code d'enrôlement est généré ; sa durée de validité est affichée à côté de lui. Téléchargez l'installeur : il embarque ce code, l'adresse du GRID et le paquet de l'agent. Sur le poste, un double-clic suffit.",
+      "otpLabel": "Code d'enrôlement",
+      "expires": "— expire dans {n} min",
+      "copyOtp": "Copier le code d'enrôlement",
+      "downloadButton": "Télécharger l'installeur",
+      "downloading": "Préparation de l'installeur…",
+      "step1": "Copiez l'installeur sur le poste (clé USB, partage réseau).",
+      "step2": "Double-cliquez. Windows affiche « Éditeur inconnu » : « Informations complémentaires », puis « Exécuter quand même », puis « Oui » à la demande d'administrateur.",
+      "step3": "Le poste apparaît ici sous deux minutes, avec son état de protection. Rien à taper.",
+      "scriptedNote": "Déploiement scripté (GPO, SCCM) : agent/install.ps1, documentation de l'agent.",
+      "noInstaller": "Aucun installeur n'est publié sur ce GRID (stub, paquet de l'agent ou certificat de l'autorité manquant). Publiez le paquet (déploiement continu), puis réessayez.",
+      "codeInvalid": "Ce code n'est plus utilisable (expiré ou inconnu) : générez-en un nouveau.",
+      "downloadFailed": "L'installeur n'a pas pu être préparé. Réessayez ; si cela persiste, voyez le journal du GRID.",
+      "hint": "Après l'enrôlement, l'agent apparaîtra ici dans les 60 secondes (prochain rafraîchissement auto).",
+      "regenerate": "Générer un nouveau code"
+    },
+    "suspended": {
+      "title": "Processus suspendus",
+      "subtitle": "Ce que ce poste déclare gelé en ce moment. Un processus que l'agent a repris, ou qui s'est arrêté, sort de cette liste parce que l'agent l'a dit.",
+      "unnamedProcess": "processus sans nom connu",
+      "since": "Suspendu",
+      "file": "Fichier leurre écrit",
+      "escalations": "Rappels envoyés sans décision",
+      "resume": "Reprendre",
+      "confirmBody": "Ceci laissera le processus repartir. S'il chiffrait des fichiers, il continuera. Rien ne reprend tout seul : c'est votre décision.",
+      "confirmResume": "Reprendre le processus",
+      "asked": "Reprise demandée ; l'agent répond sur l'alerte.",
+      "sendFailed": "La demande n'a pas pu être envoyée.",
+      "resumeFailed": "Une reprise a été demandée et a échoué : le processus reste gelé, et rien ne peut le dégeler avant le redémarrage de ce poste."
+    },
+    "detail": {
+      "notFound": "Agent non trouvé",
+      "backToList": "Retour aux agents",
+      "fqdn": "FQDN",
+      "neverReported": "Jamais",
+      "recentAlerts": "Alertes récentes",
+      "noAlerts": "Aucune alerte pour cet agent",
+      "allAlerts": "Toutes les alertes",
+      "tabOverview": "Vue d'ensemble",
+      "tabAlerts": "Alertes"
+    },
+    "command": {
+      "isolate": "Isoler le terminal",
+      "title": "Isoler le terminal",
+      "warningTitle": "Action destructrice",
+      "warningBody": "Une fois l'exécution des commandes disponible sur le poste, l'isolation de « {hostname} » coupera son accès réseau. Aujourd'hui, la commande est seulement enregistrée : le poste n'est pas isolé.",
+      "reasonLabel": "Motif (obligatoire)",
+      "reasonPlaceholder": "Ex: Suspicion de compromission — ransomware détecté en cours d'exécution...",
+      "minChars": "{count} caractères minimum",
+      "ackLabel": "Je comprends que cette commande est enregistrée, et que le poste ne sera isolé qu'une fois son exécution disponible.",
+      "submit": "Isoler le terminal",
+      "notYetExecuted": "La commande est enregistrée ; son exécution sur le poste n'est pas encore disponible. Le poste n'est pas isolé."
+    }
+  },
+  "common": {
+    "loading": "Chargement...",
+    "error": "Une erreur est survenue",
+    "retry": "Réessayer",
+    "cancel": "Annuler",
+    "confirm": "Confirmer",
+    "save": "Enregistrer",
+    "close": "Fermer",
+    "search": "Rechercher",
+    "filters": "Filtres",
+    "resetFilters": "Réinitialiser les filtres",
+    "noResults": "Aucun résultat",
+    "results": "résultats",
+    "previous": "Précédent",
+    "next": "Suivant",
+    "page": "Page {page} / {totalPages}",
+    "all": "Tous",
+    "viewAll": "Voir tout →",
+    "view": "Voir →",
+    "access": "Accéder →",
+    "copied": "Copié !"
+  },
+  "audit": {
+    "title": "Journal d'audit",
+    "subtitle": "Intégrité du journal d'audit — chaîne Ed25519 par agent",
+    "totalEntries": "entrées",
+    "empty": "Aucune entrée trouvée",
+    "exportCsv": "Exporter CSV",
+    "exportCsvTitle": "Exporter la page courante en CSV (frontend uniquement, pas d'endpoint backend)",
+    "filterAgentId": "ID Agent",
+    "filterAgentIdPlaceholder": "UUID agent...",
+    "filterAfter": "Reçu après",
+    "filterBefore": "Reçu avant",
+    "gapWarning": "Discontinuité détectée dans la séquence — entrées manquantes ou désordonnées.",
+    "col": {
+      "agentId": "Agent",
+      "sequenceNumber": "Séquence",
+      "signingKeyId": "Clé de signature",
+      "receivedAt": "Reçu le"
+    }
+  },
+  "a11y": {
+    "scrollableTable": "Tableau défilant horizontalement"
+  },
+  "settings": {
+    "title": "Paramètres",
+    "subtitle": "Votre compte, votre langue, vos notifications, votre mot de passe.",
+    "tabs": {
+      "profile": "Profil",
+      "language": "Langue",
+      "notifications": "Notifications",
+      "security": "Sécurité"
+    },
+    "profile": {
+      "name": "Nom affiché",
+      "email": "E-mail",
+      "roles": "Rôle",
+      "tenant": "Établissement",
+      "edit": "Modifier",
+      "saved": "Nom enregistré.",
+      "saveFailed": "Nom non enregistré."
+    },
+    "language": {
+      "title": "Langue",
+      "description": "La langue de cette console. L'anglais est la langue par défaut ; le français est disponible. Votre choix est enregistré sur le GRID et appliqué à chaque connexion, sur tout poste.",
+      "saved": "Langue enregistrée.",
+      "saveFailed": "Langue non enregistrée.",
+      "storedOnGrid": "Choix enregistré sur le GRID.",
+      "notChosenYet": "Aucun choix enregistré : la console suit la langue du navigateur, l'anglais sinon."
+    },
+    "notifications": {
+      "title": "Notifications par e-mail",
+      "description": "Un e-mail vous est envoyé pour chaque nouvelle alerte des sévérités cochées. Les préférences sont enregistrées sur le GRID.",
+      "deliveryNotConfigured": "L'envoi d'e-mails n'est pas configuré sur ce GRID (aucun compte SMTP) : vos préférences sont enregistrées, mais aucun e-mail ne partira tant qu'il ne l'est pas.",
+      "severity": "Sévérité",
+      "email": "E-mail",
+      "saved": "Préférence enregistrée.",
+      "saveFailed": "Préférence non enregistrée.",
+      "loadFailed": "Les préférences n'ont pas pu être lues."
+    },
+    "security": {
+      "description": "Changez votre mot de passe : le mot de passe actuel prouve que c'est bien vous.",
+      "current": "Mot de passe actuel",
+      "new": "Nouveau mot de passe (8 caractères au moins)",
+      "confirm": "Confirmer le nouveau mot de passe",
+      "tooShort": "8 caractères au moins.",
+      "mismatch": "Les deux saisies diffèrent.",
+      "submit": "Changer le mot de passe",
+      "changed": "Mot de passe changé.",
+      "wrongCurrent": "Mot de passe actuel incorrect.",
+      "rejected": "Nouveau mot de passe refusé : 8 caractères au moins, différent de l'actuel.",
+      "failed": "Le mot de passe n'a pas pu être changé."
+    }
+  },
+  "userActions": {
+    "title": "Journal des actions utilisateur",
+    "subtitle": "Qui a fait quoi sur le tableau de bord",
+    "filterByAction": "Filtrer par action",
+    "empty": "Aucune action enregistrée",
+    "actionType": {
+      "login": "Connexion",
+      "logout": "Déconnexion",
+      "alert_status_change": "Changement statut alerte",
+      "command_issued": "Commande envoyée",
+      "user_create": "Création utilisateur",
+      "user_disable": "Désactivation utilisateur",
+      "user_enable": "Activation utilisateur",
+      "agent_decommission": "Décommissionnement agent",
+      "agent_provision": "Provisionnement agent"
+    },
+    "col": {
+      "date": "Date",
+      "action": "Action",
+      "user": "Utilisateur",
+      "target": "Cible",
+      "details": "Détails",
+      "ip": "IP"
+    }
+  },
+  "errors": {
+    "notFound": {
+      "title": "Page introuvable",
+      "description": "La page que vous recherchez n'existe pas.",
+      "backToDashboard": "Retour au tableau de bord"
+    },
+    "forbidden": {
+      "title": "Accès refusé",
+      "description": "Vous n'avez pas les autorisations nécessaires pour accéder à cette page."
+    },
+    "generic": {
+      "title": "Erreur",
+      "description": "Une erreur inattendue est survenue. Veuillez réessayer."
+    }
+  },
+  "modules": {
+    "SENTINEL": "SENTINEL — fichiers leurres",
+    "ENTROPY": "ENTROPY — chiffrement",
+    "GENEALOGY": "GENEALOGY — origine du processus",
+    "USB_GUARD": "USB GUARD — supports amovibles",
+    "EXFIL_WATCH": "EXFIL WATCH — fuite de données",
+    "UNKNOWN": "Module inconnu"
+  },
+  "posture": {
+    "verdict": {
+      "protected": "Protégé",
+      "partial": "Protection partielle",
+      "unprotected": "Non protégé",
+      "unknown": "État inconnu"
+    },
+    "verdictShort": {
+      "protected": "Protégé",
+      "partial": "Partielle",
+      "unprotected": "Non protégé",
+      "unknown": "Inconnu"
+    },
+    "stateLabel": {
+      "active": "Actif",
+      "inactive": "Inactif",
+      "disabled_by_config": "Désactivé (configuration)",
+      "degraded": "Dégradé"
+    },
+    "stateInSentence": {
+      "active": "actif",
+      "inactive": "inactif",
+      "disabled_by_config": "désactivé par la configuration",
+      "degraded": "dégradé",
+      "starting": "en démarrage"
+    },
+    "reason": {
+      "admin_rights_missing": "droits administrateur manquants",
+      "disabled_by_config": "désactivé par la configuration",
+      "init_failed": "échec au démarrage",
+      "stopped_unexpectedly": "arrêt inattendu",
+      "not_implemented": "non implémenté",
+      "attribution_unreliable": "attribution non fiable",
+      "actions_not_implemented": "blocage non implémenté",
+      "starting": "démarrage en cours",
+      "no_watch_directory": "aucun dossier surveillé",
+      "integrity_check_failing": "vérification d'intégrité en échec",
+      "learning_phase": "en phase d'apprentissage",
+      "etw_session_stopped_externally": "session de surveillance noyau arrêtée de l'extérieur",
+      "not_reported": "non transmis par l'agent"
+    },
+    "verdictReason": {
+      "never_connected": "Jamais connecté",
+      "agent_update_required": "Agent à mettre à jour — posture non transmise",
+      "starting": "Démarrage en cours",
+      "no_detector_active": "aucun détecteur actif",
+      "transmission_blocked": "transmission des alertes bloquée",
+      "transmission_unknown": "État de la transmission inconnu",
+      "restart_loop": "Redémarrages répétés de l'agent",
+      "audit_write_failed": "journal d'audit incomplet : entrées non enregistrées"
+    },
+    "sentence": {
+      "verdictWithReason": "{verdict} — {reason}",
+      "module": "{module} {state}",
+      "moduleWithReason": "{module} {state} : {reason}",
+      "signalLost": "Signal perdu depuis {minutes} min",
+      "noSignalFor": "aucun signal depuis {duration}",
+      "alertsRejected": "alertes rejetées par le serveur",
+      "alertsRejectedCount": "{count, plural, one {# alerte rejetée} other {# alertes rejetées}} par le serveur"
+    },
+    "uploadError": {
+      "NETWORK_UNREACHABLE": "Serveur injoignable",
+      "TIMEOUT": "Délai dépassé",
+      "auth": "Authentification refusée",
+      "http4xx": "Rejeté par le serveur",
+      "http5xx": "Erreur du serveur",
+      "UNKNOWN": "Erreur inconnue"
+    },
+    "duration": {
+      "minutes": "{minutes} min",
+      "hours": "{hours} h {minutes}",
+      "days": "{days} j {hours} h"
+    },
+    "bytes": {
+      "gib": "{value} Go",
+      "mib": "{value} Mo"
+    },
+    "unavailable": "indisponible",
+    "none": "aucune",
+    "noneSinceStart": "aucune depuis le démarrage de l'agent",
+    "section": {
+      "verdict": "Protection",
+      "otherFindings": "Autres constats",
+      "modules": "Modules",
+      "transmission": "Transmission des alertes",
+      "endpoint": "Poste",
+      "noPosture": "Ce poste n'a transmis aucune posture.",
+      "lastPosture": "Dernière posture reçue {when}",
+      "lastValueAt": "dernière valeur reçue à {time}"
+    },
+    "field": {
+      "module": "Module",
+      "state": "État",
+      "reason": "Raison",
+      "since": "Depuis",
+      "pendingAlerts": "Alertes non transmises",
+      "lastUpload": "Dernière transmission réussie",
+      "lastUploadError": "Dernière erreur",
+      "rejectedAlerts": "Alertes rejetées par le serveur (24 h)",
+      "auditWriteFailures": "Entrées d'audit non enregistrées (depuis le démarrage)",
+      "agentVersion": "Version de l'agent",
+      "osVersion": "Version de Windows",
+      "systemFree": "Espace libre — volume système",
+      "dbFree": "Espace libre — volume de la base",
+      "lastDetection": "Dernière détection",
+      "threatIntel": "Renseignement sur les menaces",
+      "ago": "il y a {duration}",
+      "rawCode": "Code : {code}"
+    },
+    "list": {
+      "protection": "Protection",
+      "signalLostCount": "{count, plural, one {# poste sans signal depuis plus d'1 heure} other {# postes sans signal depuis plus d'1 heure}}"
+    },
+    "locale": "fr-FR"
+  },
+  "theme": {
+    "toggleLight": "Passer au thème clair",
+    "toggleDark": "Passer au thème sombre"
+  }
+}
