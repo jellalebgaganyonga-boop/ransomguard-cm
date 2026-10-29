@@ -129,8 +129,24 @@ internal sealed class RecordingLogger<T> : ILogger<T>
 
 internal static class Eventually
 {
-    /// <summary>Waits until the condition holds, or fails the test after the timeout.</summary>
-    public static async Task HoldsAsync(Func<bool> condition, string what, int timeoutMs = 15_000)
+    /// <summary>
+    /// Waits until the condition holds, or fails the test after the timeout.
+    /// </summary>
+    /// <remarks>
+    /// The timeout is a budget for failing, not an expectation of how long passing takes: the
+    /// loop returns the moment the condition holds, so a longer budget costs a green run nothing
+    /// and only ever delays a test that was going to fail anyway.
+    ///
+    /// <para>
+    /// It was fifteen seconds, which is generous for a condition that is true in milliseconds and
+    /// tight for one that waits on the whole detection pipeline -- a file watcher, the
+    /// attributor's 1.5 s delay, and a database write. On a loaded runner that produced
+    /// "Timed out waiting for: the first alert" on a commit whose other run of the same suite
+    /// passed. A check that fails for the machine it ran on is a check people learn to ignore,
+    /// and this one guards a demonstration.
+    /// </para>
+    /// </remarks>
+    public static async Task HoldsAsync(Func<bool> condition, string what, int timeoutMs = 60_000)
     {
         var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
         while (!condition())
