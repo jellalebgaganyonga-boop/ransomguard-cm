@@ -138,6 +138,18 @@ Add-Result -Section 'The platform answers' -Name 'Workstation clocks match the G
     -Detail $clockDetail `
     -Fix 'in the VM as administrator: Set-Date -Date "<correct local time>", then restart the VM so the ETW session reopens on the new clock'
 
+# Room on the disks. A disk that fills stops the agent writing its database and the installer
+# extracting, and the first symptom anybody sees is a workstation that has gone quiet; both bench
+# VMs reached zero bytes free on 2026-10-27 and nothing had looked. The workstation figure is the
+# agent's own, from its heartbeat.
+$diskOutput = & python -I (Join-Path $Repo 'scripts\disk_space_probe.py') 2>&1
+$diskOk = $LASTEXITCODE -eq 0
+$diskDetail = ($diskOutput | Where-Object { $_ -match '\S' } | Select-Object -First 5) -join '; '
+Add-Result -Section 'The platform answers' -Name 'Room on the disks' `
+    -Status $(if ($diskOk) { 'PASS' } else { 'FAIL' }) `
+    -Detail $diskDetail `
+    -Fix 'docker builder prune -f; docker image prune -f; or remove a virtual machine that is not the bench''s'
+
 $currentSection = 'General'
 foreach ($line in $probeOutput) {
     $text = [string]$line

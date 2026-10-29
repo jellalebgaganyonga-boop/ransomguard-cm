@@ -255,6 +255,21 @@ if (-not $NoVm) {
     }
 }
 
+# -- 4c. room on the disks -----------------------------------------------------
+
+# A disk that fills stops the agent writing its database and the installer extracting, and the
+# first symptom is a workstation that has gone quiet. Both bench VMs reached zero bytes free on
+# 2026-10-27 and nothing had looked.
+Say ''
+Say '      room on the disks' 'Cyan'
+$disk = & python -I (Join-Path $Repo 'scripts\disk_space_probe.py') 2>&1
+$diskOk = $LASTEXITCODE -eq 0
+foreach ($line in $disk) { Say "      $line" }
+if (-not $diskOk) {
+    Problem 'a disk is low on space' `
+        'docker builder prune -f, docker image prune -f, or remove a VM that is not the bench''s'
+}
+
 # -- 5. the health check -------------------------------------------------------
 
 Step '[5/5] The health check'
