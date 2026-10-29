@@ -10,9 +10,17 @@ at http://localhost:5175.
 | `01-usb-guard-scanned-the-key-no-findings.png` | The agent's own log: `USB SCAN: Starting scan of E: (max size: 100 MB, timeout: 120s)` then `USB SCAN: Completed E: — 2 files scanned, 2 skipped, 0 findings, severity: None, duration: 634ms`. Two files are the .docx and the .pub; the two skipped are ISO images over the 100 MB limit. |
 | `02-the-key-is-unchanged-and-still-writable.png` | `E: label='JEFF RAOUL' NTFS 14.452 GB, 9.47 GB free`, `disk 1: read-only = False`, `files: 4, bytes: 5007467131`. |
 
-The host counted the same four files and the same 5007467131 bytes before the key was attached and
-after it was returned. **Nothing written, nothing removed, and the drive was never made
+The key was byte-identical before it was attached and after it was returned — 773 files,
+5300256010 bytes, 9.47 GB free. **Nothing written, nothing removed, and the drive was never made
 read-only** — which is what the shipped Permissive mode does to a drive it calls Critical.
+
+> **Two corrections to this picture, found the same day.** The screenshot reads `files: 4`: the
+> bench script counted without `-Force`, so it counted only what was not hidden; the key holds 773.
+> And `2 files scanned, 0 findings` was not a clean key, it was a scan that never looked. 769 of
+> those files sat in a Hidden + System folder called `RECYCLER.BIN`, disguised as the recycle bin,
+> holding 766 of the owner's documents under base64 names and a script that collects the machine's
+> details onto the key. The scan skipped them because of `AttributesToSkip = FileAttributes.System`.
+> The script and the scanner are both fixed; see `docs/testing/BENCH_TEST_RESULTS.md`, test 17.
 
 Before `70b5c2a` the content scan forgave formats by extension, and `.docx` was not among them: a
 Word file is a zip, a zip reads near 8 bits per byte, and the key would have crossed the line that
