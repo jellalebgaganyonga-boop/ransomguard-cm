@@ -9,7 +9,7 @@ This is what to show, in what order, what each step proves about the title, and 
 important — what to say when something does not work, because every limit below is one you will
 be asked about.
 
-Total running time: **about 25 minutes** for the full script, **12 minutes** for the short path
+Total running time: **about 28 minutes** for the full script, **12 minutes** for the short path
 (steps 1, 3, 4, 5, 7). Much of the waiting is deliberate: the agent asks the GRID for commands on
 a schedule, so a resume takes up to a minute to arrive. Say so out loud; it is a design decision,
 not a delay.
@@ -180,13 +180,60 @@ reaches **High**. Do not invent anything more dramatic than that.
 
 ---
 
-## 8. What happens when the network goes — 2 min (optional)
+## 8. What happens when the network goes — 4 min
 
-Cut the workstation's network, trigger a detection, and reconnect.
+This is the step that answers "so it only works while the server is up?". It does not, and this
+shows why in under four minutes.
 
-The alert arrives with **the time it happened**, not the time it was delivered, and the console
-shows the workstation as *disconnected* about five minutes after it goes quiet — a deliberate
-delay, so that a brief hiccup is not an alarm.
+**Cut the workstation off**, from the host — the only step in the whole demonstration that needs a
+command outside the console:
+
+```powershell
+VBoxManage controlvm PC-LAB setlinkstate1 off
+VBoxManage controlvm PC-LAB setlinkstate2 off
+```
+
+Say what you have just done: the workstation can no longer reach the GRID at all. A hospital in
+Yaoundé loses its link often enough that this is not a thought experiment.
+
+**Now attack it anyway.** Run the trigger on the workstation. It writes once and stops:
+
+```
+07:20:23  write 1/5 done
+```
+
+**That pause is the point.** The decoy was written, the writer was named, and it was suspended —
+by the agent, on the machine, with nobody to ask. Detection and response live on the workstation;
+the GRID is where the evidence goes, not where the decision is made.
+
+**Show the console** while the link is still down: the alert count has not moved. The hospital
+cannot see what it has not been told.
+
+**Put the link back:**
+
+```powershell
+VBoxManage controlvm PC-LAB setlinkstate1 on
+VBoxManage controlvm PC-LAB setlinkstate2 on
+```
+
+Within about a minute the alerts appear — and this is the line to read aloud:
+
+| | detected | arrived |
+|---|---|---|
+| `SentinelCanaryModified` | **06:20:23** | 06:27:43 |
+| `SentinelProcessSuspended` | **06:20:25** | 06:27:43 |
+
+**Seven minutes apart.** The alert carries the time it *happened*, taken from the workstation's
+own clock, not the time it was *delivered*. An incident report that said 06:27 would be wrong
+about when the hospital was attacked, and that is the kind of error nobody catches afterwards.
+
+Finish by resuming the process from the alert, exactly as in step 4.
+
+**If you have five more minutes**, leave the link down and wait: the console marks the workstation
+*signal lost*, then **disconnected**, about six minutes after it goes quiet. That patience is
+deliberate — a brief hiccup in a hospital network must not raise an alarm.
+
+Run on 2026-10-29 on PC-LAB; screenshots in `docs/screenshots/real/offline-2026-10-29/`.
 
 ---
 
