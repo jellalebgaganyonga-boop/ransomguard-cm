@@ -257,6 +257,83 @@ async def test_resume_process_needs_a_suspension_the_agent_reported_on_this_aler
 
 
 @pytest.mark.asyncio
+async def test_the_suspension_alert_shows_the_detection_it_answers(
+    client: AsyncClient, db_session: AsyncSession, test_cert_serial: str,
+) -> None:
+    """The page the owner actually opens.
+
+    "Process suspended after writing a canary: powershell (PID 3220)" is the alert anyone clicks,
+    and on 2026-10-28 it was a sentence with nothing underneath it: no attribution, no chain, no
+    way to let the process go. All of that is recorded on the canary detection the response
+    answers, so the response alert is now read through it.
+    """
+    headers, alert_id, ids = await _console(client, db_session, test_cert_serial)
+    await _attributed(db_session, ids, alert_id)
+    response_id = await _suspension_reported(db_session, ids, alert_id, "susp-7")
+
+    shown = (await client.get(f"/api/v1/dashboard/alerts/{response_id}", headers=headers)).json()
+
+    assert shown["id"] == response_id, "it is still its own alert"
+    assert shown["alert_type"] == "SentinelProcessSuspended"
+    assert shown["attribution"]["state"] == "resolved"
+    assert shown["attribution"]["process_id"] == 4242
+    assert [r["suspension_id"] for r in shown["responses"]] == ["susp-7"], (
+        "the console decides there is something to resume from this"
+    )
+
+
+@pytest.mark.asyncio
+async def test_resume_can_be_asked_from_the_suspension_alert(
+    client: AsyncClient, db_session: AsyncSession, test_cert_serial: str, test_cert_pem: str,
+) -> None:
+    """And the decision can be taken there, not only on the detection.
+
+    The command still belongs to the detection: that is the client_message_id the agent matches
+    its own suspension against, so asking from either page sends the agent the same thing.
+    """
+    headers, alert_id, ids = await _console(client, db_session, test_cert_serial)
+    await _attributed(db_session, ids, alert_id)
+    response_id = await _suspension_reported(db_session, ids, alert_id, "susp-8")
+
+    issued = await client.post("/api/v1/dashboard/commands", headers=headers, json={
+        "agent_id": ids.agent_id, "command_type": "resume_process",
+        "parameters": {"alert_id": response_id, "suspension_id": "susp-8"},
+    })
+
+    assert issued.status_code == 200, issued.text
+    fetched = await client.get(f"/api/v1/agents/{ids.agent_id}/commands",
+                               headers={"X-Client-Cert": test_cert_pem})
+    [command] = fetched.json()["commands"]
+    assert command["command_type"] == "resume_process"
+    assert command["parameters"]["suspension_id"] == "susp-8"
+    assert command["parameters"]["alert_id"] == alert_id, "the detection, not the response"
+
+    # And it is the same command on both pages, with the same answer.
+    on_detection = (await client.get(f"/api/v1/dashboard/alerts/{alert_id}", headers=headers)).json()
+    on_response = (await client.get(f"/api/v1/dashboard/alerts/{response_id}", headers=headers)).json()
+    assert [c["id"] for c in on_detection["commands"]] == [command["id"]]
+    assert [c["id"] for c in on_response["commands"]] == [command["id"]]
+
+
+@pytest.mark.asyncio
+async def test_a_suspension_that_was_never_reported_cannot_be_resumed_from_the_response_alert(
+    client: AsyncClient, db_session: AsyncSession, test_cert_serial: str,
+) -> None:
+    """Reading through the detection does not loosen the check: the suspension must be one the
+    agent reported."""
+    headers, alert_id, ids = await _console(client, db_session, test_cert_serial)
+    await _attributed(db_session, ids, alert_id)
+    response_id = await _suspension_reported(db_session, ids, alert_id, "susp-9")
+
+    refused = await client.post("/api/v1/dashboard/commands", headers=headers, json={
+        "agent_id": ids.agent_id, "command_type": "resume_process",
+        "parameters": {"alert_id": response_id, "suspension_id": "susp-not-reported"},
+    })
+
+    assert refused.status_code == 409
+
+
+@pytest.mark.asyncio
 async def test_an_alert_command_on_another_agents_alert_is_404(
     client: AsyncClient, db_session: AsyncSession, test_cert_serial: str,
 ) -> None:

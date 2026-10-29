@@ -150,6 +150,10 @@ services:
       - "${BIND_ADDR:-0.0.0.0}:${NGINX_HTTPS_PORT:-443}:443"
       - "${BIND_ADDR:-0.0.0.0}:${NGINX_DASHBOARD_PORT:-8443}:8443"
       - "${BIND_ADDR:-0.0.0.0}:${NGINX_HTTP_PORT:-80}:80"
+      # The console on this machine, at http://localhost:5175 (nginx/conf.d/console-local.conf).
+      # 127.0.0.1 on purpose: it is plain HTTP, so it never leaves this machine. Anything
+      # reached over a network uses :8443, which is TLS.
+      - "127.0.0.1:${CONSOLE_LOCAL_PORT:-5175}:5175"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/conf.d:/etc/nginx/conf.d:ro

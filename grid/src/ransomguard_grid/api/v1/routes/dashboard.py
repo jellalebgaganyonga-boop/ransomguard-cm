@@ -314,13 +314,47 @@ async def get_alert(
     alert = await repo.get_by_id(alert_id)
     if not alert:
         raise HTTPException(404, "Alert not found")
+    # An alert that answers another one shows that one's story and offers the same decision; see
+    # _answered_alert.
+    source = await _answered_alert(db, alert)
     item = _alert_item(alert, await _hostname_for(db, alert))
     return item.model_copy(update={
-        "attribution": await _attribution_for(db, alert),
-        "genealogy": await _genealogy_for(db, alert),
-        "commands": await _commands_for(db, alert),
-        "responses": await _responses_for(db, alert),
+        "attribution": await _attribution_for(db, source),
+        "genealogy": await _genealogy_for(db, source),
+        "commands": await _commands_for(db, source),
+        "responses": await _responses_for(db, source),
     })
+
+
+async def _answered_alert(db: AsyncSession, alert: Alert) -> Alert:
+    """The detection an alert answers, or the alert itself.
+
+    `SentinelProcessSuspended` and its kin are the agent's answer to a canary detection: they
+    carry `response_to`, the client_message_id of the alert they belong to. Everything a person
+    needs in order to decide -- who was named, what chain led there, which suspension is open --
+    is recorded on that detection, so a response alert read on its own was a page with a sentence
+    and nothing to do about it. The owner opened "Process suspended after writing a canary:
+    powershell (PID 3220)" on 2026-10-28, which is exactly the alert anyone would open, and found
+    no way to let the process go.
+
+    So a response alert is read through the detection it answers. The suspension is one event
+    seen from two pages, and both pages now show it and can end it.
+    """
+    response_to = (await db.execute(select(AlertDetail.value).where(
+        AlertDetail.tenant_id == alert.tenant_id,
+        AlertDetail.alert_id == alert.id,
+        AlertDetail.key == "response_to",
+    ))).scalars().first()
+    if not response_to:
+        return alert
+
+    answered = (await db.execute(select(Alert).where(
+        Alert.tenant_id == alert.tenant_id,
+        Alert.agent_id == alert.agent_id,
+        Alert.client_message_id == response_to,
+    ))).scalars().first()
+    # A response whose detection is not here (never delivered, or deleted) still shows itself.
+    return answered or alert
 
 
 async def _attribution_for(db: AsyncSession, alert: Alert) -> AlertAttribution | None:
@@ -454,6 +488,10 @@ async def _alert_command_parameters(db: AsyncSession, user: User, body: IssueCom
     alert = await AlertRepository(db, tenant_id=user.tenant_id).get_by_id(alert_id)
     if alert is None or alert.agent_id != body.agent_id:
         raise HTTPException(404, "Alert not found")
+    # Asked from a response alert, the command still belongs to the detection it answers: that is
+    # the client_message_id the agent matches its suspension against, and the alert whose
+    # attribution names the process.
+    alert = await _answered_alert(db, alert)
     parameters: dict[str, Any] = {"alert_id": alert.id, "alert_client_message_id": alert.client_message_id}
     if body.command_type == "suspend_process":
         attribution = await _attribution_for(db, alert)
