@@ -28,3 +28,25 @@ makes it read-only.
 On the workstation, the trigger's own output: `05:23:46 write 1/5 done`, then nothing for two
 minutes and twenty-one seconds, then `05:26:07 write 2/5 done`. The process was frozen until an
 administrator decided, from the alert page, to let it go.
+
+## Two hospitals on one server
+
+PC-RECEPTION was wiped, then its agent was downloaded from the **clinic's** console with the
+clinic's own enrolment code. The installer says which organization it belongs to before it
+installs anything: `Organization : test-clinic`.
+
+| | |
+|---|---|
+| `05-pc-reception-reset-to-before-the-agent.png` | the wipe: service deleted, data and binaries removed, 9 decoys and the test zone gone |
+| `06-hospital-dashboard.png`, `06-hospital-agents.png` | `yde-hospital`: 1/1 active, **PC-LAB** only, in English |
+| `07-clinic-dashboard.png`, `07-clinic-agents.png` | `test-clinic`: 1/1 active, **PC-RECEPTION** only, in French -- the language belongs to the account |
+| `08-clinic-alert-with-resume.png` | the clinic's own detection, with the writer named (`powershell PID 2664`), the chain `cmd -> powershell`, and *Reprendre le processus* |
+
+Neither console shows the other's workstation or the other's alerts, and asking for the other
+tenant's agent by its id answers **404**, not 403: a customer must not learn even that the thing
+exists.
+
+The clock on PC-RECEPTION was 45 min 58 s behind and was corrected **while the agent was
+running** -- the exact condition that used to blind attribution. The detection that followed still
+named `powershell (PID 2664)` and suspended it, and the trigger's own output shows the five writes
+and the four pauses: 07:03:28, 07:06:43, 07:07:33, 07:08:33, 07:09:32.
