@@ -1,6 +1,6 @@
 # RansomGuard-CM — what works, what is partial, what is not built
 
-**As of 2026-10-28**, branch `sprint8/recovery`.
+**As of 2026-10-29**, branch `sprint8/recovery`.
 
 Every row says how it was checked. Nothing here is a plan or an intention: a row says **works**
 only if something was run and observed. Where a thing cannot be exercised on this bench, the row
@@ -20,7 +20,7 @@ It runs to the end, prints PASS / FAIL / NOT BUILT / NOT TESTABLE HERE for each 
 | Feature | Status | Proof |
 |---|---|---|
 | GRID server (compose: nginx, API, MySQL, Redis, notifier) | **works** | system-check §1 and §2: five containers healthy, `/api/v1/health` answers over TLS validated against the demo CA |
-| Console (React) | **works** | system-check §2; 212 unit tests, 81 end-to-end tests |
+| Console (React) | **works** | system-check §2; 269 unit tests, 81 end-to-end tests. Served by the GRID's own nginx at http://localhost:5175 (published on 127.0.0.1 only) and at https://192.168.56.1:8443, so it is there whenever the stack is up. It used to be Vite's development server started by hand, and a demonstration lost its console that way on 2026-10-28 |
 | Multi-tenant isolation | **works** | system-check "One customer sees nothing of another": `test-clinic` sees 0 workstations and 0 alerts while the hospital has one. Bench test 6 |
 | Roles (admin / analyst / auditor) | **works** | system-check "The auditor can read but not act". Bench test 5: every write is 403 for the auditor; analyst refused users, resume and decommission |
 | Audit log and user actions | **partial** | Bench test 7: `login`, `user_create`, `agent_decommission`, `user_disable` are all recorded with `actor_email` and a timestamp. **`ip_address` is null on every row** |
@@ -46,10 +46,11 @@ It runs to the end, prints PASS / FAIL / NOT BUILT / NOT TESTABLE HERE for each 
 | Attribution — who wrote the file | **works** | Bench test 3: `attribution: resolved`, powershell PID 7744, with its image path and start time |
 | GENEALOGY — what started it | **works** | `explorer -> cmd -> powershell` on the alert page, PID 7744 matching the trigger output. Screenshot: `docs/screenshots/real/round4-english/alert_genealogy_section.png`. 8 GRID tests, 8 console tests |
 | Suspension (ADR-026) | **works** | Bench test 3: `SentinelProcessSuspended`, the writer frozen |
+| The decision is on the alert | **works** | "Process suspended after writing a canary: powershell (PID 3620)" is the alert anyone opens, and until 2026-10-29 it was a sentence with nothing under it -- the response controls lived on the workstation page. A response alert is now read through the detection it answers, so that page carries who did it, what started it, and Resume. Proven on PC-LAB: Resume clicked on the alert page, and the trigger's own output went `05:23:46 write 1/5 done` then `05:26:07 write 2/5 done` |
 | Resume from the console | **works** | Bench test 4: `SentinelProcessResumed` reaches the GRID, the PID leaves *Suspended processes*, and the process really continues on the workstation |
 | Attribution survives a clock change | **works** | The ETW session timestamps against the clock it was opened with and does not follow the wall clock, so correcting a drifted workstation while the agent ran made every writer look younger than its own write: on 2026-10-27 PC-RECEPTION raised five alerts, all `unavailable / pid_reused`, and nothing was suspended. Fixed in `8d89fd2` and `84500b9` by measuring the offset between the two clocks rather than widening any tolerance. Proven on PC-LAB on 2026-10-28: after a +3 h 01 m change the alert named `powershell PID 1152` with the chain `explorer -> cmd -> powershell` and suspended it, and again after a 7 h 52 m correction (`PID 4684`) |
 | ENTROPY | **works** | Reports `active` on PC-LAB with a named writer and rule 3 evaluated (AGT-EN-002 closed) |
-| USB GUARD | **partial** | Exercised twice with the owner's own Kingston key (FAT32, 7.21 GB, her files on it). **2026-10-26, before the fix:** Critical within a second, on the boot signature `0x55AA` that is on the first sector of every FAT32 and NTFS volume including a blank one — in the shipped Permissive mode that means the drive is made read-only, so a nurse's key would have been locked. **2026-10-27, build `7edad8a`, shipped Permissive, on PC-LAB:** no boot-signature finding at all. The module saw the key as `E:`, scanned it, and logged `High entropy 7.98–7.99` on the key's own PDFs at Warning. A `UsbGuard` Critical was still raised two minutes in, from the content scan rather than the boot signature, but **no action was taken** (`responses: []`) and the key came back `Healthy`, 4.84 GB free of 7.21 GB — identical, nothing written, nothing removed. The false positive this was meant to fix is gone. **2026-10-28, `70b5c2a`:** the content scan now recognises the formats that are compressed by design by their magic bytes rather than their extension — a renamed PDF is forgiven, a .pdf that is not one is not — and high entropy behind no known header is reported at Low, below the Medium that makes a drive read-only. Tests cover eleven formats, a renamed PDF, a fake PDF, and the whole-device line the owner's key crossed; no key has been plugged in since, so that half is CI-proven and not yet bench-proven |
+| USB GUARD | **works** | Exercised twice with the owner's own Kingston key (FAT32, 7.21 GB, her files on it). **2026-10-26, before the fix:** Critical within a second, on the boot signature `0x55AA` that is on the first sector of every FAT32 and NTFS volume including a blank one — in the shipped Permissive mode that means the drive is made read-only, so a nurse's key would have been locked. **2026-10-27, build `7edad8a`, shipped Permissive, on PC-LAB:** no boot-signature finding at all. The module saw the key as `E:`, scanned it, and logged `High entropy 7.98–7.99` on the key's own PDFs at Warning. A `UsbGuard` Critical was still raised two minutes in, from the content scan rather than the boot signature, but **no action was taken** (`responses: []`) and the key came back `Healthy`, 4.84 GB free of 7.21 GB — identical, nothing written, nothing removed. The false positive this was meant to fix is gone. **2026-10-28, `70b5c2a`:** the content scan now recognises the formats that are compressed by design by their magic bytes rather than their extension — a renamed PDF is forgiven, a .pdf that is not one is not — and high entropy behind no known header is reported at Low, below the Medium that makes a drive read-only. Tests cover eleven formats, a renamed PDF, a fake PDF, and the whole-device line the owner's key crossed. **2026-10-29, with a real key on PC-LAB** (Toshiba TransMemory, NTFS, 14.45 GB, the owner's own files): `USB SCAN: Completed E: - 2 files scanned, 2 skipped, 0 findings, severity: None, duration: 634ms`. The drive stayed writable (`disk 1: read-only = False`) and the host counted the same four files and the same 5007467131 bytes before and after. One of the two scanned files is a .docx -- a zip, which is what the old extension list would have called encrypted. Screenshots in `docs/screenshots/real/demo-fixes-2026-10-29/` |
 | EXFIL WATCH | **partial** | Reports `degraded / learning_phase` honestly. It cannot raise an alert until it has learned the normal traffic, so no detection has been observed |
 | IRONCLAD (offline backup) | **partial** | The code exists and is tested against a *simulated* Arduino. Never connected to real hardware. system-check §8 |
 | Anti-tampering | **not built — planned** | The services are registered but never started. As of 2026-10-26 the agent no longer reports it as a module and the console no longer shows the row: a line on every workstation reading "inactive — not implemented" is true and nothing anybody can act on. The GRID still *accepts* it, so an agent installed before that keeps its heartbeat. It is listed by system-check under what is not built, and it is the first thing in "what is weakest" below |
@@ -95,15 +96,19 @@ It runs to the end, prints PASS / FAIL / NOT BUILT / NOT TESTABLE HERE for each 
    a user is told to be suspicious of.
 3. **EXFIL WATCH has never raised an alert here.** It is honest about learning, but that means
    the module is unproven on this bench.
-4. **USB GUARD has not been re-tested with a real key since the fix.** The content scan used to
-   call an ordinary key Critical: the owner's key holds PDFs, PDFs are compressed, and compressed
-   bytes look like encrypted bytes to an entropy test (7.98–7.99 of a possible 8). Since
-   `70b5c2a` the formats that are compressed by design are recognised by their magic bytes — PDF,
-   zip and so docx/xlsx/pptx, JPEG, PNG, MP4, 7z, RAR, gzip and the rest — and what is left is
-   reported at Low rather than Medium, which is the severity that makes a drive read-only. The
-   tests cover it, including a key of documents and photos staying below Medium while autorun.inf
-   plus an executable still reaches High. No USB key has been plugged into a bench VM since, so
-   the fix is proven in CI and not yet on hardware.
+4. **A bench VM stopped with a bug check once.** PC-LAB, 2026-10-28 22:46:
+   `DRIVER_PORTION_MUST_BE_NONPAGED` in `clipsp.sys`, which is Windows' own Client License
+   Service driver and nothing this product installs. One bug check in a week of heavy use, not a
+   pattern -- but a workstation that stops during a demonstration is this product's problem
+   whoever's driver it is. The readings behind it (`deployment/bench/why-bluescreened.ps1`): 4 GB
+   of RAM, an automatically managed page file Windows had sized at **0.69 GB**, and Windows
+   itself in "Notification (not activated)". A driver's non-pageable part was paged out and could
+   not be brought back; the condition is memory pressure and the driver is the one an unactivated
+   Windows is least happy with. Both halves of the condition are gone: a fixed 4 GB page file on
+   each VM (`deployment/bench/steady-page-file.ps1`) and 6 GB of RAM instead of 4. The licensing
+   state is the owner's to settle; activating Windows on the bench VMs would remove the last of
+   it.
+
 5. **IRONCLAD has never seen real hardware.**
 6. **A bench VM's clock free-runs.** There are no Guest Additions on PC-LAB or PC-RECEPTION, so
    nothing keeps their clocks with the host's after the VM starts: PC-LAB was five hours and
@@ -125,3 +130,11 @@ It runs to the end, prints PASS / FAIL / NOT BUILT / NOT TESTABLE HERE for each 
    Windows still called the machine `PC-ACCUEIL`, so it would have enrolled under the French name. <!-- french-ok: the old machine name, recorded here only because it was renamed away -->
    
    Renamed and restarted on 2026-10-26.
+
+10. **This machine is the tightest disk in the system.** 25.4 GB free on C:, with the two bench
+    VM disks able to grow by another 20.3 GB between them, the GRID's images and containers at
+    11 GB, and three virtual machines that are nothing to do with the bench holding about 45 GB
+    (`New group 2\windows` 17.4 GB, `New group\kali` 15.9 GB, the Ubuntu server image in
+    Downloads 11.9 GB). Nothing looked at any of this until 2026-10-29, which is how both VMs
+    reached zero bytes free on 2026-10-27; `scripts/disk_space_probe.py` now reads it and
+    `demo-ready` refuses a demonstration below 10 GB here or 3 GB on a workstation.
