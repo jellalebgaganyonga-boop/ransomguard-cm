@@ -42,7 +42,10 @@ foreach ($v in Get-Volume | Where-Object { $_.DriveType -eq 'Removable' }) {
     }
 
     if ($v.DriveLetter) {
-        $files = Get-ChildItem "$($v.DriveLetter):\" -Recurse -File -ErrorAction SilentlyContinue
+        # -Force, because without it this counts only what is not hidden. On 2026-10-29 this
+        # line reported "4 files" for a key holding 773: the other 769 were in a Hidden + System
+        # folder, which is exactly the part worth counting on a USB key.
+        $files = Get-ChildItem "$($v.DriveLetter):\" -Recurse -File -Force -ErrorAction SilentlyContinue
         $bytes = ($files | Measure-Object Length -Sum).Sum
         Write-Host "      files: $($files.Count), bytes: $bytes"
     }

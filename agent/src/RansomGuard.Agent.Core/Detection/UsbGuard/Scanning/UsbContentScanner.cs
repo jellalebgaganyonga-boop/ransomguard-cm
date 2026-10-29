@@ -95,11 +95,23 @@ public sealed class UsbContentScanner : IUsbContentScanner
                 IEnumerable<string> files;
                 try
                 {
+                    // Nothing is skipped for being Hidden or System. That was the default here
+                    // and it is the wrong default on a USB key: Hidden + System is not where
+                    // Windows keeps its furniture on removable media, it is where USB malware
+                    // hides. On 2026-10-29 a real key was scanned and reported "2 files scanned,
+                    // 0 findings" while 769 files sat in a Hidden + System folder called
+                    // RECYCLER.BIN -- the owner's documents under base64 names, and a script that
+                    // collects systeminfo, ipconfig, netstat, arp and tasklist onto the key. The
+                    // module walked past all of it.
+                    //
+                    // The two folders Windows really does own are skipped by name instead, in
+                    // SkipDirectory, which is a closed list rather than an attribute anything can
+                    // set on itself.
                     files = Directory.EnumerateFiles(rootPath, "*", new EnumerationOptions
                     {
                         RecurseSubdirectories = true,
                         IgnoreInaccessible = true,
-                        AttributesToSkip = FileAttributes.System
+                        AttributesToSkip = FileAttributes.None
                     });
                 }
                 catch (Exception ex)
@@ -111,6 +123,13 @@ public sealed class UsbContentScanner : IUsbContentScanner
                 foreach (string filePath in files)
                 {
                     ct.ThrowIfCancellationRequested();
+
+                    // Windows' own two folders, by name. Everything else is looked at.
+                    if (IsWindowsOwned(rootPath, filePath))
+                    {
+                        Interlocked.Increment(ref filesSkipped);
+                        continue;
+                    }
 
                     // Skip SENTINEL canary files
                     string fileName = Path.GetFileName(filePath);
@@ -167,7 +186,7 @@ public sealed class UsbContentScanner : IUsbContentScanner
             {
                 try
                 {
-                    var findings = await ScanFileAsync(filePath, policy, ct);
+                    var findings = await ScanFileAsync(filePath, rootPath, policy, ct);
                     Interlocked.Increment(ref filesScanned);
                     foreach (var finding in findings)
                         allFindings.Add(finding);
@@ -219,12 +238,149 @@ public sealed class UsbContentScanner : IUsbContentScanner
         };
     }
 
+    /// <summary>
+    /// The two folders Windows itself puts on a removable volume, matched by name at the root.
+    ///
+    /// <para>
+    /// `System Volume Information` holds the volume's own metadata and is unreadable anyway;
+    /// `$RECYCLE.BIN` is the real recycle bin. Both are skipped because they belong to Windows,
+    /// not because of an attribute -- a folder that merely *calls itself* a recycle bin, like the
+    /// `RECYCLER.BIN` found on a real key on 2026-10-29, is somebody else's idea and is read.
+    /// </para>
+    /// </summary>
+    private static bool IsWindowsOwned(string rootPath, string filePath)
+    {
+        string relative = Path.GetRelativePath(rootPath, filePath);
+        string first = relative.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)[0];
+        return first.Equals("System Volume Information", StringComparison.OrdinalIgnoreCase)
+            || first.Equals("$RECYCLE.BIN", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Extensions that run something when somebody double-clicks them.</summary>
+    private static readonly HashSet<string> RunnableExtensions =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            ".exe", ".com", ".scr", ".pif", ".bat", ".cmd", ".vbs", ".vbe", ".js", ".jse",
+            ".wsf", ".wsh", ".ps1", ".msi", ".hta", ".cpl", ".dll", ".lnk",
+        };
+
+    /// <summary>The CLSID that makes a folder show up in Explorer as the recycle bin.</summary>
+    private const string RecycleBinClsid = "{645FF040-5081-101B-9F08-00AA002F954E}";
+
+    /// <summary>
+    /// Is this file inside a folder that is hiding it -- Hidden and System, on a key where
+    /// Windows owns no such folder?
+    /// </summary>
+    private static bool IsConcealedByItsFolder(string rootPath, string filePath)
+    {
+        var directory = new DirectoryInfo(Path.GetDirectoryName(filePath)!);
+        var root = new DirectoryInfo(rootPath);
+        while (directory is not null && !PathsEqual(directory.FullName, root.FullName))
+        {
+            if (directory.Attributes.HasFlag(FileAttributes.Hidden)
+                && directory.Attributes.HasFlag(FileAttributes.System))
+            {
+                return true;
+            }
+
+            directory = directory.Parent;
+        }
+
+        return false;
+    }
+
+    private static bool PathsEqual(string a, string b) =>
+        string.Equals(a.TrimEnd(Path.DirectorySeparatorChar), b.TrimEnd(Path.DirectorySeparatorChar),
+            StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// A folder dressed up as the recycle bin: a desktop.ini that claims the recycle bin's CLSID,
+    /// in a folder that is not the real `$RECYCLE.BIN`.
+    ///
+    /// <para>
+    /// This is not a guess about a name. Explorer reads that CLSID and draws the folder as an
+    /// empty recycle bin, which is the whole point of writing it: whatever is inside stops being
+    /// visible to the person carrying the key. Found on a real key on 2026-10-29, holding 766 of
+    /// the owner's documents under base64 names.
+    /// </para>
+    /// </summary>
+    private static async Task<bool> IsDisguisedAsRecycleBinAsync(string directoryPath, CancellationToken ct)
+    {
+        string desktopIni = Path.Combine(directoryPath, "desktop.ini");
+        if (!File.Exists(desktopIni))
+        {
+            return false;
+        }
+
+        try
+        {
+            string text = await File.ReadAllTextAsync(desktopIni, ct);
+            return text.Contains(RecycleBinClsid, StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
     private async Task<List<UsbFileFinding>> ScanFileAsync(
-        string filePath, UsbPolicy policy, CancellationToken ct)
+        string filePath, string rootPath, UsbPolicy policy, CancellationToken ct)
     {
         var findings = new List<UsbFileFinding>();
         string ext = Path.GetExtension(filePath).ToLowerInvariant();
         string fileName = Path.GetFileName(filePath);
+        bool concealed = IsConcealedByItsFolder(rootPath, filePath);
+
+        // 0. Hidden where somebody put it, not where Windows did.
+        if (concealed && RunnableExtensions.Contains(ext))
+        {
+            findings.Add(new UsbFileFinding
+            {
+                FilePath = filePath,
+                FindingType = "ConcealedExecutable",
+                Description =
+                    $"'{fileName}' runs when it is opened, and sits in a folder marked hidden and "
+                    + "system so that nobody carrying this key would see it",
+                Severity = ScanSeverity.High,
+                DetectorName = nameof(UsbContentScanner)
+            });
+        }
+
+        // 0b. A folder wearing the recycle bin's face.
+        if (string.Equals(fileName, "desktop.ini", StringComparison.OrdinalIgnoreCase))
+        {
+            string folder = Path.GetDirectoryName(filePath)!;
+            if (!IsWindowsOwned(rootPath, filePath)
+                && await IsDisguisedAsRecycleBinAsync(folder, ct))
+            {
+                int inside = 0;
+                try
+                {
+                    inside = Directory.EnumerateFiles(folder, "*", new EnumerationOptions
+                    {
+                        RecurseSubdirectories = true,
+                        IgnoreInaccessible = true,
+                        AttributesToSkip = FileAttributes.None,
+                    }).Count();
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    // the count is a detail; the disguise is the finding
+                }
+
+                findings.Add(new UsbFileFinding
+                {
+                    FilePath = filePath,
+                    FindingType = "DisguisedRecycleBin",
+                    Description =
+                        $"'{Path.GetFileName(folder)}' is dressed up as the recycle bin -- its "
+                        + "desktop.ini claims the recycle bin's CLSID, so Explorer draws it empty "
+                        + $"-- and it holds {inside} file(s). The real one is $RECYCLE.BIN",
+                    Severity = ScanSeverity.High,
+                    DetectorName = nameof(UsbContentScanner)
+                });
+            }
+        }
 
         // 1. Magic byte validation (all files)
         var magicResult = await _magicByteValidator.ValidateAsync(filePath, ct);
